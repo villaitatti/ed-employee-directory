@@ -1,0 +1,49 @@
+import type { EmployeeWriteInput } from '@itatti/shared';
+import { resolveRetirementDate } from '@itatti/shared';
+
+function dateOnlyToUtc(value: string): Date {
+  return new Date(`${value}T00:00:00.000Z`);
+}
+
+function nullableDateToUtc(value: string | null | undefined): Date | null {
+  return value ? dateOnlyToUtc(value) : null;
+}
+
+/**
+ * Existing retirement state, when updating an employee. Lets resolveRetirementDate
+ * preserve a manual override instead of recalculating it away.
+ */
+export type ExistingRetirement = {
+  retirementDate: string | null;
+  retirementDateOverridden: boolean;
+};
+
+export function toEmployeeData(input: EmployeeWriteInput, existing?: ExistingRetirement) {
+  const retirement = resolveRetirementDate({
+    birthDate: input.birthDate,
+    ...(input.retirementDate !== undefined ? { requestedRetirementDate: input.retirementDate } : {}),
+    ...(input.resetRetirementDate !== undefined ? { resetOverride: input.resetRetirementDate } : {}),
+    ...(existing
+      ? {
+          currentRetirementDate: existing.retirementDate,
+          currentRetirementDateOverridden: existing.retirementDateOverridden,
+        }
+      : {}),
+  });
+
+  return {
+    employeeNumber: input.employeeNumber,
+    firstName: input.firstName,
+    lastName: input.lastName,
+    departmentId: input.departmentId,
+    birthDate: dateOnlyToUtc(input.birthDate),
+    hireDate: nullableDateToUtc(input.hireDate),
+    terminationDate: nullableDateToUtc(input.terminationDate),
+    retirementDate: dateOnlyToUtc(retirement.retirementDate),
+    retirementDateOverridden: retirement.retirementDateOverridden,
+    fte: input.fte,
+    usaCategory: input.usaCategory,
+    contractType: input.contractType,
+    status: input.status,
+  };
+}

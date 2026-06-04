@@ -1,0 +1,178 @@
+openapi: 3.1.0
+info:
+  title: ED Employee Directory Read API
+  version: 1.0.0
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+paths:
+  /departments:
+    get:
+      summary: List departments
+      responses:
+        "200":
+          description: Department list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Department"
+  /employees:
+    get:
+      summary: List employees
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/EmployeeStatus"
+        - name: departmentId
+          in: query
+          schema:
+            type: string
+        - name: updatedSince
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Employee page
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, nextCursor]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Employee"
+                  nextCursor:
+                    type: [string, "null"]
+  /employees/{employeeNumber}:
+    get:
+      summary: Get one employee by Employee Number
+      parameters:
+        - name: employeeNumber
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Employee
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Employee"
+        "404":
+          description: Employee not found
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Department:
+      type: object
+      required: [id, name, normalizedName, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        normalizedName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    EmployeeStatus:
+      type: string
+      enum: [ATTIVO, CESSATO, DA_ASSUMERE]
+    Employee:
+      type: object
+      required:
+        - id
+        - employeeNumber
+        - firstName
+        - lastName
+        - departmentId
+        - birthDate
+        - hireDate
+        - terminationDate
+        - retirementDate
+        - retirementDateOverridden
+        - fte
+        - usaCategory
+        - contractType
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+        employeeNumber:
+          type: integer
+        firstName:
+          type: string
+        lastName:
+          type: string
+        departmentId:
+          type: string
+        department:
+          $ref: "#/components/schemas/Department"
+        birthDate:
+          type: string
+          format: date
+        hireDate:
+          type: [string, "null"]
+          format: date
+        terminationDate:
+          type: [string, "null"]
+          format: date
+        retirementDate:
+          type: string
+          format: date
+        retirementDateOverridden:
+          type: boolean
+        fte:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 1
+        usaCategory:
+          type: string
+          enum: [EXEMPT, NON_EXEMPT, OTHER]
+        contractType:
+          type: string
+          enum: [INDETERMINATO, DETERMINATO, CONTRATTO_USA, COLLABORATORE]
+        status:
+          $ref: "#/components/schemas/EmployeeStatus"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
