@@ -1,0 +1,140 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UsaCategory {
+  EXEMPT
+  NON_EXEMPT
+  OTHER
+}
+
+enum ContractType {
+  INDETERMINATO
+  DETERMINATO
+  CONTRATTO_USA
+  COLLABORATORE
+}
+
+enum EmployeeStatus {
+  ATTIVO
+  CESSATO
+  DA_ASSUMERE
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  IMPORT_COMMIT
+}
+
+enum EntityType {
+  EMPLOYEE
+  DEPARTMENT
+  IMPORT_BATCH
+}
+
+enum ImportRowStatus {
+  PENDING
+  COMMITTED
+  SKIPPED
+  ERROR
+}
+
+enum ImportProposedAction {
+  CREATE
+  UPDATE
+}
+
+model Department {
+  id             String     @id @default(cuid())
+  name           String
+  normalizedName String     @unique
+  employees      Employee[]
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@index([name])
+}
+
+model Employee {
+  id                       String         @id @default(cuid())
+  employeeNumber           Int            @unique
+  firstName                String
+  lastName                 String
+  departmentId             String
+  department               Department     @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  birthDate                DateTime       @db.Date
+  hireDate                 DateTime?      @db.Date
+  terminationDate          DateTime?      @db.Date
+  retirementDate           DateTime       @db.Date
+  retirementDateOverridden Boolean        @default(false)
+  fte                      Decimal        @db.Decimal(4, 3)
+  usaCategory              UsaCategory
+  contractType             ContractType
+  status                   EmployeeStatus
+  createdAt                DateTime       @default(now())
+  updatedAt                DateTime       @updatedAt
+
+  @@index([lastName, firstName])
+  @@index([departmentId])
+  @@index([status])
+  @@index([updatedAt])
+}
+
+model AuditLog {
+  id             String      @id @default(cuid())
+  actorSub       String
+  actorEmail     String?
+  entityType     EntityType
+  entityId       String?
+  employeeNumber Int?
+  action         AuditAction
+  before         Json?
+  after          Json?
+  requestId      String
+  importBatchId  String?
+  importBatch    ImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+  createdAt      DateTime    @default(now())
+
+  @@index([entityType, entityId])
+  @@index([employeeNumber])
+  @@index([actorSub])
+  @@index([createdAt])
+  @@index([importBatchId])
+}
+
+model ImportBatch {
+  id         String      @id @default(cuid())
+  filename   String
+  actorSub   String
+  actorEmail String?
+  rowCount   Int
+  createdAt  DateTime    @default(now())
+  committedAt DateTime?
+  rows       ImportRow[]
+  auditLogs  AuditLog[]
+}
+
+model ImportRow {
+  id                 String                @id @default(cuid())
+  batchId            String
+  batch              ImportBatch           @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  rowNumber          Int
+  original           Json
+  normalized         Json?
+  errors             Json
+  proposedAction     ImportProposedAction?
+  existingEmployeeId String?
+  status             ImportRowStatus       @default(PENDING)
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  @@unique([batchId, rowNumber])
+  @@index([batchId, status])
+}

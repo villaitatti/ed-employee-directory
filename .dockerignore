@@ -1,0 +1,12 @@
+.git
+.context
+.DS_Store
+node_modules
+**/node_modules
+**/dist
+**/.turbo
+coverage
+.env
+.env.*
+!.env.example
+pnpm-store
