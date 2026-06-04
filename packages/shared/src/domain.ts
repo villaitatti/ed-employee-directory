@@ -68,8 +68,10 @@ export function calculateRetirementDate(birthDate: string): DateString {
 
 export function parseFteInput(input: string | number): number {
   const normalized = typeof input === 'number' ? String(input) : input.trim().replace(',', '.');
-  if (!/^(0|1)(\.\d+)?$/.test(normalized)) {
-    throw new Error('FTE must be a decimal between 0 and 1.');
+  // Cap at 3 decimal places: the DB column is Decimal(4,3), so a 4th decimal
+  // (e.g. 0.0004) would silently round to 0.000 and violate the positive guarantee.
+  if (!/^(0|1)(\.\d{1,3})?$/.test(normalized)) {
+    throw new Error('FTE must be a decimal between 0 and 1 with at most 3 decimal places.');
   }
 
   const value = Number(normalized);
@@ -101,11 +103,27 @@ export function validateStatusDates(input: StatusDateInput): string[] {
 export function resolveRetirementDate(input: {
   birthDate: string;
   currentRetirementDate?: string | null | undefined;
+  currentRetirementDateOverridden?: boolean | undefined;
   requestedRetirementDate?: string | null | undefined;
   resetOverride?: boolean | undefined;
 }): { retirementDate: DateString; retirementDateOverridden: boolean } {
   const calculated = calculateRetirementDate(input.birthDate);
-  if (input.resetOverride || !input.requestedRetirementDate) {
+
+  if (input.resetOverride) {
+    return { retirementDate: calculated, retirementDateOverridden: false };
+  }
+
+  if (!input.requestedRetirementDate) {
+    // No new retirement date supplied. Preserve a previously-set manual override
+    // rather than silently recalculating — otherwise an import (or form save)
+    // that omits the retirement column wipes the operator's manual value.
+    if (input.currentRetirementDateOverridden && input.currentRetirementDate) {
+      parseDateOnly(input.currentRetirementDate);
+      return {
+        retirementDate: input.currentRetirementDate as DateString,
+        retirementDateOverridden: true,
+      };
+    }
     return { retirementDate: calculated, retirementDateOverridden: false };
   }
 

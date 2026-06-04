@@ -10,7 +10,10 @@ import { registerRoutes } from './routes/index.js';
 
 const app = express();
 
-app.set('trust proxy', true);
+// Trust exactly one proxy hop (the reverse proxy / load balancer in front of
+// the app). Trusting every hop ('true') lets clients spoof X-Forwarded-For and
+// evade the per-IP rate limiter.
+app.set('trust proxy', 1);
 app.use(
   helmet({
     contentSecurityPolicy:

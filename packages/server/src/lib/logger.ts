@@ -3,6 +3,10 @@ import { env } from '../env.js';
 
 const loggerOptions: LoggerOptions = {
   level: env.NODE_ENV === 'test' ? 'silent' : process.env.LOG_LEVEL ?? 'info',
+  redact: {
+    paths: ['req.headers.authorization', 'req.headers.cookie'],
+    remove: true,
+  },
 };
 
 if (env.NODE_ENV === 'development') {

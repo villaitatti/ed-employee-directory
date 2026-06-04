@@ -3,12 +3,13 @@ import { parse } from 'csv-parse/sync';
 import { Router, type Request } from 'express';
 import multer from 'multer';
 import {
+  auditActionSchema,
   departmentCreateSchema,
   employeeListQuerySchema,
   employeeWriteSchema,
+  entityTypeSchema,
   importCommitSchema,
   normalizeDepartmentName,
-  type EmployeeWriteInput,
   type ImportPreviewRow,
 } from '@itatti/shared';
 import { prisma } from '../lib/prisma.js';
@@ -16,12 +17,36 @@ import { asyncHandler } from '../middleware/async-handler.js';
 import { AuthenticatedRequest, requireAuth, requireStaff } from '../middleware/auth.js';
 import { HttpError } from '../middleware/error.js';
 import { writeAuditLog } from '../services/audit.js';
+import {
+  csvEscape,
+  parseContractType,
+  parseNullableDate,
+  parseStatus,
+  parseUsaCategory,
+  readFirst,
+} from '../services/csv.js';
 import { toEmployeeData } from '../services/employee-input.js';
 import { serializeAuditLog, serializeDepartment, serializeEmployee } from '../services/serializers.js';
+
+const CSV_MIME_TYPES = new Set([
+  'text/csv',
+  'application/csv',
+  'application/vnd.ms-excel',
+  'text/plain',
+  'application/octet-stream',
+]);
 
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const hasCsvExtension = file.originalname.toLowerCase().endsWith('.csv');
+    if (hasCsvExtension && CSV_MIME_TYPES.has(file.mimetype)) {
+      cb(null, true);
+      return;
+    }
+    cb(new HttpError(400, 'CSV_REQUIRED', 'Upload a .csv file.'));
+  },
 });
 
 export const adminRouter = Router();
@@ -46,72 +71,6 @@ function jsonSnapshot(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
-function normalizeHeader(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .trim()
-    .toLocaleLowerCase('it-IT')
-    .replace(/[^a-z0-9]+/g, ' ');
-}
-
-function readFirst(row: Record<string, string>, aliases: string[]): string {
-  for (const [key, value] of Object.entries(row)) {
-    if (aliases.includes(normalizeHeader(key))) {
-      return value.trim();
-    }
-  }
-  return '';
-}
-
-function parseNullableDate(value: string): string | null {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
-  if (iso) return trimmed;
-  const italian = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed);
-  if (italian) {
-    const [, day = '', month = '', year = ''] = italian;
-    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-  }
-  return trimmed;
-}
-
-function parseUsaCategory(value: string): EmployeeWriteInput['usaCategory'] | undefined {
-  const normalized = normalizeHeader(value);
-  if (normalized === 'exempt') return 'EXEMPT';
-  if (normalized === 'non exempt' || normalized === 'non exempted' || normalized === 'non exempt usa') {
-    return 'NON_EXEMPT';
-  }
-  if (normalized === 'other' || normalized === 'altro') return 'OTHER';
-  return undefined;
-}
-
-function parseContractType(value: string): EmployeeWriteInput['contractType'] | undefined {
-  const normalized = normalizeHeader(value);
-  if (normalized === 'indeterminato' || normalized === 'permanent') return 'INDETERMINATO';
-  if (normalized === 'determinato' || normalized === 'fixed term') return 'DETERMINATO';
-  if (normalized === 'contratto usa' || normalized === 'us contract') return 'CONTRATTO_USA';
-  if (normalized === 'collaboratore' || normalized === 'collaborator') return 'COLLABORATORE';
-  return undefined;
-}
-
-function parseStatus(value: string): EmployeeWriteInput['status'] | undefined {
-  const normalized = normalizeHeader(value);
-  if (normalized === 'attivo' || normalized === 'active') return 'ATTIVO';
-  if (normalized === 'cessato' || normalized === 'terminated') return 'CESSATO';
-  if (normalized === 'da assumere' || normalized === 'to be hired') return 'DA_ASSUMERE';
-  return undefined;
-}
-
-function csvEscape(value: unknown): string {
-  const raw = value === null || value === undefined ? '' : String(value);
-  if (/[",\n\r]/.test(raw)) {
-    return `"${raw.replace(/"/g, '""')}"`;
-  }
-  return raw;
-}
-
 function employeeWhereFromQuery(query: ReturnType<typeof employeeListQuerySchema.parse>): Prisma.EmployeeWhereInput {
   const where: Prisma.EmployeeWhereInput = {};
   if (query.status) where.status = query.status;
@@ -122,7 +81,7 @@ function employeeWhereFromQuery(query: ReturnType<typeof employeeListQuerySchema
       { firstName: { contains: query.q, mode: Prisma.QueryMode.insensitive } },
       { lastName: { contains: query.q, mode: Prisma.QueryMode.insensitive } },
     ];
-    if (Number.isInteger(Number(query.q))) {
+    if (/^\d+$/.test(query.q)) {
       terms.push({ employeeNumber: Number(query.q) });
     }
     where.OR = terms;
@@ -292,7 +251,10 @@ adminRouter.put(
       if (!before) throw new HttpError(404, 'EMPLOYEE_NOT_FOUND', 'Employee not found.');
       const updated = await tx.employee.update({
         where: { id: employeeId },
-        data: toEmployeeData(input),
+        data: toEmployeeData(input, {
+          retirementDate: before.retirementDate.toISOString().slice(0, 10),
+          retirementDateOverridden: before.retirementDateOverridden,
+        }),
         include: { department: true },
       });
       await writeAuditLog({
@@ -399,8 +361,14 @@ adminRouter.get(
     if (typeof employeeNumber === 'number' && Number.isInteger(employeeNumber)) {
       where.employeeNumber = employeeNumber;
     }
-    if (typeof req.query.entityType === 'string') where.entityType = req.query.entityType as never;
-    if (typeof req.query.action === 'string') where.action = req.query.action as never;
+    if (typeof req.query.entityType === 'string') {
+      const entityType = entityTypeSchema.safeParse(req.query.entityType);
+      if (entityType.success) where.entityType = entityType.data;
+    }
+    if (typeof req.query.action === 'string') {
+      const action = auditActionSchema.safeParse(req.query.action);
+      if (action.success) where.action = action.data;
+    }
     if (typeof req.query.actor === 'string') where.actorSub = req.query.actor;
     if (typeof req.query.importBatchId === 'string') where.importBatchId = req.query.importBatchId;
     const auditLogs = await prisma.auditLog.findMany({
@@ -561,10 +529,27 @@ adminRouter.post(
           where: { employeeNumber: parsed.employeeNumber },
           include: { department: true },
         });
+
+        // The preview recorded CREATE vs UPDATE. If the world changed between
+        // preview and commit (a concurrent insert/delete of this employeeNumber),
+        // the previewed action no longer matches reality — refuse rather than
+        // silently overwriting a record the operator never reviewed.
+        const liveAction = before ? 'UPDATE' : 'CREATE';
+        if (row.proposedAction && row.proposedAction !== liveAction) {
+          throw new HttpError(
+            409,
+            'IMPORT_ACTION_DRIFT',
+            `Employee Number ${parsed.employeeNumber} changed since preview (previewed ${row.proposedAction}, now ${liveAction}). Re-run the import preview.`
+          );
+        }
+
         const employee = before
           ? await tx.employee.update({
               where: { employeeNumber: parsed.employeeNumber },
-              data: toEmployeeData(parsed),
+              data: toEmployeeData(parsed, {
+                retirementDate: before.retirementDate.toISOString().slice(0, 10),
+                retirementDateOverridden: before.retirementDateOverridden,
+              }),
               include: { department: true },
             })
           : await tx.employee.create({

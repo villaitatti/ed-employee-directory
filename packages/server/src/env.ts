@@ -31,6 +31,9 @@ export function loadEnv(): Env {
   }
 
   const env = result.data;
+  if (env.NODE_ENV === 'production' && env.DEV_SKIP_AUTH) {
+    throw new Error('DEV_SKIP_AUTH must not be enabled in production.');
+  }
   if (env.NODE_ENV === 'production' && !env.CORS_ORIGIN) {
     throw new Error('CORS_ORIGIN is required in production.');
   }
