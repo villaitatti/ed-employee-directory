@@ -6,6 +6,8 @@ import type {
   EmployeeWriteInput,
   ImportPreview,
   PaginatedEmployees,
+  RetirementPolicyInput,
+  Settings,
 } from '@itatti/shared';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
@@ -50,6 +52,13 @@ export function createApiClient(getToken: TokenGetter) {
   }
 
   return {
+    settings: async () => (await request<{ data: Settings }>('/api/admin/settings')).data,
+    updateRetirementPolicy: async (input: RetirementPolicyInput) =>
+      (await request<{ data: Settings & { recalculatedEmployees: number } }>(
+        '/api/admin/settings/retirement-policy',
+        { method: 'PUT', body: JSON.stringify(input) }
+      )).data,
+
     departments: async () => (await request<{ data: Department[] }>('/api/admin/departments')).data,
     createDepartment: async (input: DepartmentCreateInput) =>
       (await request<{ data: Department }>('/api/admin/departments', {

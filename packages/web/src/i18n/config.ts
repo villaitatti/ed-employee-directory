@@ -9,6 +9,7 @@ export const resources = {
         departments: 'Dipartimenti',
         import: 'Importa CSV',
         audit: 'Audit',
+        settings: 'Impostazioni',
       },
       actions: {
         createEmployee: 'Nuovo dipendente',
@@ -38,6 +39,23 @@ export const resources = {
         status: 'Stato',
         search: 'Cerca',
       },
+      sections: {
+        identity: 'Anagrafica',
+        employment: 'Rapporto di lavoro',
+        classification: 'Inquadramento',
+      },
+      settings: {
+        title: 'Età pensionabile',
+        description:
+          'Età anagrafica usata per calcolare la data di pensionamento prevista. Aggiornala quando cambia la legge italiana.',
+        years: 'Anni',
+        months: 'Mesi',
+        neverUpdated: 'Mai modificato (valore predefinito)',
+        lastUpdated: 'Ultimo aggiornamento',
+        recalcNote:
+          'Salvando, la data di pensionamento prevista verrà ricalcolata per tutti i dipendenti. Le date impostate manualmente non vengono toccate.',
+        recalcDone: 'Aggiornato. Ricalcolati {{count}} dipendenti.',
+      },
       status: {
         ATTIVO: 'Attivo',
         CESSATO: 'Cessato',
@@ -57,6 +75,7 @@ export const resources = {
       copy: {
         productEyebrow: 'Registro master data',
         subtitle: 'Dipendenti, dipartimenti, importazioni e audit in un unico registro.',
+        discardChanges: 'Ci sono modifiche non salvate. Vuoi chiudere senza salvare?',
         emptyEmployees: 'Nessun dipendente trovato.',
         emptyDepartments: 'Aggiungi i dipartimenti prima di importare il CSV.',
         importInstructions: 'Carica un CSV con intestazioni italiane o inglesi. I dipartimenti sconosciuti rimangono errori di riga.',
@@ -70,6 +89,7 @@ export const resources = {
         departments: 'Departments',
         import: 'CSV Import',
         audit: 'Audit',
+        settings: 'Settings',
       },
       actions: {
         createEmployee: 'New employee',
@@ -99,6 +119,23 @@ export const resources = {
         status: 'Status',
         search: 'Search',
       },
+      sections: {
+        identity: 'Identity',
+        employment: 'Employment',
+        classification: 'Classification',
+      },
+      settings: {
+        title: 'Retirement age',
+        description:
+          'The age used to calculate each employee’s projected retirement date. Update it when the Italian law changes.',
+        years: 'Years',
+        months: 'Months',
+        neverUpdated: 'Never changed (default value)',
+        lastUpdated: 'Last updated',
+        recalcNote:
+          'On save, the projected retirement date is recalculated for all employees. Manually overridden dates are left untouched.',
+        recalcDone: 'Updated. Recalculated {{count}} employees.',
+      },
       status: {
         ATTIVO: 'Active',
         CESSATO: 'Terminated',
@@ -118,6 +155,7 @@ export const resources = {
       copy: {
         productEyebrow: 'Master-data register',
         subtitle: 'Employees, departments, imports, and audit history in one register.',
+        discardChanges: 'You have unsaved changes. Close without saving?',
         emptyEmployees: 'No employees found.',
         emptyDepartments: 'Add departments before importing CSV data.',
         importInstructions: 'Upload a CSV with Italian or English headers. Unknown departments remain row errors.',
