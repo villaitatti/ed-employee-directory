@@ -6,12 +6,57 @@ import {
   normalizeDepartmentName,
   parseFteInput,
   resolveRetirementDate,
+  retirementPolicySchema,
+  settingsSchema,
   validateStatusDates,
 } from '../index.js';
 
 describe('employee domain rules', () => {
   it('calculates retirement date as birth date plus 67 years and 3 months', () => {
     expect(calculateRetirementDate('1980-01-15')).toBe('2047-04-15');
+  });
+
+  it('honours a custom retirement policy when one is supplied', () => {
+    // e.g. the law changes to 68 years, 0 months.
+    expect(calculateRetirementDate('1980-01-15', { years: 68, months: 0 })).toBe('2048-01-15');
+    expect(calculateRetirementDate('1980-01-15', { years: 67, months: 6 })).toBe('2047-07-15');
+  });
+
+  it('resolveRetirementDate uses the supplied policy for the calculated date', () => {
+    expect(
+      resolveRetirementDate({ birthDate: '1980-01-15', policy: { years: 68, months: 0 } })
+    ).toEqual({ retirementDate: '2048-01-15', retirementDateOverridden: false });
+  });
+
+  it('clamps day overflow when a custom policy shifts into a shorter month', () => {
+    // 1960-08-31 + 67y2m => 2027-10-31 (no clamp); + 67y3m => 2027-11-30 (clamps).
+    expect(calculateRetirementDate('1960-08-31', { years: 67, months: 2 })).toBe('2027-10-31');
+    expect(calculateRetirementDate('1960-08-31', { years: 67, months: 3 })).toBe('2027-11-30');
+  });
+
+  it('a reset override under a custom policy recalculates against that policy', () => {
+    expect(
+      resolveRetirementDate({
+        birthDate: '1980-01-15',
+        currentRetirementDate: '2047-05-01',
+        currentRetirementDateOverridden: true,
+        resetOverride: true,
+        policy: { years: 68, months: 0 },
+      })
+    ).toEqual({ retirementDate: '2048-01-15', retirementDateOverridden: false });
+  });
+
+  it('preserves a manual override even when a new policy is supplied', () => {
+    // Invariant the PUT /settings route relies on: it filters out overridden
+    // employees, so a supplied policy must NOT overwrite a standing override.
+    expect(
+      resolveRetirementDate({
+        birthDate: '1980-01-15',
+        currentRetirementDate: '2047-05-01',
+        currentRetirementDateOverridden: true,
+        policy: { years: 68, months: 0 },
+      })
+    ).toEqual({ retirementDate: '2047-05-01', retirementDateOverridden: true });
   });
 
   it('clamps leap-day retirement calculations to the last valid day', () => {
@@ -155,5 +200,64 @@ describe('employee domain rules', () => {
     const result = importCommitSchema.safeParse({ selectedRows: [2, 3, 2] });
 
     expect(result.success).toBe(false);
+  });
+});
+
+describe('retirementPolicySchema', () => {
+  it('accepts a valid policy and coerces numeric strings from form inputs', () => {
+    // The Settings page sends string values from <input type="number">.
+    expect(retirementPolicySchema.parse({ years: '67', months: '3' })).toEqual({
+      years: 67,
+      months: 3,
+    });
+    expect(retirementPolicySchema.parse({ years: 68, months: 0 })).toEqual({
+      years: 68,
+      months: 0,
+    });
+  });
+
+  it('enforces the statutory year bounds (50-80)', () => {
+    expect(retirementPolicySchema.safeParse({ years: 49, months: 0 }).success).toBe(false);
+    expect(retirementPolicySchema.safeParse({ years: 81, months: 0 }).success).toBe(false);
+    expect(retirementPolicySchema.safeParse({ years: 50, months: 0 }).success).toBe(true);
+    expect(retirementPolicySchema.safeParse({ years: 80, months: 11 }).success).toBe(true);
+  });
+
+  it('enforces the month bounds (0-11)', () => {
+    expect(retirementPolicySchema.safeParse({ years: 67, months: -1 }).success).toBe(false);
+    expect(retirementPolicySchema.safeParse({ years: 67, months: 12 }).success).toBe(false);
+  });
+
+  it('rejects non-integer years and months', () => {
+    expect(retirementPolicySchema.safeParse({ years: 67.5, months: 0 }).success).toBe(false);
+    expect(retirementPolicySchema.safeParse({ years: 67, months: 3.2 }).success).toBe(false);
+  });
+});
+
+describe('settingsSchema', () => {
+  it('accepts a settings payload with a null updatedAt (never changed)', () => {
+    expect(
+      settingsSchema.parse({
+        retirementPolicy: { years: 67, months: 3 },
+        updatedAt: null,
+      })
+    ).toEqual({ retirementPolicy: { years: 67, months: 3 }, updatedAt: null });
+  });
+
+  it('accepts an ISO updatedAt timestamp', () => {
+    const result = settingsSchema.safeParse({
+      retirementPolicy: { years: 68, months: 0 },
+      updatedAt: '2026-06-04T00:00:00.000Z',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a non-integer retirement policy', () => {
+    expect(
+      settingsSchema.safeParse({
+        retirementPolicy: { years: 67.5, months: 3 },
+        updatedAt: null,
+      }).success
+    ).toBe(false);
   });
 });
