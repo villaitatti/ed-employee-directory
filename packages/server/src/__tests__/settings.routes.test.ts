@@ -1,0 +1,202 @@
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import request from 'supertest';
+import app from '../app.js';
+import { isDbReachable, resetDb, testPrisma } from './helpers/db.js';
+
+const dbUp = await isDbReachable();
+if (!dbUp) {
+  // eslint-disable-next-line no-console
+  console.warn('[settings.routes] DATABASE_URL unreachable — skipping integration tests.');
+}
+
+// Seeds one department + one employee, returning the created employee row.
+async function seedEmployee(overrides: { retirementDateOverridden?: boolean } = {}) {
+  const department = await testPrisma.department.create({
+    data: { name: 'Amministrazione', normalizedName: 'amministrazione' },
+  });
+  return testPrisma.employee.create({
+    data: {
+      employeeNumber: 1001,
+      firstName: 'Giulia',
+      lastName: 'Rossi',
+      departmentId: department.id,
+      birthDate: new Date('1985-04-12T00:00:00.000Z'),
+      hireDate: new Date('2015-09-01T00:00:00.000Z'),
+      // 1985-04-12 + 67y3m = 2052-07-12 (the default policy).
+      retirementDate: new Date('2052-07-12T00:00:00.000Z'),
+      retirementDateOverridden: overrides.retirementDateOverridden ?? false,
+      fte: 1,
+      usaCategory: 'EXEMPT',
+      contractType: 'INDETERMINATO',
+      status: 'ATTIVO',
+    },
+  });
+}
+
+describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
+  beforeAll(async () => {
+    await resetDb();
+  });
+  beforeEach(async () => {
+    await resetDb();
+  });
+  afterAll(async () => {
+    await testPrisma.$disconnect();
+  });
+
+  it('GET /settings returns the statutory default when unset', async () => {
+    const res = await request(app).get('/api/admin/settings');
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({
+      retirementPolicy: { years: 67, months: 3 },
+      updatedAt: null,
+    });
+  });
+
+  it('PUT recalculates non-overridden employees and persists the policy', async () => {
+    await seedEmployee();
+
+    const res = await request(app)
+      .put('/api/admin/settings/retirement-policy')
+      .send({ years: 68, months: 0 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.retirementPolicy).toEqual({ years: 68, months: 0 });
+    expect(res.body.data.recalculatedEmployees).toBe(1);
+
+    // 1985-04-12 + 68y0m = 2053-04-12.
+    const employee = await testPrisma.employee.findUniqueOrThrow({ where: { employeeNumber: 1001 } });
+    expect(employee.retirementDate.toISOString().slice(0, 10)).toBe('2053-04-12');
+
+    // The setting is now persisted and read back by GET.
+    const get = await request(app).get('/api/admin/settings');
+    expect(get.body.data.retirementPolicy).toEqual({ years: 68, months: 0 });
+    expect(get.body.data.updatedAt).not.toBeNull();
+  });
+
+  it('PUT leaves a manually-overridden retirement date untouched', async () => {
+    await seedEmployee({ retirementDateOverridden: true });
+
+    const res = await request(app)
+      .put('/api/admin/settings/retirement-policy')
+      .send({ years: 68, months: 0 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.recalculatedEmployees).toBe(0);
+
+    const employee = await testPrisma.employee.findUniqueOrThrow({ where: { employeeNumber: 1001 } });
+    // Unchanged from the seeded override value.
+    expect(employee.retirementDate.toISOString().slice(0, 10)).toBe('2052-07-12');
+  });
+
+  it('PUT writes a SETTING audit log entry', async () => {
+    await request(app).put('/api/admin/settings/retirement-policy').send({ years: 68, months: 0 });
+
+    const logs = await testPrisma.auditLog.findMany({ where: { entityType: 'SETTING' } });
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.action).toBe('UPDATE');
+    expect(logs[0]?.entityId).toBe('retirementPolicy');
+  });
+
+  it('PUT with an unchanged policy recalculates nothing', async () => {
+    await seedEmployee();
+    // Default is 67/3; sending the same value must short-circuit the recalc.
+    const res = await request(app)
+      .put('/api/admin/settings/retirement-policy')
+      .send({ years: 67, months: 3 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.recalculatedEmployees).toBe(0);
+    const employee = await testPrisma.employee.findUniqueOrThrow({ where: { employeeNumber: 1001 } });
+    expect(employee.retirementDate.toISOString().slice(0, 10)).toBe('2052-07-12');
+  });
+
+  it('PUT rejects out-of-range values with a 400', async () => {
+    const res = await request(app)
+      .put('/api/admin/settings/retirement-policy')
+      .send({ years: 67, months: 12 });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('new employees created after a policy change use the new policy', async () => {
+    await request(app).put('/api/admin/settings/retirement-policy').send({ years: 68, months: 0 });
+    const department = await testPrisma.department.create({
+      data: { name: 'Biblioteca', normalizedName: 'biblioteca' },
+    });
+
+    const res = await request(app)
+      .post('/api/admin/employees')
+      .send({
+        employeeNumber: 2002,
+        firstName: 'Marco',
+        lastName: 'Bianchi',
+        departmentId: department.id,
+        birthDate: '1985-04-12',
+        hireDate: '2020-01-01',
+        fte: 1,
+        usaCategory: 'EXEMPT',
+        contractType: 'INDETERMINATO',
+        status: 'ATTIVO',
+      });
+
+    expect(res.status).toBe(201);
+    // Calculated with the new 68y0m policy, not the 67y3m default.
+    expect(res.body.data.retirementDate).toBe('2053-04-12');
+  });
+
+  it('re-importing an exported calculated date does not freeze it as an override', async () => {
+    // Export → change policy → re-import. The exported row carries the OLD
+    // calculated date with "Retirement Date Overridden" = false. After the
+    // policy change, the re-import must recalculate (not freeze the stale date).
+    await seedEmployee(); // born 1985-04-12, default retirement 2052-07-12
+    const department = await testPrisma.department.findFirstOrThrow();
+
+    await request(app).put('/api/admin/settings/retirement-policy').send({ years: 68, months: 0 });
+
+    // A CSV shaped like the export: includes the (now-stale) old date + the
+    // override=false flag.
+    const csv = [
+      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,Status,Retirement Date,Retirement Date Overridden',
+      `1001,Giulia,Rossi,${department.name},1985-04-12,2015-09-01,1,Exempt,Indeterminato,Attivo,2052-07-12,false`,
+    ].join('\n');
+
+    const preview = await request(app)
+      .post('/api/admin/imports/preview')
+      .attach('file', Buffer.from(csv), { filename: 'employees.csv', contentType: 'text/csv' });
+    expect(preview.status).toBe(201);
+    const rowNumbers = preview.body.data.rows.filter((r: { errors: string[] }) => r.errors.length === 0).map((r: { rowNumber: number }) => r.rowNumber);
+
+    const commit = await request(app)
+      .post(`/api/admin/imports/${preview.body.data.batchId}/commit`)
+      .send({ selectedRows: rowNumbers });
+    expect(commit.status).toBe(200);
+
+    const employee = await testPrisma.employee.findUniqueOrThrow({ where: { employeeNumber: 1001 } });
+    // Recalculated against the new 68y0m policy, not frozen at the imported date.
+    expect(employee.retirementDate.toISOString().slice(0, 10)).toBe('2053-04-12');
+    expect(employee.retirementDateOverridden).toBe(false);
+  });
+
+  it('honors an imported manual override (overridden=true) instead of recalculating', async () => {
+    await seedEmployee();
+    const department = await testPrisma.department.findFirstOrThrow();
+
+    const csv = [
+      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,Status,Retirement Date,Retirement Date Overridden',
+      `1001,Giulia,Rossi,${department.name},1985-04-12,2015-09-01,1,Exempt,Indeterminato,Attivo,2060-01-01,true`,
+    ].join('\n');
+
+    const preview = await request(app)
+      .post('/api/admin/imports/preview')
+      .attach('file', Buffer.from(csv), { filename: 'employees.csv', contentType: 'text/csv' });
+    const rowNumbers = preview.body.data.rows.filter((r: { errors: string[] }) => r.errors.length === 0).map((r: { rowNumber: number }) => r.rowNumber);
+    await request(app)
+      .post(`/api/admin/imports/${preview.body.data.batchId}/commit`)
+      .send({ selectedRows: rowNumbers });
+
+    const employee = await testPrisma.employee.findUniqueOrThrow({ where: { employeeNumber: 1001 } });
+    expect(employee.retirementDate.toISOString().slice(0, 10)).toBe('2060-01-01');
+    expect(employee.retirementDateOverridden).toBe(true);
+  });
+});

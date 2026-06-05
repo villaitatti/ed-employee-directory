@@ -6,6 +6,10 @@ import {
   ENTITY_TYPES,
   IMPORT_PROPOSED_ACTIONS,
   IMPORT_ROW_STATUSES,
+  RETIREMENT_MONTHS_MAX,
+  RETIREMENT_MONTHS_MIN,
+  RETIREMENT_YEARS_MAX,
+  RETIREMENT_YEARS_MIN,
   USA_CATEGORIES,
 } from './constants.js';
 import { isValidDateString, parseFteInput, validateStatusDates } from './domain.js';
@@ -21,6 +25,19 @@ export const auditActionSchema = z.enum(AUDIT_ACTIONS);
 export const entityTypeSchema = z.enum(ENTITY_TYPES);
 export const importRowStatusSchema = z.enum(IMPORT_ROW_STATUSES);
 export const importProposedActionSchema = z.enum(IMPORT_PROPOSED_ACTIONS);
+
+export const retirementPolicySchema = z.object({
+  years: z.coerce.number().int().min(RETIREMENT_YEARS_MIN).max(RETIREMENT_YEARS_MAX),
+  months: z.coerce.number().int().min(RETIREMENT_MONTHS_MIN).max(RETIREMENT_MONTHS_MAX),
+});
+export type RetirementPolicyInput = z.infer<typeof retirementPolicySchema>;
+
+export const settingsSchema = z.object({
+  // Reuse the policy schema so the shape has a single source of truth.
+  retirementPolicy: retirementPolicySchema,
+  updatedAt: z.string().nullable(),
+});
+export type Settings = z.infer<typeof settingsSchema>;
 
 export const departmentSchema = z.object({
   id: z.string(),

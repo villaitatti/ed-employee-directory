@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   csvEscape,
+  parseBoolean,
   parseContractType,
   parseNullableDate,
   parseStatus,
@@ -63,6 +64,20 @@ describe('enum mappers', () => {
     expect(parseStatus('Terminated')).toBe('CESSATO');
     expect(parseStatus('Da Assumere')).toBe('DA_ASSUMERE');
     expect(parseStatus('unknown')).toBeUndefined();
+  });
+});
+
+describe('parseBoolean', () => {
+  it('recognizes Italian and English truthy tokens', () => {
+    for (const truthy of ['true', 'TRUE', 'Si', 'sì', 'yes', 'Y', 'x', '1', 'Vero']) {
+      expect(parseBoolean(truthy)).toBe(true);
+    }
+  });
+
+  it('treats blank, false, and unknown tokens as false', () => {
+    for (const falsy of ['', '   ', 'false', 'no', '0', 'maybe']) {
+      expect(parseBoolean(falsy)).toBe(false);
+    }
   });
 });
 

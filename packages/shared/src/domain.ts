@@ -62,8 +62,24 @@ export function addYearsAndMonths(dateString: string, years: number, months: num
   return formatDateOnly(new Date(Date.UTC(targetYear, targetMonth, targetDay)));
 }
 
-export function calculateRetirementDate(birthDate: string): DateString {
-  return addYearsAndMonths(birthDate, 67, 3);
+/**
+ * The statutory retirement age, expressed as a number of years and months added
+ * to an employee's birth date. Configurable by staff (e.g. the CFO) because the
+ * Italian pension age changes by law; {@link DEFAULT_RETIREMENT_POLICY} is the
+ * value in force when this directory was built (67 years, 3 months).
+ */
+export type RetirementPolicy = {
+  years: number;
+  months: number;
+};
+
+export const DEFAULT_RETIREMENT_POLICY: RetirementPolicy = { years: 67, months: 3 };
+
+export function calculateRetirementDate(
+  birthDate: string,
+  policy: RetirementPolicy = DEFAULT_RETIREMENT_POLICY
+): DateString {
+  return addYearsAndMonths(birthDate, policy.years, policy.months);
 }
 
 export function parseFteInput(input: string | number): number {
@@ -106,8 +122,9 @@ export function resolveRetirementDate(input: {
   currentRetirementDateOverridden?: boolean | undefined;
   requestedRetirementDate?: string | null | undefined;
   resetOverride?: boolean | undefined;
+  policy?: RetirementPolicy | undefined;
 }): { retirementDate: DateString; retirementDateOverridden: boolean } {
-  const calculated = calculateRetirementDate(input.birthDate);
+  const calculated = calculateRetirementDate(input.birthDate, input.policy);
 
   if (input.resetOverride) {
     return { retirementDate: calculated, retirementDateOverridden: false };

@@ -38,6 +38,7 @@ docker build .
 - Department and employee CRUD
 - Italian-first bilingual UI
 - Staff-only admin and write access
-- CSV preview/commit by `Employee Number`
+- Settings page for the statutory retirement age, with table-wide retirement-date recalculation for non-overridden employees
+- CSV preview/commit by `Employee Number`, honoring the per-row "Retirement Date Overridden" flag
 - Audit log with delete tombstones
 - Read-only `/api/v1/departments`, `/api/v1/employees`, and `/api/v1/employees/:employeeNumber`

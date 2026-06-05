@@ -4,12 +4,14 @@ import { Router, type Request } from 'express';
 import multer from 'multer';
 import {
   auditActionSchema,
+  calculateRetirementDate,
   departmentCreateSchema,
   employeeListQuerySchema,
   employeeWriteSchema,
   entityTypeSchema,
   importCommitSchema,
   normalizeDepartmentName,
+  retirementPolicySchema,
   type ImportPreviewRow,
 } from '@itatti/shared';
 import { prisma } from '../lib/prisma.js';
@@ -19,6 +21,7 @@ import { HttpError } from '../middleware/error.js';
 import { writeAuditLog } from '../services/audit.js';
 import {
   csvEscape,
+  parseBoolean,
   parseContractType,
   parseNullableDate,
   parseStatus,
@@ -27,6 +30,7 @@ import {
 } from '../services/csv.js';
 import { toEmployeeData } from '../services/employee-input.js';
 import { serializeAuditLog, serializeDepartment, serializeEmployee } from '../services/serializers.js';
+import { getRetirementPolicy, getRetirementSetting, RETIREMENT_POLICY_KEY } from '../services/settings.js';
 
 const CSV_MIME_TYPES = new Set([
   'text/csv',
@@ -88,6 +92,94 @@ function employeeWhereFromQuery(query: ReturnType<typeof employeeListQuerySchema
   }
   return where;
 }
+
+adminRouter.get(
+  '/settings',
+  asyncHandler(async (_req, res) => {
+    const setting = await getRetirementSetting(prisma);
+    res.json({ data: setting });
+  })
+);
+
+adminRouter.put(
+  '/settings/retirement-policy',
+  asyncHandler(async (req, res) => {
+    const policy = retirementPolicySchema.parse(req.body);
+    const user = (req as AuthenticatedRequest).authUser;
+    const id = requestId(req as AuthenticatedRequest);
+
+    const result = await prisma.$transaction(async (tx) => {
+      const before = await getRetirementSetting(tx);
+      const unchanged =
+        before.retirementPolicy.years === policy.years &&
+        before.retirementPolicy.months === policy.months;
+
+      const setting = await tx.setting.upsert({
+        where: { key: RETIREMENT_POLICY_KEY },
+        create: { key: RETIREMENT_POLICY_KEY, value: policy },
+        update: { value: policy },
+      });
+
+      // Recalculate the projected retirement date for every employee whose date
+      // was never manually overridden, so the directory reflects the new law.
+      // Overridden dates are intentionally left untouched. Skip the table-wide
+      // recalc entirely when the policy didn't actually change — a repeated PUT
+      // with the same value shouldn't rescan and relock every employee row.
+      const employees = unchanged
+        ? []
+        : await tx.employee.findMany({
+            where: { retirementDateOverridden: false },
+            select: { id: true, birthDate: true },
+          });
+      // Group employees by their recomputed date and issue one updateMany per
+      // distinct date instead of one UPDATE per employee. The date math stays in
+      // calculateRetirementDate (single source of truth); only the writes are
+      // batched, bounding the round-trips held open inside this transaction.
+      const idsByRetirementDate = new Map<string, string[]>();
+      for (const employee of employees) {
+        const birthDate = employee.birthDate.toISOString().slice(0, 10);
+        const retirementDate = calculateRetirementDate(birthDate, policy);
+        const ids = idsByRetirementDate.get(retirementDate) ?? [];
+        ids.push(employee.id);
+        idsByRetirementDate.set(retirementDate, ids);
+      }
+      let recalculated = 0;
+      for (const [retirementDate, ids] of idsByRetirementDate) {
+        // Re-assert retirementDateOverridden=false in the write predicate: if a
+        // concurrent edit set a manual override between the findMany and here,
+        // that row is skipped rather than having its override silently clobbered.
+        const updated = await tx.employee.updateMany({
+          where: { id: { in: ids }, retirementDateOverridden: false },
+          data: { retirementDate: new Date(`${retirementDate}T00:00:00.000Z`) },
+        });
+        recalculated += updated.count;
+      }
+
+      await writeAuditLog({
+        tx,
+        user,
+        requestId: id,
+        entityType: 'SETTING',
+        entityId: RETIREMENT_POLICY_KEY,
+        action: 'UPDATE',
+        before: jsonSnapshot({ retirementPolicy: before.retirementPolicy }),
+        after: jsonSnapshot({ retirementPolicy: policy, recalculatedEmployees: recalculated }),
+      });
+
+      return {
+        retirementPolicy: policy,
+        updatedAt: setting.updatedAt.toISOString(),
+        recalculatedEmployees: recalculated,
+      };
+    }, {
+      // The bulk recalc can touch every employee; give it headroom beyond the
+      // 5s interactive-transaction default.
+      timeout: 30_000,
+    });
+
+    res.json({ data: result });
+  })
+);
 
 adminRouter.get(
   '/departments',
@@ -217,8 +309,9 @@ adminRouter.post(
     const id = requestId(req as AuthenticatedRequest);
 
     const employee = await prisma.$transaction(async (tx) => {
+      const policy = await getRetirementPolicy(tx);
       const created = await tx.employee.create({
-        data: toEmployeeData(input),
+        data: toEmployeeData(input, undefined, policy),
         include: { department: true },
       });
       await writeAuditLog({
@@ -249,12 +342,17 @@ adminRouter.put(
       const employeeId = pathParam(req, 'id');
       const before = await tx.employee.findUnique({ where: { id: employeeId }, include: { department: true } });
       if (!before) throw new HttpError(404, 'EMPLOYEE_NOT_FOUND', 'Employee not found.');
+      const policy = await getRetirementPolicy(tx);
       const updated = await tx.employee.update({
         where: { id: employeeId },
-        data: toEmployeeData(input, {
-          retirementDate: before.retirementDate.toISOString().slice(0, 10),
-          retirementDateOverridden: before.retirementDateOverridden,
-        }),
+        data: toEmployeeData(
+          input,
+          {
+            retirementDate: before.retirementDate.toISOString().slice(0, 10),
+            retirementDateOverridden: before.retirementDateOverridden,
+          },
+          policy
+        ),
         include: { department: true },
       });
       await writeAuditLog({
@@ -425,6 +523,18 @@ adminRouter.post(
         errors.push(`Employee Number ${employeeNumber} appears more than once in this CSV (rows ${duplicateRows.join(', ')}).`);
       }
 
+      // Honor the "Retirement Date Overridden" flag (the same column export
+      // emits). When true, the imported retirement date is a genuine manual
+      // override and is passed through. When false/absent, recalculate from the
+      // current policy instead of freezing the imported (possibly stale) date —
+      // otherwise an export → policy-change → re-import would silently turn every
+      // calculated date into a bogus override.
+      const retirementOverridden = parseBoolean(
+        readFirst(row, ['data pensionamento manuale', 'retirement date overridden', 'retirementdateoverridden'])
+      );
+      const importedRetirementDate = parseNullableDate(
+        readFirst(row, ['data pensionamento', 'retirement date', 'retirementdate'])
+      );
       const rawInput = {
         employeeNumber,
         firstName: readFirst(row, ['nome', 'first name', 'firstname']),
@@ -433,7 +543,8 @@ adminRouter.post(
         birthDate: parseNullableDate(readFirst(row, ['data di nascita', 'birth date', 'birthdate'])),
         hireDate: parseNullableDate(readFirst(row, ['data assunzione', 'hire date', 'hiredate'])),
         terminationDate: parseNullableDate(readFirst(row, ['data cessazione', 'termination date', 'terminationdate'])),
-        retirementDate: parseNullableDate(readFirst(row, ['data pensionamento', 'retirement date', 'retirementdate'])),
+        retirementDate: retirementOverridden ? importedRetirementDate : null,
+        resetRetirementDate: !retirementOverridden,
         fte: readFirst(row, ['fte']),
         usaCategory: parseUsaCategory(readFirst(row, ['categoria usa', 'usa category'])),
         contractType: parseContractType(readFirst(row, ['tipo contratto', 'contract type'])),
@@ -494,6 +605,7 @@ adminRouter.post(
 
     const result = await prisma.$transaction(async (tx) => {
       const batchId = pathParam(req, 'id');
+      const policy = await getRetirementPolicy(tx);
       const rows = await tx.importRow.findMany({
         where: {
           batchId,
@@ -546,14 +658,18 @@ adminRouter.post(
         const employee = before
           ? await tx.employee.update({
               where: { employeeNumber: parsed.employeeNumber },
-              data: toEmployeeData(parsed, {
-                retirementDate: before.retirementDate.toISOString().slice(0, 10),
-                retirementDateOverridden: before.retirementDateOverridden,
-              }),
+              data: toEmployeeData(
+                parsed,
+                {
+                  retirementDate: before.retirementDate.toISOString().slice(0, 10),
+                  retirementDateOverridden: before.retirementDateOverridden,
+                },
+                policy
+              ),
               include: { department: true },
             })
           : await tx.employee.create({
-              data: toEmployeeData(parsed),
+              data: toEmployeeData(parsed, undefined, policy),
               include: { department: true },
             });
 

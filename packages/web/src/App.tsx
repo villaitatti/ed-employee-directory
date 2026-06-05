@@ -9,11 +9,13 @@ import {
   Plus,
   Save,
   Search,
+  Settings,
   Trash2,
   Upload,
   UsersRound,
+  X,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -21,6 +23,10 @@ import { toast, Toaster } from 'sonner';
 import {
   CONTRACT_TYPES,
   EMPLOYEE_STATUSES,
+  RETIREMENT_MONTHS_MAX,
+  RETIREMENT_MONTHS_MIN,
+  RETIREMENT_YEARS_MAX,
+  RETIREMENT_YEARS_MIN,
   USA_CATEGORIES,
   type ContractType,
   type Department,
@@ -33,7 +39,7 @@ import { createApiClient } from './api/client.js';
 import { useEdAuth } from './auth/AuthProvider.js';
 import './styles/app.css';
 
-type EmployeeDraft = {
+export type EmployeeDraft = {
   id?: string;
   employeeNumber: string;
   firstName: string;
@@ -50,7 +56,7 @@ type EmployeeDraft = {
   status: EmployeeStatus;
 };
 
-const emptyEmployeeDraft: EmployeeDraft = {
+export const emptyEmployeeDraft: EmployeeDraft = {
   employeeNumber: '',
   firstName: '',
   lastName: '',
@@ -162,6 +168,10 @@ function Shell() {
               <History size={18} />
               {t('nav.audit')}
             </NavLink>
+            <NavLink to="/settings">
+              <Settings size={18} />
+              {t('nav.settings')}
+            </NavLink>
             <div className="sidebar-version" aria-label={`Version ${__APP_VERSION__}`}>
               v{__APP_VERSION__}
             </div>
@@ -173,6 +183,7 @@ function Shell() {
               <Route path="/departments" element={<DepartmentsPage />} />
               <Route path="/import" element={<ImportPage />} />
               <Route path="/audit" element={<AuditPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
             </Routes>
           </main>
         </div>
@@ -367,7 +378,7 @@ function EmployeesPage() {
   );
 }
 
-function EmployeeForm({
+export function EmployeeForm({
   draft,
   departments,
   onCancel,
@@ -387,100 +398,156 @@ function EmployeeForm({
     onChange({ ...draft, [key]: value });
   };
 
+  const initialDraft = useRef(draft);
+  const isDirty = JSON.stringify(draft) !== JSON.stringify(initialDraft.current);
+
+  const requestClose = useCallback(() => {
+    if (isDirty && !window.confirm(t('copy.discardChanges'))) return;
+    onCancel();
+  }, [isDirty, onCancel, t]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') requestClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = '';
+    };
+  }, [requestClose]);
+
   return (
-    <form
-      className="edit-panel"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onSave();
+    <div
+      className="modal-overlay"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) requestClose();
       }}
     >
-      <div className="panel-heading">
-        <h3>{draft.id ? `${draft.lastName} ${draft.firstName}` : t('actions.createEmployee')}</h3>
-        <div className="action-row">
-          <button className="button ghost" type="button" onClick={onCancel}>
+      <form
+        className="modal-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label={draft.id ? `${draft.lastName} ${draft.firstName}` : t('actions.createEmployee')}
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSave();
+        }}
+      >
+        <header className="modal-header">
+          <div>
+            <p className="eyebrow">{t('nav.employees')}</p>
+            <h3>{draft.id ? `${draft.lastName} ${draft.firstName}` : t('actions.createEmployee')}</h3>
+          </div>
+          <button className="modal-close" type="button" onClick={requestClose} aria-label={t('actions.cancel')}>
+            <X size={18} />
+          </button>
+        </header>
+
+        <div className="modal-body">
+          <fieldset className="form-section">
+            <legend>{t('sections.identity')}</legend>
+            <div className="form-grid">
+              <Field label={t('fields.employeeNumber')}>
+                <input required inputMode="numeric" value={draft.employeeNumber} onChange={(e) => set('employeeNumber', e.target.value)} />
+              </Field>
+              <Field label={t('fields.department')}>
+                <select required value={draft.departmentId} onChange={(e) => set('departmentId', e.target.value)}>
+                  <option value="" />
+                  {departments.map((department) => (
+                    <option key={department.id} value={department.id}>
+                      {department.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label={t('fields.firstName')}>
+                <input required value={draft.firstName} onChange={(e) => set('firstName', e.target.value)} />
+              </Field>
+              <Field label={t('fields.lastName')}>
+                <input required value={draft.lastName} onChange={(e) => set('lastName', e.target.value)} />
+              </Field>
+              <Field label={t('fields.birthDate')}>
+                <input required type="date" value={draft.birthDate} onChange={(e) => set('birthDate', e.target.value)} />
+              </Field>
+            </div>
+          </fieldset>
+
+          <fieldset className="form-section">
+            <legend>{t('sections.employment')}</legend>
+            <div className="form-grid">
+              <Field label={t('fields.hireDate')}>
+                <input type="date" value={draft.hireDate} onChange={(e) => set('hireDate', e.target.value)} />
+              </Field>
+              <Field label={t('fields.terminationDate')}>
+                <input type="date" value={draft.terminationDate} onChange={(e) => set('terminationDate', e.target.value)} />
+              </Field>
+              <Field label={t('fields.fte')}>
+                <input required inputMode="decimal" value={draft.fte} onChange={(e) => set('fte', e.target.value)} />
+              </Field>
+              <Field label={t('fields.status')}>
+                <select value={draft.status} onChange={(e) => set('status', e.target.value as EmployeeStatus)}>
+                  {EMPLOYEE_STATUSES.map((option) => (
+                    <option key={option} value={option}>
+                      {t(`status.${option}`)}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label={t('fields.retirementDate')} full>
+                <div className="inline-field">
+                  <input type="date" value={draft.retirementDate} onChange={(e) => set('retirementDate', e.target.value)} />
+                  <label className="checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={draft.resetRetirementDate}
+                      onChange={(e) => set('resetRetirementDate', e.target.checked)}
+                    />
+                    {t('actions.resetRetirement')}
+                  </label>
+                </div>
+              </Field>
+            </div>
+          </fieldset>
+
+          <fieldset className="form-section">
+            <legend>{t('sections.classification')}</legend>
+            <div className="form-grid">
+              <Field label={t('fields.contractType')}>
+                <select value={draft.contractType} onChange={(e) => set('contractType', e.target.value as ContractType)}>
+                  {CONTRACT_TYPES.map((option) => (
+                    <option key={option} value={option}>
+                      {t(`contractType.${option}`)}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label={t('fields.usaCategory')}>
+                <select value={draft.usaCategory} onChange={(e) => set('usaCategory', e.target.value as UsaCategory)}>
+                  {USA_CATEGORIES.map((option) => (
+                    <option key={option} value={option}>
+                      {t(`usaCategory.${option}`)}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+          </fieldset>
+        </div>
+
+        <footer className="modal-footer">
+          <button className="button ghost" type="button" onClick={requestClose}>
             {t('actions.cancel')}
           </button>
           <button className="button primary" type="submit" disabled={isSaving}>
             <Save size={16} />
             {t('actions.save')}
           </button>
-        </div>
-      </div>
-      <div className="form-grid">
-        <Field label={t('fields.employeeNumber')}>
-          <input required inputMode="numeric" value={draft.employeeNumber} onChange={(e) => set('employeeNumber', e.target.value)} />
-        </Field>
-        <Field label={t('fields.department')}>
-          <select required value={draft.departmentId} onChange={(e) => set('departmentId', e.target.value)}>
-            <option value="" />
-            {departments.map((department) => (
-              <option key={department.id} value={department.id}>
-                {department.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label={t('fields.firstName')}>
-          <input required value={draft.firstName} onChange={(e) => set('firstName', e.target.value)} />
-        </Field>
-        <Field label={t('fields.lastName')}>
-          <input required value={draft.lastName} onChange={(e) => set('lastName', e.target.value)} />
-        </Field>
-        <Field label={t('fields.birthDate')}>
-          <input required type="date" value={draft.birthDate} onChange={(e) => set('birthDate', e.target.value)} />
-        </Field>
-        <Field label={t('fields.hireDate')}>
-          <input type="date" value={draft.hireDate} onChange={(e) => set('hireDate', e.target.value)} />
-        </Field>
-        <Field label={t('fields.terminationDate')}>
-          <input type="date" value={draft.terminationDate} onChange={(e) => set('terminationDate', e.target.value)} />
-        </Field>
-        <Field label={t('fields.retirementDate')}>
-          <div className="inline-field">
-            <input type="date" value={draft.retirementDate} onChange={(e) => set('retirementDate', e.target.value)} />
-            <label className="checkbox-row">
-              <input
-                type="checkbox"
-                checked={draft.resetRetirementDate}
-                onChange={(e) => set('resetRetirementDate', e.target.checked)}
-              />
-              {t('actions.resetRetirement')}
-            </label>
-          </div>
-        </Field>
-        <Field label={t('fields.fte')}>
-          <input required inputMode="decimal" value={draft.fte} onChange={(e) => set('fte', e.target.value)} />
-        </Field>
-        <Field label={t('fields.usaCategory')}>
-          <select value={draft.usaCategory} onChange={(e) => set('usaCategory', e.target.value as UsaCategory)}>
-            {USA_CATEGORIES.map((option) => (
-              <option key={option} value={option}>
-                {t(`usaCategory.${option}`)}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label={t('fields.contractType')}>
-          <select value={draft.contractType} onChange={(e) => set('contractType', e.target.value as ContractType)}>
-            {CONTRACT_TYPES.map((option) => (
-              <option key={option} value={option}>
-                {t(`contractType.${option}`)}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label={t('fields.status')}>
-          <select value={draft.status} onChange={(e) => set('status', e.target.value as EmployeeStatus)}>
-            {EMPLOYEE_STATUSES.map((option) => (
-              <option key={option} value={option}>
-                {t(`status.${option}`)}
-              </option>
-            ))}
-          </select>
-        </Field>
-      </div>
-    </form>
+        </footer>
+      </form>
+    </div>
   );
 }
 
@@ -747,9 +814,109 @@ function AuditPage() {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+export function SettingsPage() {
+  const { t } = useTranslation();
+  const api = useApi();
+  const queryClient = useQueryClient();
+  const settings = useQuery({ queryKey: ['settings'], queryFn: api.settings });
+
+  const [years, setYears] = useState('');
+  const [months, setMonths] = useState('');
+  const [edited, setEdited] = useState(false);
+
+  const loaded = settings.data;
+
+  // Seed the inputs once the setting loads, unless the user is already editing.
+  useEffect(() => {
+    if (loaded && !edited) {
+      setYears(String(loaded.retirementPolicy.years));
+      setMonths(String(loaded.retirementPolicy.months));
+    }
+  }, [loaded, edited]);
+
+  const savePolicy = useMutation({
+    mutationFn: async () =>
+      api.updateRetirementPolicy({ years: Number(years), months: Number(months) }),
+    onSuccess: (result) => {
+      setEdited(false);
+      toast.success(t('settings.recalcDone', { count: result.recalculatedEmployees }));
+      void queryClient.invalidateQueries({ queryKey: ['settings'] });
+      void queryClient.invalidateQueries({ queryKey: ['employees'] });
+      void queryClient.invalidateQueries({ queryKey: ['audit'] });
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Error'),
+  });
+
   return (
-    <label className="field">
+    <section className="page-grid settings-grid">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">{t('nav.settings')}</p>
+          <h2>{t('settings.title')}</h2>
+        </div>
+      </div>
+
+      <form
+        className="settings-card"
+        onSubmit={(event) => {
+          event.preventDefault();
+          savePolicy.mutate();
+        }}
+      >
+        <p className="settings-description">{t('settings.description')}</p>
+
+        <div className="settings-fields">
+          <Field label={t('settings.years')}>
+            <input
+              required
+              type="number"
+              inputMode="numeric"
+              min={RETIREMENT_YEARS_MIN}
+              max={RETIREMENT_YEARS_MAX}
+              value={years}
+              onChange={(e) => {
+                setEdited(true);
+                setYears(e.target.value);
+              }}
+            />
+          </Field>
+          <Field label={t('settings.months')}>
+            <input
+              required
+              type="number"
+              inputMode="numeric"
+              min={RETIREMENT_MONTHS_MIN}
+              max={RETIREMENT_MONTHS_MAX}
+              value={months}
+              onChange={(e) => {
+                setEdited(true);
+                setMonths(e.target.value);
+              }}
+            />
+          </Field>
+        </div>
+
+        <p className="settings-meta">
+          {loaded?.updatedAt
+            ? `${t('settings.lastUpdated')}: ${new Date(loaded.updatedAt).toLocaleString()}`
+            : t('settings.neverUpdated')}
+        </p>
+        <p className="settings-note">{t('settings.recalcNote')}</p>
+
+        <div className="action-row">
+          <button className="button primary" type="submit" disabled={savePolicy.isPending}>
+            <Save size={16} />
+            {t('actions.save')}
+          </button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
+function Field({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
+  return (
+    <label className={full ? 'field field-full' : 'field'}>
       <span>{label}</span>
       {children}
     </label>
