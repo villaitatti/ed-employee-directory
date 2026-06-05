@@ -1,4 +1,4 @@
-import type { EmployeeWriteInput } from '@itatti/shared';
+import type { EmployeeWriteInput, RetirementPolicy } from '@itatti/shared';
 import { resolveRetirementDate } from '@itatti/shared';
 
 function dateOnlyToUtc(value: string): Date {
@@ -18,9 +18,14 @@ export type ExistingRetirement = {
   retirementDateOverridden: boolean;
 };
 
-export function toEmployeeData(input: EmployeeWriteInput, existing?: ExistingRetirement) {
+export function toEmployeeData(
+  input: EmployeeWriteInput,
+  existing?: ExistingRetirement,
+  policy?: RetirementPolicy
+) {
   const retirement = resolveRetirementDate({
     birthDate: input.birthDate,
+    ...(policy ? { policy } : {}),
     ...(input.retirementDate !== undefined ? { requestedRetirementDate: input.retirementDate } : {}),
     ...(input.resetRetirementDate !== undefined ? { resetOverride: input.resetRetirementDate } : {}),
     ...(existing

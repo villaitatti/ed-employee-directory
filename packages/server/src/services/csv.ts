@@ -36,6 +36,16 @@ export function parseNullableDate(value: string): string | null {
   return trimmed;
 }
 
+/**
+ * Parses the "Retirement Date Overridden" column. Recognizes Italian/English
+ * truthy tokens; everything else (including blank) is false. Returns false when
+ * the column is absent so a CSV without it recalculates rather than freezing.
+ */
+export function parseBoolean(value: string): boolean {
+  const normalized = normalizeHeader(value);
+  return ['true', 'si', 'yes', 'y', 'x', '1', 'vero'].includes(normalized);
+}
+
 export function parseUsaCategory(value: string): EmployeeWriteInput['usaCategory'] | undefined {
   const normalized = normalizeHeader(value);
   if (normalized === 'exempt') return 'EXEMPT';
