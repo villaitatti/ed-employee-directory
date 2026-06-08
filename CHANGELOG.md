@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0 - 2026-06-08
+
+### Changed
+
+- Adding and editing a department now uses the same modal dialog as employees: a "New department" button opens a centered popup with the name field, and saving shows a confirmation toast. Replaces the inline add/edit bar so both flows feel consistent. Edit, Escape/backdrop close, and the unsaved-changes prompt work the same as the employee form.
+
+### Removed
+
+- Dropped the unused `.department-form` styles left over from the old inline department bar.
+
 ## 0.2.1 - 2026-06-08
 
 ### Changed
