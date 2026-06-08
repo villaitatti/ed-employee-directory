@@ -36,7 +36,7 @@ import {
   type UsaCategory,
 } from '@itatti/shared';
 import { createApiClient } from './api/client.js';
-import { useEdAuth } from './auth/AuthProvider.js';
+import { useEdAuth, wasSignedOut } from './auth/AuthProvider.js';
 import './styles/app.css';
 
 export type EmployeeDraft = {
@@ -103,12 +103,54 @@ function useDepartments(api: ReturnType<typeof createApiClient>) {
 function Shell() {
   const { t, i18n } = useTranslation();
   const auth = useEdAuth();
+  const redirecting = useRef(false);
+  const [loginFailed, setLoginFailed] = useState(false);
+
+  // No landing page on a clean first visit: once Auth0 finishes its session
+  // check, send an unauthenticated visitor straight to the Auth0 Universal
+  // Login. But DON'T auto-redirect when there's nothing to redirect to safely:
+  //   - auth.error: the Auth0 round-trip failed (consent denied, access_denied,
+  //     callback/MFA error). Redirecting again just loops forever.
+  //   - wasSignedOut(): the user deliberately logged out and Auth0 returned to
+  //     origin; auto-redirecting would make sign-out impossible.
+  //   - loginFailed: loginWithRedirect() itself rejected (bad config, network).
+  // In those cases we fall through to the sign-in screen, which is the manual
+  // off-ramp. The ref guards against firing the redirect more than once per
+  // mount (StrictMode double-invoke); the conditions above guard the reload
+  // loops the ref cannot see.
+  const blockRedirect = Boolean(auth.error) || loginFailed || wasSignedOut();
+
+  useEffect(() => {
+    if (!auth.isLoading && !auth.isAuthenticated && !blockRedirect && !redirecting.current) {
+      redirecting.current = true;
+      auth.login().catch(() => {
+        // Surface a manual retry instead of stranding the user on the splash.
+        redirecting.current = false;
+        setLoginFailed(true);
+      });
+    }
+  }, [auth.isLoading, auth.isAuthenticated, auth.login, blockRedirect]);
 
   if (auth.isLoading) {
     return <div className="app-loading">ED</div>;
   }
 
   if (!auth.isAuthenticated) {
+    // Auto-redirect is in flight on a clean visit — show the splash, not the
+    // sign-in screen, to avoid a flash of the manual button before navigation.
+    if (!blockRedirect) {
+      return <div className="app-loading">ED</div>;
+    }
+
+    const signIn = () => {
+      setLoginFailed(false);
+      redirecting.current = true;
+      void auth.login().catch(() => {
+        redirecting.current = false;
+        setLoginFailed(true);
+      });
+    };
+
     return (
       <main className="signin-screen">
         <img className="brand-logo" src="/itatti-logo.png" alt="I Tatti" />
@@ -116,7 +158,16 @@ function Shell() {
           <p className="eyebrow">{t('copy.productEyebrow')}</p>
           <h1>ED - Employee Directory</h1>
           <p>{t('copy.subtitle')}</p>
-          <button className="button primary" onClick={() => void auth.login()}>
+          {auth.error ? (
+            <p className="signin-error" role="alert">
+              {t('copy.signInError')}
+            </p>
+          ) : loginFailed ? (
+            <p className="signin-error" role="alert">
+              {t('copy.signInUnavailable')}
+            </p>
+          ) : null}
+          <button className="button primary" onClick={signIn}>
             {t('actions.signIn')}
           </button>
         </div>

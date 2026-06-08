@@ -10,6 +10,17 @@
 
 - Dropped the unused `.department-form` styles left over from the old inline department bar.
 
+## 0.2.1 - 2026-06-08
+
+### Changed
+
+- Signing in is now one step: visiting the app sends you straight to the Auth0 login instead of showing a separate welcome screen first.
+
+### Fixed
+
+- Signing out now keeps you signed out. Previously the app could immediately send you back into Auth0 and silently sign you back in, making it impossible to log out or switch accounts.
+- A failed or denied sign-in no longer traps you in an endless redirect. The app now shows the sign-in screen with a clear message and a button to try again, instead of looping back to Auth0 or hanging on a blank loading screen.
+
 ## 0.2.0 - 2026-06-05
 
 ### Added
