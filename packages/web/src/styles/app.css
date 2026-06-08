@@ -140,6 +140,11 @@ button:focus-visible {
   color: var(--ink-soft);
 }
 
+.signin-error {
+  color: var(--danger);
+  font-weight: 600;
+}
+
 .app-shell {
   height: 100vh;
   min-height: 0;
