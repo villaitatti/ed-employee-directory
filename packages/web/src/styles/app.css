@@ -290,7 +290,6 @@ button:focus-visible {
   align-items: center;
 }
 
-.department-form,
 .import-toolbar {
   grid-template-columns: minmax(16rem, 32rem) auto auto;
   justify-content: start;
@@ -670,7 +669,6 @@ button:focus-visible {
   }
 
   .toolbar,
-  .department-form,
   .import-toolbar {
     grid-template-columns: 1fr;
   }

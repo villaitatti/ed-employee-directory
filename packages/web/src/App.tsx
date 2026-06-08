@@ -551,21 +551,28 @@ export function EmployeeForm({
   );
 }
 
+export type DepartmentDraft = {
+  id?: string;
+  name: string;
+};
+
+export const emptyDepartmentDraft: DepartmentDraft = {
+  name: '',
+};
+
 function DepartmentsPage() {
   const { t } = useTranslation();
   const api = useApi();
   const queryClient = useQueryClient();
   const departments = useDepartments(api);
-  const [name, setName] = useState('');
-  const [editing, setEditing] = useState<Department | null>(null);
+  const [draft, setDraft] = useState<DepartmentDraft | null>(null);
   const saveDepartment = useMutation({
-    mutationFn: async () =>
-      editing ? api.updateDepartment(editing.id, { name }) : api.createDepartment({ name }),
+    mutationFn: async (input: DepartmentDraft) =>
+      input.id ? api.updateDepartment(input.id, { name: input.name }) : api.createDepartment({ name: input.name }),
     onSuccess: () => {
-      setName('');
-      setEditing(null);
-      void queryClient.invalidateQueries({ queryKey: ['departments'] });
+      setDraft(null);
       toast.success(t('actions.save'));
+      void queryClient.invalidateQueries({ queryKey: ['departments'] });
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : 'Error'),
   });
@@ -585,32 +592,13 @@ function DepartmentsPage() {
           <p className="eyebrow">{t('nav.departments')}</p>
           <h2>{t('copy.emptyDepartments')}</h2>
         </div>
-      </div>
-      <form
-        className="toolbar department-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          saveDepartment.mutate();
-        }}
-      >
-        <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t('fields.department')} required />
-        <button className="button primary" type="submit">
-          <Save size={16} />
-          {t('actions.save')}
-        </button>
-        {editing ? (
-          <button
-            className="button ghost"
-            type="button"
-            onClick={() => {
-              setEditing(null);
-              setName('');
-            }}
-          >
-            {t('actions.cancel')}
+        <div className="action-row">
+          <button className="button primary" type="button" onClick={() => setDraft(emptyDepartmentDraft)}>
+            <Plus size={16} />
+            {t('actions.createDepartment')}
           </button>
-        ) : null}
-      </form>
+        </div>
+      </div>
       <div className="data-surface">
         <table>
           <thead>
@@ -629,10 +617,7 @@ function DepartmentsPage() {
                   <button
                     className="text-button"
                     type="button"
-                    onClick={() => {
-                      setEditing(department);
-                      setName(department.name);
-                    }}
+                    onClick={() => setDraft({ id: department.id, name: department.name })}
                   >
                     Edit
                   </button>
@@ -645,7 +630,110 @@ function DepartmentsPage() {
           </tbody>
         </table>
       </div>
+
+      {draft ? (
+        <DepartmentForm
+          draft={draft}
+          onCancel={() => setDraft(null)}
+          onChange={setDraft}
+          onSave={() => saveDepartment.mutate(draft)}
+          isSaving={saveDepartment.isPending}
+        />
+      ) : null}
     </section>
+  );
+}
+
+export function DepartmentForm({
+  draft,
+  onCancel,
+  onChange,
+  onSave,
+  isSaving,
+}: {
+  draft: DepartmentDraft;
+  onCancel: () => void;
+  onChange: (draft: DepartmentDraft) => void;
+  onSave: () => void;
+  isSaving: boolean;
+}) {
+  const { t } = useTranslation();
+
+  const initialDraft = useRef(draft);
+  const isDirty = JSON.stringify(draft) !== JSON.stringify(initialDraft.current);
+
+  const requestClose = useCallback(() => {
+    if (isDirty && !window.confirm(t('copy.discardChanges'))) return;
+    onCancel();
+  }, [isDirty, onCancel, t]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') requestClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = '';
+    };
+  }, [requestClose]);
+
+  return (
+    <div
+      className="modal-overlay"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) requestClose();
+      }}
+    >
+      <form
+        className="modal-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label={draft.id ? draft.name : t('actions.createDepartment')}
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSave();
+        }}
+      >
+        <header className="modal-header">
+          <div>
+            <p className="eyebrow">{t('nav.departments')}</p>
+            <h3>{draft.id ? draft.name : t('actions.createDepartment')}</h3>
+          </div>
+          <button className="modal-close" type="button" onClick={requestClose} aria-label={t('actions.cancel')}>
+            <X size={18} />
+          </button>
+        </header>
+
+        <div className="modal-body">
+          <fieldset className="form-section">
+            <legend>{t('sections.identity')}</legend>
+            <div className="form-grid">
+              <Field label={t('fields.department')} full>
+                <input
+                  required
+                  autoFocus
+                  value={draft.name}
+                  onChange={(e) => onChange({ ...draft, name: e.target.value })}
+                />
+              </Field>
+            </div>
+          </fieldset>
+        </div>
+
+        <footer className="modal-footer">
+          <button className="button ghost" type="button" onClick={requestClose}>
+            {t('actions.cancel')}
+          </button>
+          <button className="button primary" type="submit" disabled={isSaving}>
+            <Save size={16} />
+            {t('actions.save')}
+          </button>
+        </footer>
+      </form>
+    </div>
   );
 }
 
