@@ -41,6 +41,7 @@ export function serializeEmployee(employee: EmployeeWithDepartment): EmployeeDto
     fte: Number(employee.fte),
     usaCategory: employee.usaCategory,
     contractType: employee.contractType,
+    tfr: employee.tfr,
     status: employee.status,
     createdAt: dateTime(employee.createdAt),
     updatedAt: dateTime(employee.updatedAt),

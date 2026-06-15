@@ -1,4 +1,4 @@
-import type { EmployeeWriteInput, RetirementPolicy } from '@itatti/shared';
+import type { EmployeeWriteInput, RetirementPolicy, TfrOption } from '@itatti/shared';
 import { resolveRetirementDate } from '@itatti/shared';
 
 function dateOnlyToUtc(value: string): Date {
@@ -11,11 +11,12 @@ function nullableDateToUtc(value: string | null | undefined): Date | null {
 
 /**
  * Existing retirement state, when updating an employee. Lets resolveRetirementDate
- * preserve a manual override instead of recalculating it away.
+ * preserve a confirmed government-approved date instead of recalculating it away.
  */
 export type ExistingRetirement = {
   retirementDate: string | null;
   retirementDateOverridden: boolean;
+  tfr?: TfrOption | null;
 };
 
 export function toEmployeeData(
@@ -28,6 +29,7 @@ export function toEmployeeData(
     ...(policy ? { policy } : {}),
     ...(input.retirementDate !== undefined ? { requestedRetirementDate: input.retirementDate } : {}),
     ...(input.resetRetirementDate !== undefined ? { resetOverride: input.resetRetirementDate } : {}),
+    ...(input.retirementDateOverridden !== undefined ? { confirmRetirementDate: input.retirementDateOverridden } : {}),
     ...(existing
       ? {
           currentRetirementDate: existing.retirementDate,
@@ -49,6 +51,7 @@ export function toEmployeeData(
     fte: input.fte,
     usaCategory: input.usaCategory,
     contractType: input.contractType,
+    tfr: input.tfr ?? existing?.tfr ?? 'I_TATTI',
     status: input.status,
   };
 }

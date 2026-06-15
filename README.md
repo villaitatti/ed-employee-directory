@@ -1,6 +1,6 @@
 # ED - Employee Directory
 
-ED is an internal employee and department master-data app. It replaces spreadsheet maintenance with authenticated CRUD, CSV import review, CSV export, audit logging, and stable read-only `/api/v1` endpoints for future finance apps.
+ED is an internal employee and department master-data app. It replaces spreadsheet maintenance with authenticated CRUD, Excel import review, Excel export, audit logging, and stable read-only `/api/v1` endpoints for future finance apps.
 
 ## Stack
 
@@ -39,6 +39,6 @@ docker build .
 - Italian-first bilingual UI
 - Staff-only admin and write access
 - Settings page for the statutory retirement age, with table-wide retirement-date recalculation for non-overridden employees
-- CSV preview/commit by `Employee Number`, honoring the per-row "Retirement Date Overridden" flag
+- Excel preview/commit by `Employee Number`, honoring the per-row "Retirement Date Confirmed" flag
 - Audit log with delete tombstones
 - Read-only `/api/v1/departments`, `/api/v1/employees`, and `/api/v1/employees/:employeeNumber`

@@ -15,6 +15,7 @@ describe('employee write schema', () => {
       fte: '0,5',
       usaCategory: 'EXEMPT',
       contractType: 'INDETERMINATO',
+      tfr: 'I_TATTI',
       status: 'ATTIVO',
     });
 

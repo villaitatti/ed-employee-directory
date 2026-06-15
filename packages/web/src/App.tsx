@@ -27,17 +27,22 @@ import {
   RETIREMENT_MONTHS_MIN,
   RETIREMENT_YEARS_MAX,
   RETIREMENT_YEARS_MIN,
+  TFR_OPTIONS,
   USA_CATEGORIES,
+  type AuditLog,
   type ContractType,
   type Department,
   type Employee,
   type EmployeeStatus,
   type ImportPreview,
+  type TfrOption,
   type UsaCategory,
 } from '@itatti/shared';
 import { createApiClient } from './api/client.js';
 import { useEdAuth, wasSignedOut } from './auth/AuthProvider.js';
 import './styles/app.css';
+
+type Translate = (key: string) => string;
 
 export type EmployeeDraft = {
   id?: string;
@@ -49,12 +54,169 @@ export type EmployeeDraft = {
   hireDate: string;
   terminationDate: string;
   retirementDate: string;
-  resetRetirementDate: boolean;
+  retirementDateOverridden: boolean;
   fte: string;
   usaCategory: UsaCategory;
   contractType: ContractType;
+  tfr: TfrOption;
   status: EmployeeStatus;
 };
+
+const tableDateFormatter = new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  timeZone: 'UTC',
+});
+
+const tableDateTimeFormatter = new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+
+const auditFieldTranslationKeys: Record<string, string> = {
+  employeeNumber: 'fields.employeeNumber',
+  firstName: 'fields.firstName',
+  lastName: 'fields.lastName',
+  departmentId: 'fields.department',
+  name: 'fields.department',
+  birthDate: 'fields.birthDate',
+  hireDate: 'fields.hireDate',
+  terminationDate: 'fields.terminationDate',
+  retirementDate: 'fields.retirementDate',
+  retirementDateOverridden: 'fields.retirementDateOverridden',
+  fte: 'fields.fte',
+  usaCategory: 'fields.usaCategory',
+  contractType: 'fields.contractType',
+  tfr: 'fields.tfr',
+  status: 'fields.status',
+  retirementPolicy: 'settings.title',
+};
+
+const auditIgnoredFields = new Set(['id', 'createdAt', 'updatedAt', 'department']);
+const dateFields = new Set(['birthDate', 'hireDate', 'terminationDate', 'retirementDate']);
+
+function parseDateOnlyToUtc(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const [, yearRaw, monthRaw, dayRaw] = match;
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return date;
+}
+
+function formatTableDate(value: string | null | undefined): string {
+  if (!value) return '';
+  const date = parseDateOnlyToUtc(value);
+  return date ? tableDateFormatter.format(date) : value;
+}
+
+function formatTableDateTime(value: string | null | undefined): string {
+  if (!value) return '';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : tableDateTimeFormatter.format(date);
+}
+
+function formatFormDate(value: string): string {
+  if (!value) return '';
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return value;
+  return `${match[3]}/${match[2]}/${match[1]}`;
+}
+
+function parseFormDate(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  const match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed);
+  if (!match) return null;
+  const dayRaw = match[1] ?? '';
+  const monthRaw = match[2] ?? '';
+  const yearRaw = match[3] ?? '';
+  const iso = `${yearRaw}-${monthRaw.padStart(2, '0')}-${dayRaw.padStart(2, '0')}`;
+  return parseDateOnlyToUtc(iso) ? iso : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function comparableAuditValue(key: string, snapshot: Record<string, unknown>): unknown {
+  if (key === 'departmentId' && isRecord(snapshot.department) && typeof snapshot.department.name === 'string') {
+    return snapshot.department.name;
+  }
+  return snapshot[key];
+}
+
+function formatAuditValue(key: string, value: unknown, t: Translate): string {
+  if (value === null || value === undefined || value === '') return '-';
+  if (dateFields.has(key) && typeof value === 'string') return formatTableDate(value);
+  if (key === 'status' && typeof value === 'string') return t(`status.${value}`);
+  if (key === 'contractType' && typeof value === 'string') return t(`contractType.${value}`);
+  if (key === 'usaCategory' && typeof value === 'string') return t(`usaCategory.${value}`);
+  if (key === 'tfr' && typeof value === 'string') return t(`tfr.${value}`);
+  if (key === 'retirementPolicy' && isRecord(value)) {
+    return `${value.years ?? '-'}y ${value.months ?? '-'}m`;
+  }
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+}
+
+function auditFieldLabel(key: string, t: Translate): string {
+  return t(auditFieldTranslationKeys[key] ?? key);
+}
+
+function auditChanges(entry: AuditLog, t: Translate) {
+  if (entry.action !== 'UPDATE' || !isRecord(entry.before) || !isRecord(entry.after)) return [];
+  const keys = new Set([...Object.keys(entry.before), ...Object.keys(entry.after)]);
+  return [...keys]
+    .filter((key) => !auditIgnoredFields.has(key))
+    .map((key) => ({
+      key,
+      before: comparableAuditValue(key, entry.before as Record<string, unknown>),
+      after: comparableAuditValue(key, entry.after as Record<string, unknown>),
+    }))
+    .filter(({ before, after }) => JSON.stringify(before) !== JSON.stringify(after))
+    .map(({ key, before, after }) => ({
+      key,
+      label: auditFieldLabel(key, t),
+      before: formatAuditValue(key, before, t),
+      after: formatAuditValue(key, after, t),
+    }));
+}
+
+function auditEmployeeLabel(entry: AuditLog): { name: string; number: string } | null {
+  const snapshot = isRecord(entry.after) ? entry.after : isRecord(entry.before) ? entry.before : null;
+  const firstName = typeof snapshot?.firstName === 'string' ? snapshot.firstName : '';
+  const lastName = typeof snapshot?.lastName === 'string' ? snapshot.lastName : '';
+  const name = `${firstName} ${lastName}`.trim();
+  const number =
+    typeof entry.employeeNumber === 'number'
+      ? String(entry.employeeNumber)
+      : typeof snapshot?.employeeNumber === 'number'
+        ? String(snapshot.employeeNumber)
+        : '';
+
+  if (!name && !number) return null;
+  return { name, number };
+}
+
+function OptionalEyebrow({ text }: { text: string }) {
+  return text ? <p className="eyebrow">{text}</p> : null;
+}
 
 export const emptyEmployeeDraft: EmployeeDraft = {
   employeeNumber: '',
@@ -65,10 +227,11 @@ export const emptyEmployeeDraft: EmployeeDraft = {
   hireDate: '',
   terminationDate: '',
   retirementDate: '',
-  resetRetirementDate: false,
+  retirementDateOverridden: false,
   fte: '1',
   usaCategory: 'EXEMPT',
   contractType: 'INDETERMINATO',
+  tfr: 'I_TATTI',
   status: 'ATTIVO',
 };
 
@@ -83,10 +246,11 @@ function toEmployeeDraft(employee: Employee): EmployeeDraft {
     hireDate: employee.hireDate ?? '',
     terminationDate: employee.terminationDate ?? '',
     retirementDate: employee.retirementDate,
-    resetRetirementDate: false,
+    retirementDateOverridden: employee.retirementDateOverridden,
     fte: String(employee.fte).replace('.', ','),
     usaCategory: employee.usaCategory,
     contractType: employee.contractType,
+    tfr: employee.tfr,
     status: employee.status,
   };
 }
@@ -155,7 +319,7 @@ function Shell() {
       <main className="signin-screen">
         <img className="brand-logo" src="/itatti-logo.png" alt="I Tatti" />
         <div>
-          <p className="eyebrow">{t('copy.productEyebrow')}</p>
+          <OptionalEyebrow text={t('copy.productEyebrow')} />
           <h1>ED - Employee Directory</h1>
           <p>{t('copy.subtitle')}</p>
           {auth.error ? (
@@ -187,7 +351,7 @@ function Shell() {
           <div className="identity">
             <img className="brand-logo" src="/itatti-logo.png" alt="I Tatti" />
             <div>
-              <p className="eyebrow">{t('copy.productEyebrow')}</p>
+              <OptionalEyebrow text={t('copy.productEyebrow')} />
               <h1>ED - Employee Directory</h1>
             </div>
           </div>
@@ -270,11 +434,13 @@ function EmployeesPage() {
         birthDate: input.birthDate,
         hireDate: input.hireDate || null,
         terminationDate: input.terminationDate || null,
-        retirementDate: input.retirementDate || null,
-        resetRetirementDate: input.resetRetirementDate,
+        retirementDate: input.retirementDateOverridden ? input.retirementDate || null : null,
+        resetRetirementDate: !input.retirementDateOverridden,
+        retirementDateOverridden: input.retirementDateOverridden,
         fte: Number(input.fte.replace(',', '.')),
         usaCategory: input.usaCategory,
         contractType: input.contractType,
+        tfr: input.tfr,
         status: input.status,
       };
       return input.id ? api.updateEmployee(input.id, payload) : api.createEmployee(payload);
@@ -300,7 +466,7 @@ function EmployeesPage() {
 
   const exportEmployees = async () => {
     try {
-      const blob = await api.exportEmployeesCsv({
+      const blob = await api.exportEmployeesExcel({
         q: filters.q || undefined,
         status: filters.status || undefined,
         departmentId: filters.departmentId || undefined,
@@ -308,7 +474,7 @@ function EmployeesPage() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = 'ed-employees.csv';
+      link.download = 'ed-employees.xlsx';
       document.body.append(link);
       link.click();
       link.remove();
@@ -382,6 +548,7 @@ function EmployeesPage() {
               <th>{t('fields.department')}</th>
               <th>{t('fields.status')}</th>
               <th>{t('fields.fte')}</th>
+              <th>{t('fields.tfr')}</th>
               <th>{t('fields.retirementDate')}</th>
               <th aria-label="Actions" />
             </tr>
@@ -397,7 +564,8 @@ function EmployeesPage() {
                   <span className={`status-pill status-${employee.status.toLowerCase()}`}>{t(`status.${employee.status}`)}</span>
                 </td>
                 <td>{employee.fte}</td>
-                <td>{employee.retirementDate}</td>
+                <td>{t(`tfr.${employee.tfr}`)}</td>
+                <td>{formatTableDate(employee.retirementDate)}</td>
                 <td className="row-actions">
                   <button className="text-button" type="button" onClick={() => setDraft(toEmployeeDraft(employee))}>
                     Edit
@@ -521,7 +689,7 @@ export function EmployeeForm({
                 <input required value={draft.lastName} onChange={(e) => set('lastName', e.target.value)} />
               </Field>
               <Field label={t('fields.birthDate')}>
-                <input required type="date" value={draft.birthDate} onChange={(e) => set('birthDate', e.target.value)} />
+                <DateInput required value={draft.birthDate} onChange={(value) => set('birthDate', value)} />
               </Field>
             </div>
           </fieldset>
@@ -530,10 +698,10 @@ export function EmployeeForm({
             <legend>{t('sections.employment')}</legend>
             <div className="form-grid">
               <Field label={t('fields.hireDate')}>
-                <input type="date" value={draft.hireDate} onChange={(e) => set('hireDate', e.target.value)} />
+                <DateInput value={draft.hireDate} onChange={(value) => set('hireDate', value)} />
               </Field>
               <Field label={t('fields.terminationDate')}>
-                <input type="date" value={draft.terminationDate} onChange={(e) => set('terminationDate', e.target.value)} />
+                <DateInput value={draft.terminationDate} onChange={(value) => set('terminationDate', value)} />
               </Field>
               <Field label={t('fields.fte')}>
                 <input required inputMode="decimal" value={draft.fte} onChange={(e) => set('fte', e.target.value)} />
@@ -549,14 +717,18 @@ export function EmployeeForm({
               </Field>
               <Field label={t('fields.retirementDate')} full>
                 <div className="inline-field">
-                  <input type="date" value={draft.retirementDate} onChange={(e) => set('retirementDate', e.target.value)} />
+                  <DateInput
+                    required={draft.retirementDateOverridden}
+                    value={draft.retirementDate}
+                    onChange={(value) => set('retirementDate', value)}
+                  />
                   <label className="checkbox-row">
                     <input
                       type="checkbox"
-                      checked={draft.resetRetirementDate}
-                      onChange={(e) => set('resetRetirementDate', e.target.checked)}
+                      checked={draft.retirementDateOverridden}
+                      onChange={(e) => set('retirementDateOverridden', e.target.checked)}
                     />
-                    {t('actions.resetRetirement')}
+                    {t('actions.confirmRetirementDate')}
                   </label>
                 </div>
               </Field>
@@ -580,6 +752,15 @@ export function EmployeeForm({
                   {USA_CATEGORIES.map((option) => (
                     <option key={option} value={option}>
                       {t(`usaCategory.${option}`)}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label={t('fields.tfr')}>
+                <select value={draft.tfr} onChange={(e) => set('tfr', e.target.value as TfrOption)}>
+                  {TFR_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {t(`tfr.${option}`)}
                     </option>
                   ))}
                 </select>
@@ -663,7 +844,7 @@ function DepartmentsPage() {
             {departments.data?.map((department) => (
               <tr key={department.id}>
                 <td>{department.name}</td>
-                <td>{new Date(department.updatedAt).toLocaleDateString()}</td>
+                <td>{formatTableDateTime(department.updatedAt)}</td>
                 <td className="row-actions">
                   <button
                     className="text-button"
@@ -797,7 +978,7 @@ function ImportPage() {
   const [selectedRows, setSelectedRows] = useState<number[]>([]);
   const previewImport = useMutation({
     mutationFn: async () => {
-      if (!file) throw new Error('CSV required.');
+      if (!file) throw new Error('Excel file required.');
       return api.previewImport(file);
     },
     onSuccess: (data) => {
@@ -837,7 +1018,11 @@ function ImportPage() {
           previewImport.mutate();
         }}
       >
-        <input type="file" accept=".csv,text/csv" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
+        <input
+          type="file"
+          accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+        />
         <button className="button primary" type="submit" disabled={!file || previewImport.isPending}>
           <FileCheck2 size={16} />
           {t('actions.preview')}
@@ -916,7 +1101,7 @@ function AuditPage() {
       <div className="section-heading">
         <div>
           <p className="eyebrow">{t('nav.audit')}</p>
-          <h2>Append-only change history</h2>
+          <h2>{t('audit.title')}</h2>
         </div>
       </div>
       <div className="toolbar">
@@ -929,23 +1114,57 @@ function AuditPage() {
         <table>
           <thead>
             <tr>
-              <th>Time</th>
-              <th>Actor</th>
-              <th>Entity</th>
-              <th>Action</th>
-              <th>{t('fields.employeeNumber')}</th>
+              <th>{t('audit.time')}</th>
+              <th>{t('audit.user')}</th>
+              <th>{t('audit.employee')}</th>
+              <th>{t('audit.entity')}</th>
+              <th>{t('audit.action')}</th>
+              <th>{t('audit.changes')}</th>
             </tr>
           </thead>
           <tbody>
-            {audit.data?.map((entry) => (
-              <tr key={entry.id}>
-                <td>{new Date(entry.createdAt).toLocaleString()}</td>
-                <td>{entry.actorEmail ?? entry.actorSub}</td>
-                <td>{entry.entityType}</td>
-                <td>{entry.action}</td>
-                <td>{entry.employeeNumber}</td>
-              </tr>
-            ))}
+            {audit.data?.map((entry) => {
+              const changes = auditChanges(entry, t);
+              const employee = auditEmployeeLabel(entry);
+              return (
+                <tr key={entry.id}>
+                  <td>{formatTableDateTime(entry.createdAt)}</td>
+                  <td>{entry.actorEmail ?? entry.actorSub}</td>
+                  <td>
+                    {employee ? (
+                      <span className="audit-employee">
+                        {employee.name ? <span>{employee.name}</span> : null}
+                        {employee.number ? <span className="muted-text">{employee.number}</span> : null}
+                      </span>
+                    ) : (
+                      <span className="muted-text">-</span>
+                    )}
+                  </td>
+                  <td>{t(`entityType.${entry.entityType}`)}</td>
+                  <td>{t(`auditAction.${entry.action}`)}</td>
+                  <td>
+                    {changes.length > 0 ? (
+                      <div className="audit-changes">
+                        {changes.map((change) => (
+                          <div className="audit-change" key={change.key}>
+                            <span className="audit-field">{change.label}</span>
+                            <span className="audit-value" title={t('audit.oldValue')}>
+                              {change.before}
+                            </span>
+                            <span className="audit-arrow">-&gt;</span>
+                            <span className="audit-value" title={t('audit.newValue')}>
+                              {change.after}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="muted-text">{t('audit.noFieldChanges')}</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -1037,7 +1256,7 @@ export function SettingsPage() {
 
         <p className="settings-meta">
           {loaded?.updatedAt
-            ? `${t('settings.lastUpdated')}: ${new Date(loaded.updatedAt).toLocaleString()}`
+            ? `${t('settings.lastUpdated')}: ${formatTableDateTime(loaded.updatedAt)}`
             : t('settings.neverUpdated')}
         </p>
         <p className="settings-note">{t('settings.recalcNote')}</p>
@@ -1050,6 +1269,53 @@ export function SettingsPage() {
         </div>
       </form>
     </section>
+  );
+}
+
+function DateInput({
+  value,
+  onChange,
+  required,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+}) {
+  const { t } = useTranslation();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [text, setText] = useState(formatFormDate(value));
+  const invalid = text.trim() !== '' && parseFormDate(text) === null;
+
+  useEffect(() => {
+    setText(formatFormDate(value));
+  }, [value]);
+
+  useEffect(() => {
+    inputRef.current?.setCustomValidity(invalid ? t('fields.dateInvalid') : '');
+  }, [invalid, t]);
+
+  const commit = (next: string) => {
+    setText(next);
+    const parsed = parseFormDate(next);
+    if (parsed !== null) onChange(parsed);
+  };
+
+  return (
+    <input
+      ref={inputRef}
+      required={required}
+      type="text"
+      inputMode="numeric"
+      placeholder={t('fields.datePlaceholder')}
+      pattern="\\d{1,2}/\\d{1,2}/\\d{4}"
+      aria-invalid={invalid}
+      value={text}
+      onChange={(event) => commit(event.target.value)}
+      onBlur={() => {
+        const parsed = parseFormDate(text);
+        if (parsed) setText(formatFormDate(parsed));
+      }}
+    />
   );
 }
 

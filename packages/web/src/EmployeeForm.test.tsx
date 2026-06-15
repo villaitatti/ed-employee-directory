@@ -21,6 +21,23 @@ describe('EmployeeForm modal', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
+  it('renders the TFR options', () => {
+    renderWithProviders(
+      <EmployeeForm
+        draft={emptyEmployeeDraft}
+        departments={departments}
+        onCancel={vi.fn()}
+        onChange={vi.fn()}
+        onSave={vi.fn()}
+        isSaving={false}
+      />
+    );
+
+    expect(screen.getByLabelText('TFR')).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'I Tatti' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Fondo Pensione' })).toBeInTheDocument();
+  });
+
   it('closes immediately via Escape when the form is pristine', async () => {
     const onCancel = vi.fn();
     const user = userEvent.setup();

@@ -9,6 +9,9 @@ export const CONTRACT_TYPES = [
 ] as const;
 export type ContractType = (typeof CONTRACT_TYPES)[number];
 
+export const TFR_OPTIONS = ['I_TATTI', 'FONDO_PENSIONE'] as const;
+export type TfrOption = (typeof TFR_OPTIONS)[number];
+
 export const EMPLOYEE_STATUSES = ['ATTIVO', 'CESSATO', 'DA_ASSUMERE'] as const;
 export type EmployeeStatus = (typeof EMPLOYEE_STATUSES)[number];
 
@@ -44,6 +47,10 @@ export const labels = {
       CONTRATTO_USA: 'Contratto USA',
       COLLABORATORE: 'Collaboratore',
     },
+    tfr: {
+      I_TATTI: 'I Tatti',
+      FONDO_PENSIONE: 'Fondo Pensione',
+    },
     status: {
       ATTIVO: 'Attivo',
       CESSATO: 'Cessato',
@@ -61,6 +68,10 @@ export const labels = {
       DETERMINATO: 'Fixed-term',
       CONTRATTO_USA: 'US Contract',
       COLLABORATORE: 'Collaborator',
+    },
+    tfr: {
+      I_TATTI: 'I Tatti',
+      FONDO_PENSIONE: 'Fondo Pensione',
     },
     status: {
       ATTIVO: 'Active',

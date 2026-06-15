@@ -6,17 +6,17 @@ describe('api client', () => {
     vi.unstubAllGlobals();
   });
 
-  it('sends the bearer token when exporting employee CSV data', async () => {
+  it('sends the bearer token when exporting employee Excel data', async () => {
     const fetchMock = vi.fn(async () => new Response('Employee Number\n1001\n', { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
     const api = createApiClient(async () => 'token-123');
-    const csv = await api.exportEmployeesCsv({ status: 'ATTIVO' });
+    const workbook = await api.exportEmployeesExcel({ status: 'ATTIVO' });
 
-    expect(await csv.text()).toBe('Employee Number\n1001\n');
+    expect(await workbook.text()).toBe('Employee Number\n1001\n');
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe('/api/admin/employees/export.csv?status=ATTIVO');
+    expect(url).toBe('/api/admin/employees/export.xlsx?status=ATTIVO');
     expect(new Headers(init.headers).get('authorization')).toBe('Bearer token-123');
   });
 

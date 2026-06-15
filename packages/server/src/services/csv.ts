@@ -37,7 +37,7 @@ export function parseNullableDate(value: string): string | null {
 }
 
 /**
- * Parses the "Retirement Date Overridden" column. Recognizes Italian/English
+ * Parses the "Retirement Date Confirmed" column. Recognizes Italian/English
  * truthy tokens; everything else (including blank) is false. Returns false when
  * the column is absent so a CSV without it recalculates rather than freezing.
  */
@@ -63,6 +63,14 @@ export function parseContractType(value: string): EmployeeWriteInput['contractTy
   if (normalized === 'contratto usa' || normalized === 'us contract') return 'CONTRATTO_USA';
   if (normalized === 'collaboratore' || normalized === 'collaborator') return 'COLLABORATORE';
   return undefined;
+}
+
+export function parseTfr(value: string): EmployeeWriteInput['tfr'] | string | undefined {
+  const normalized = normalizeHeader(value);
+  if (!normalized) return undefined;
+  if (normalized === 'i tatti' || normalized === 'itatti') return 'I_TATTI';
+  if (normalized === 'fondo pensione') return 'FONDO_PENSIONE';
+  return value;
 }
 
 export function parseStatus(value: string): EmployeeWriteInput['status'] | undefined {

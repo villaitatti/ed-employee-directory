@@ -128,6 +128,7 @@ components:
         - fte
         - usaCategory
         - contractType
+        - tfr
         - status
         - createdAt
         - updatedAt
@@ -158,6 +159,7 @@ components:
           format: date
         retirementDateOverridden:
           type: boolean
+          description: True when the retirement date is confirmed and excluded from pension-age recalculation.
         fte:
           type: number
           exclusiveMinimum: 0
@@ -168,6 +170,9 @@ components:
         contractType:
           type: string
           enum: [INDETERMINATO, DETERMINATO, CONTRATTO_USA, COLLABORATORE]
+        tfr:
+          type: string
+          enum: [I_TATTI, FONDO_PENSIONE]
         status:
           $ref: "#/components/schemas/EmployeeStatus"
         createdAt:
