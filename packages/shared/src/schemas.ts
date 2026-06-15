@@ -10,6 +10,7 @@ import {
   RETIREMENT_MONTHS_MIN,
   RETIREMENT_YEARS_MAX,
   RETIREMENT_YEARS_MIN,
+  TFR_OPTIONS,
   USA_CATEGORIES,
 } from './constants.js';
 import { isValidDateString, parseFteInput, validateStatusDates } from './domain.js';
@@ -20,6 +21,7 @@ export const dateStringSchema = z.string().refine(isValidDateString, {
 
 export const employeeStatusSchema = z.enum(EMPLOYEE_STATUSES);
 export const contractTypeSchema = z.enum(CONTRACT_TYPES);
+export const tfrSchema = z.enum(TFR_OPTIONS);
 export const usaCategorySchema = z.enum(USA_CATEGORIES);
 export const auditActionSchema = z.enum(AUDIT_ACTIONS);
 export const entityTypeSchema = z.enum(ENTITY_TYPES);
@@ -68,6 +70,7 @@ export const employeeSchema = z.object({
   fte: z.number().positive().max(1),
   usaCategory: usaCategorySchema,
   contractType: contractTypeSchema,
+  tfr: tfrSchema,
   status: employeeStatusSchema,
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -84,6 +87,7 @@ export const employeeWriteBaseSchema = z.object({
     terminationDate: dateStringSchema.nullable().optional(),
     retirementDate: dateStringSchema.nullable().optional(),
     resetRetirementDate: z.boolean().optional(),
+    retirementDateOverridden: z.boolean().optional(),
     fte: z.union([z.string(), z.number()]).transform((value, ctx) => {
       try {
         return parseFteInput(value);
@@ -97,11 +101,19 @@ export const employeeWriteBaseSchema = z.object({
     }),
     usaCategory: usaCategorySchema,
     contractType: contractTypeSchema,
+    tfr: tfrSchema.default('I_TATTI'),
     status: employeeStatusSchema,
   });
 
 export const employeeWriteSchema = employeeWriteBaseSchema
   .superRefine((value, ctx) => {
+    if (value.retirementDateOverridden && !value.retirementDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['retirementDate'],
+        message: 'Confirmed retirement dates require a retirement date.',
+      });
+    }
     for (const error of validateStatusDates(value)) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: error });
     }

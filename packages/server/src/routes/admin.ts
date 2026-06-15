@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { parse } from 'csv-parse/sync';
+import ExcelJS from 'exceljs';
 import { Router, type Request } from 'express';
 import multer from 'multer';
 import {
@@ -25,6 +26,7 @@ import {
   parseContractType,
   parseNullableDate,
   parseStatus,
+  parseTfr,
   parseUsaCategory,
   readFirst,
 } from '../services/csv.js';
@@ -40,16 +42,32 @@ const CSV_MIME_TYPES = new Set([
   'application/octet-stream',
 ]);
 
+const EXCEL_MIME_TYPES = new Set([
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+  'application/octet-stream',
+]);
+
+type UploadRecord = {
+  rowNumber: number;
+  row: Record<string, string>;
+};
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 2 * 1024 * 1024 },
+  limits: { fileSize: 8 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const hasCsvExtension = file.originalname.toLowerCase().endsWith('.csv');
-    if (hasCsvExtension && CSV_MIME_TYPES.has(file.mimetype)) {
+    const lowerName = file.originalname.toLowerCase();
+    const hasCsvExtension = lowerName.endsWith('.csv');
+    const hasExcelExtension = lowerName.endsWith('.xlsx');
+    if (
+      (hasCsvExtension && CSV_MIME_TYPES.has(file.mimetype)) ||
+      (hasExcelExtension && EXCEL_MIME_TYPES.has(file.mimetype))
+    ) {
       cb(null, true);
       return;
     }
-    cb(new HttpError(400, 'CSV_REQUIRED', 'Upload a .csv file.'));
+    cb(new HttpError(400, 'EMPLOYEE_FILE_REQUIRED', 'Upload a .xlsx employee file.'));
   },
 });
 
@@ -73,6 +91,106 @@ function pathParam(req: Request, name: string): string {
 
 function jsonSnapshot(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+}
+
+function dateStringToExcelDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const [, yearRaw, monthRaw, dayRaw] = match;
+  return new Date(Date.UTC(Number(yearRaw), Number(monthRaw) - 1, Number(dayRaw)));
+}
+
+function displayUsaCategory(value: string): string {
+  if (value === 'NON_EXEMPT') return 'Non Exempt';
+  if (value === 'OTHER') return 'Other';
+  return 'Exempt';
+}
+
+function displayContractType(value: string): string {
+  if (value === 'DETERMINATO') return 'Determinato';
+  if (value === 'CONTRATTO_USA') return 'Contratto USA';
+  if (value === 'COLLABORATORE') return 'Collaboratore';
+  return 'Indeterminato';
+}
+
+function displayTfr(value: string): string {
+  return value === 'FONDO_PENSIONE' ? 'Fondo Pensione' : 'I Tatti';
+}
+
+function displayStatus(value: string): string {
+  if (value === 'CESSATO') return 'Cessato';
+  if (value === 'DA_ASSUMERE') return 'Da Assumere';
+  return 'Attivo';
+}
+
+function formatDateForImport(date: Date): string {
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function excelValueToString(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (value instanceof Date) return formatDateForImport(value);
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (isRecord(value)) {
+    if (typeof value.text === 'string') return value.text.trim();
+    if ('result' in value) return excelValueToString(value.result);
+    if (Array.isArray(value.richText)) {
+      return value.richText
+        .map((part) => (isRecord(part) && typeof part.text === 'string' ? part.text : ''))
+        .join('')
+        .trim();
+    }
+  }
+  return String(value).trim();
+}
+
+async function parseUploadRecords(file: Express.Multer.File): Promise<UploadRecord[]> {
+  if (file.originalname.toLowerCase().endsWith('.xlsx')) {
+    const workbook = new ExcelJS.Workbook();
+    const workbookBuffer = file.buffer as unknown as Parameters<typeof workbook.xlsx.load>[0];
+    await workbook.xlsx.load(workbookBuffer);
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) throw new HttpError(400, 'EMPTY_WORKBOOK', 'The Excel file does not contain a worksheet.');
+
+    const firstRowValues = worksheet.getRow(1).values;
+    const headerValues = Array.isArray(firstRowValues) ? firstRowValues.slice(1) : Object.values(firstRowValues);
+    const headers = headerValues.map((value: ExcelJS.CellValue) => excelValueToString(value));
+    if (headers.length === 0 || headers.every((header) => !header)) {
+      throw new HttpError(400, 'MISSING_HEADERS', 'The Excel file must have headers in the first row.');
+    }
+
+    const records: UploadRecord[] = [];
+    worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+      if (rowNumber === 1) return;
+      const record: Record<string, string> = {};
+      let hasValue = false;
+      headers.forEach((header, index) => {
+        if (!header) return;
+        const value = excelValueToString(row.getCell(index + 1).value);
+        if (value) hasValue = true;
+        record[header] = value;
+      });
+      if (hasValue) records.push({ rowNumber, row: record });
+    });
+    return records;
+  }
+
+  const rows = parse(file.buffer, {
+    columns: true,
+    skip_empty_lines: true,
+    bom: true,
+    trim: true,
+  }) as Record<string, string>[];
+  return rows.map((row, index) => ({ rowNumber: index + 2, row }));
 }
 
 function employeeWhereFromQuery(query: ReturnType<typeof employeeListQuerySchema.parse>): Prisma.EmployeeWhereInput {
@@ -146,7 +264,7 @@ adminRouter.put(
       let recalculated = 0;
       for (const [retirementDate, ids] of idsByRetirementDate) {
         // Re-assert retirementDateOverridden=false in the write predicate: if a
-        // concurrent edit set a manual override between the findMany and here,
+        // concurrent edit confirmed the date between the findMany and here,
         // that row is skipped rather than having its override silently clobbered.
         const updated = await tx.employee.updateMany({
           where: { id: { in: ids }, retirementDateOverridden: false },
@@ -419,10 +537,11 @@ adminRouter.get(
         'Hire Date',
         'Termination Date',
         'Retirement Date',
-        'Retirement Date Overridden',
+        'Retirement Date Confirmed',
         'FTE',
         'USA Category',
         'Contract Type',
+        'TFR',
         'Status',
       ],
       ...employees.map((employee) => {
@@ -440,6 +559,7 @@ adminRouter.get(
           serialized.fte,
           serialized.usaCategory,
           serialized.contractType,
+          serialized.tfr,
           serialized.status,
         ];
       }),
@@ -447,6 +567,77 @@ adminRouter.get(
     res.setHeader('content-type', 'text/csv; charset=utf-8');
     res.setHeader('content-disposition', 'attachment; filename="ed-employees.csv"');
     res.send(rows.map((row) => row.map(csvEscape).join(',')).join('\n'));
+  })
+);
+
+adminRouter.get(
+  '/employees/export.xlsx',
+  asyncHandler(async (req, res) => {
+    const query = employeeListQuerySchema.parse(req.query);
+    const employees = await prisma.employee.findMany({
+      where: employeeWhereFromQuery(query),
+      include: { department: true },
+      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'ED Employee Directory';
+    workbook.created = new Date();
+    const worksheet = workbook.addWorksheet('Employees', {
+      views: [{ state: 'frozen', ySplit: 1 }],
+    });
+    worksheet.columns = [
+      { header: 'Employee Number', key: 'employeeNumber', width: 18 },
+      { header: 'First Name', key: 'firstName', width: 18 },
+      { header: 'Last Name', key: 'lastName', width: 18 },
+      { header: 'Department', key: 'department', width: 28 },
+      { header: 'Birth Date', key: 'birthDate', width: 14 },
+      { header: 'Hire Date', key: 'hireDate', width: 14 },
+      { header: 'Termination Date', key: 'terminationDate', width: 16 },
+      { header: 'Retirement Date', key: 'retirementDate', width: 16 },
+      { header: 'Retirement Date Confirmed', key: 'retirementDateOverridden', width: 28 },
+      { header: 'FTE', key: 'fte', width: 10 },
+      { header: 'USA Category', key: 'usaCategory', width: 16 },
+      { header: 'Contract Type', key: 'contractType', width: 18 },
+      { header: 'TFR', key: 'tfr', width: 18 },
+      { header: 'Status', key: 'status', width: 16 },
+    ];
+
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.getRow(1).alignment = { vertical: 'middle' };
+    worksheet.autoFilter = {
+      from: { row: 1, column: 1 },
+      to: { row: 1, column: worksheet.columns.length },
+    };
+
+    for (const employee of employees) {
+      const serialized = serializeEmployee(employee);
+      worksheet.addRow({
+        employeeNumber: serialized.employeeNumber,
+        firstName: serialized.firstName,
+        lastName: serialized.lastName,
+        department: serialized.department?.name ?? '',
+        birthDate: dateStringToExcelDate(serialized.birthDate),
+        hireDate: dateStringToExcelDate(serialized.hireDate),
+        terminationDate: dateStringToExcelDate(serialized.terminationDate),
+        retirementDate: dateStringToExcelDate(serialized.retirementDate),
+        retirementDateOverridden: serialized.retirementDateOverridden,
+        fte: serialized.fte,
+        usaCategory: displayUsaCategory(serialized.usaCategory),
+        contractType: displayContractType(serialized.contractType),
+        tfr: displayTfr(serialized.tfr),
+        status: displayStatus(serialized.status),
+      });
+    }
+
+    for (const key of ['birthDate', 'hireDate', 'terminationDate', 'retirementDate']) {
+      worksheet.getColumn(key).numFmt = 'dd/mm/yyyy';
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    res.setHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('content-disposition', 'attachment; filename="ed-employees.xlsx"');
+    res.send(Buffer.from(buffer));
   })
 );
 
@@ -483,14 +674,9 @@ adminRouter.post(
   upload.single('file'),
   asyncHandler(async (req, res) => {
     const file = req.file;
-    if (!file) throw new HttpError(400, 'CSV_REQUIRED', 'Upload a CSV file in the file field.');
+    if (!file) throw new HttpError(400, 'EMPLOYEE_FILE_REQUIRED', 'Upload an employee file in the file field.');
 
-    const records = parse(file.buffer, {
-      columns: true,
-      skip_empty_lines: true,
-      bom: true,
-      trim: true,
-    }) as Record<string, string>[];
+    const records = await parseUploadRecords(file);
 
     const [departments, employees] = await Promise.all([
       prisma.department.findMany(),
@@ -499,17 +685,16 @@ adminRouter.post(
     const departmentByName = new Map(departments.map((department) => [department.normalizedName, department]));
     const employeeByNumber = new Map(employees.map((employee) => [employee.employeeNumber, employee]));
     const employeeNumberRows = new Map<number, number[]>();
-    for (const [index, row] of records.entries()) {
+    for (const { row, rowNumber } of records) {
       const employeeNumber = Number(readFirst(row, ['numero matricola', 'employee number', 'employee id']));
       if (Number.isInteger(employeeNumber) && employeeNumber > 0) {
         const rowNumbers = employeeNumberRows.get(employeeNumber) ?? [];
-        rowNumbers.push(index + 2);
+        rowNumbers.push(rowNumber);
         employeeNumberRows.set(employeeNumber, rowNumbers);
       }
     }
 
-    const previewRows: ImportPreviewRow[] = records.map((row, index) => {
-      const rowNumber = index + 2;
+    const previewRows: ImportPreviewRow[] = records.map(({ row, rowNumber }) => {
       const departmentName = readFirst(row, ['dipartimento', 'department']);
       const department = departmentByName.get(normalizeDepartmentName(departmentName));
       const employeeNumber = Number(readFirst(row, ['numero matricola', 'employee number', 'employee id']));
@@ -520,17 +705,24 @@ adminRouter.post(
       if (!Number.isInteger(employeeNumber) || employeeNumber <= 0) errors.push('Employee Number must be a positive integer.');
       const duplicateRows = employeeNumberRows.get(employeeNumber) ?? [];
       if (duplicateRows.length > 1) {
-        errors.push(`Employee Number ${employeeNumber} appears more than once in this CSV (rows ${duplicateRows.join(', ')}).`);
+        errors.push(`Employee Number ${employeeNumber} appears more than once in this file (rows ${duplicateRows.join(', ')}).`);
       }
 
-      // Honor the "Retirement Date Overridden" flag (the same column export
-      // emits). When true, the imported retirement date is a genuine manual
-      // override and is passed through. When false/absent, recalculate from the
+      // Honor the "Retirement Date Confirmed" flag (the same column export
+      // emits). When true, the imported retirement date is an approved date and
+      // is passed through. When false/absent, recalculate from the
       // current policy instead of freezing the imported (possibly stale) date —
       // otherwise an export → policy-change → re-import would silently turn every
-      // calculated date into a bogus override.
+      // calculated date into a bogus confirmed date.
       const retirementOverridden = parseBoolean(
-        readFirst(row, ['data pensionamento manuale', 'retirement date overridden', 'retirementdateoverridden'])
+        readFirst(row, [
+          'data pensionamento confermata',
+          'data pensionamento manuale',
+          'retirement date confirmed',
+          'retirement date overridden',
+          'retirementdateconfirmed',
+          'retirementdateoverridden',
+        ])
       );
       const importedRetirementDate = parseNullableDate(
         readFirst(row, ['data pensionamento', 'retirement date', 'retirementdate'])
@@ -545,9 +737,11 @@ adminRouter.post(
         terminationDate: parseNullableDate(readFirst(row, ['data cessazione', 'termination date', 'terminationdate'])),
         retirementDate: retirementOverridden ? importedRetirementDate : null,
         resetRetirementDate: !retirementOverridden,
+        retirementDateOverridden: retirementOverridden,
         fte: readFirst(row, ['fte']),
         usaCategory: parseUsaCategory(readFirst(row, ['categoria usa', 'usa category'])),
         contractType: parseContractType(readFirst(row, ['tipo contratto', 'contract type'])),
+        tfr: parseTfr(readFirst(row, ['tfr'])),
         status: parseStatus(readFirst(row, ['stato', 'status'])),
       };
 

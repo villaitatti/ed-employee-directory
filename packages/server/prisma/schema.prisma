@@ -20,6 +20,11 @@ enum ContractType {
   COLLABORATORE
 }
 
+enum TfrOption {
+  I_TATTI
+  FONDO_PENSIONE
+}
+
 enum EmployeeStatus {
   ATTIVO
   CESSATO
@@ -86,6 +91,7 @@ model Employee {
   fte                      Decimal        @db.Decimal(4, 3)
   usaCategory              UsaCategory
   contractType             ContractType
+  tfr                      TfrOption      @default(I_TATTI)
   status                   EmployeeStatus
   createdAt                DateTime       @default(now())
   updatedAt                DateTime       @updatedAt

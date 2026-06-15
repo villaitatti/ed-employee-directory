@@ -88,8 +88,8 @@ export function createApiClient(getToken: TokenGetter) {
     deleteEmployee: async (id: string) =>
       request<void>(`/api/admin/employees/${id}`, { method: 'DELETE' }),
 
-    exportEmployeesCsv: async (params: ListEmployeeParams = {}) => {
-      const response = await authorizedFetch(`/api/admin/employees/export.csv${queryString(params)}`);
+    exportEmployeesExcel: async (params: ListEmployeeParams = {}) => {
+      const response = await authorizedFetch(`/api/admin/employees/export.xlsx${queryString(params)}`);
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
         throw new Error(payload?.error?.message ?? `Request failed with ${response.status}`);

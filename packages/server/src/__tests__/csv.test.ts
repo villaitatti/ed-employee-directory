@@ -5,6 +5,7 @@ import {
   parseContractType,
   parseNullableDate,
   parseStatus,
+  parseTfr,
   parseUsaCategory,
   readFirst,
 } from '../services/csv.js';
@@ -64,6 +65,14 @@ describe('enum mappers', () => {
     expect(parseStatus('Terminated')).toBe('CESSATO');
     expect(parseStatus('Da Assumere')).toBe('DA_ASSUMERE');
     expect(parseStatus('unknown')).toBeUndefined();
+  });
+
+  it('maps TFR options from display labels and codes', () => {
+    expect(parseTfr('I Tatti')).toBe('I_TATTI');
+    expect(parseTfr('i_tatti')).toBe('I_TATTI');
+    expect(parseTfr('Fondo Pensione')).toBe('FONDO_PENSIONE');
+    expect(parseTfr('')).toBeUndefined();
+    expect(parseTfr('unknown')).toBe('unknown');
   });
 });
 

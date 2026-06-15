@@ -525,7 +525,7 @@ button:focus-visible {
   gap: var(--space-md);
 }
 
-.inline-field input[type='date'] {
+.inline-field > input {
   width: auto;
   flex: 0 1 13rem;
 }
@@ -646,6 +646,43 @@ button:focus-visible {
 .row-error {
   background: var(--warning-bg);
   color: var(--warning-ink);
+}
+
+.muted-text {
+  color: var(--muted);
+}
+
+.audit-changes {
+  display: grid;
+  gap: var(--space-xs);
+  min-width: 24rem;
+}
+
+.audit-employee {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 9rem;
+}
+
+.audit-change {
+  display: grid;
+  grid-template-columns: minmax(8rem, 12rem) minmax(7rem, 1fr) auto minmax(7rem, 1fr);
+  gap: var(--space-xs);
+  align-items: start;
+}
+
+.audit-field {
+  color: var(--ink-soft);
+  font-weight: 800;
+}
+
+.audit-value {
+  overflow-wrap: anywhere;
+}
+
+.audit-arrow {
+  color: var(--muted);
+  font-weight: 800;
 }
 
 @media (max-width: 900px) {

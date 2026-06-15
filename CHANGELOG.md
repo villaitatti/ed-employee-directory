@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.0 - 2026-06-15
+
+### Added
+
+- Added TFR as an employee field with the options "I Tatti" and "Fondo Pensione", including API validation, Prisma persistence, audit snapshots, and import/export support.
+- Added Excel `.xlsx` export and import preview for employee data, with readable labels and Italian `dd/mm/yyyy` date formatting.
+- Added audit change details that show the modified employee name, matricola, changed field, previous value, and new value.
+
+### Changed
+
+- Updated Italian and English copy around the employee list, import/export actions, and audit table labels.
+- Employee date fields now use `dd/mm/yyyy` entry, while tables and audit history display dates as `20 Jun 2026`.
+- The retirement-date checkbox now means "confirmed retirement date"; confirmed dates are preserved when the pension-age setting changes.
+
 ## 0.3.0 - 2026-06-08
 
 ### Changed

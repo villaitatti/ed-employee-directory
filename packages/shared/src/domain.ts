@@ -122,6 +122,7 @@ export function resolveRetirementDate(input: {
   currentRetirementDateOverridden?: boolean | undefined;
   requestedRetirementDate?: string | null | undefined;
   resetOverride?: boolean | undefined;
+  confirmRetirementDate?: boolean | undefined;
   policy?: RetirementPolicy | undefined;
 }): { retirementDate: DateString; retirementDateOverridden: boolean } {
   const calculated = calculateRetirementDate(input.birthDate, input.policy);
@@ -130,10 +131,16 @@ export function resolveRetirementDate(input: {
     return { retirementDate: calculated, retirementDateOverridden: false };
   }
 
+  if (input.confirmRetirementDate) {
+    const confirmedDate = input.requestedRetirementDate ?? input.currentRetirementDate ?? calculated;
+    parseDateOnly(confirmedDate);
+    return { retirementDate: confirmedDate as DateString, retirementDateOverridden: true };
+  }
+
   if (!input.requestedRetirementDate) {
-    // No new retirement date supplied. Preserve a previously-set manual override
+    // No new retirement date supplied. Preserve a previously-confirmed date
     // rather than silently recalculating — otherwise an import (or form save)
-    // that omits the retirement column wipes the operator's manual value.
+    // that omits the retirement column wipes the approved government date.
     if (input.currentRetirementDateOverridden && input.currentRetirementDate) {
       parseDateOnly(input.currentRetirementDate);
       return {

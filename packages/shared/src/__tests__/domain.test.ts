@@ -46,7 +46,7 @@ describe('employee domain rules', () => {
     ).toEqual({ retirementDate: '2048-01-15', retirementDateOverridden: false });
   });
 
-  it('preserves a manual override even when a new policy is supplied', () => {
+  it('preserves a confirmed retirement date even when a new policy is supplied', () => {
     // Invariant the PUT /settings route relies on: it filters out overridden
     // employees, so a supplied policy must NOT overwrite a standing override.
     expect(
@@ -95,7 +95,7 @@ describe('employee domain rules', () => {
     expect(parseFteInput('0.125')).toBe(0.125);
   });
 
-  it('tracks a manual retirement override until reset', () => {
+  it('tracks a confirmed retirement date until reset', () => {
     expect(
       resolveRetirementDate({
         birthDate: '1980-01-15',
@@ -112,7 +112,17 @@ describe('employee domain rules', () => {
     ).toEqual({ retirementDate: '2047-04-15', retirementDateOverridden: false });
   });
 
-  it('preserves an existing manual override when no new retirement date is supplied', () => {
+  it('marks a calculated retirement date as confirmed when requested', () => {
+    expect(
+      resolveRetirementDate({
+        birthDate: '1980-01-15',
+        requestedRetirementDate: '2047-04-15',
+        confirmRetirementDate: true,
+      })
+    ).toEqual({ retirementDate: '2047-04-15', retirementDateOverridden: true });
+  });
+
+  it('preserves an existing confirmed retirement date when no new retirement date is supplied', () => {
     // Mirrors a CSV import UPDATE that omits the retirement column.
     expect(
       resolveRetirementDate({
@@ -190,6 +200,7 @@ describe('employee domain rules', () => {
       fte: '0,5',
       usaCategory: 'EXEMPT',
       contractType: 'INDETERMINATO',
+      tfr: 'I_TATTI',
       status: 'ATTIVO',
     });
 

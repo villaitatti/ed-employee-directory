@@ -1,0 +1,4 @@
+CREATE TYPE "TfrOption" AS ENUM ('I_TATTI', 'FONDO_PENSIONE');
+
+ALTER TABLE "Employee"
+  ADD COLUMN "tfr" "TfrOption" NOT NULL DEFAULT 'I_TATTI';
