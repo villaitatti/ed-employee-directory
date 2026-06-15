@@ -207,6 +207,26 @@ describe('employee domain rules', () => {
     expect(result.success).toBe(false);
   });
 
+  it('does not default TFR at the schema boundary', () => {
+    const result = employeeWriteSchema.safeParse({
+      employeeNumber: 1001,
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      departmentId: 'dept_1',
+      birthDate: '1980-01-15',
+      hireDate: '2024-01-01',
+      terminationDate: null,
+      retirementDate: null,
+      fte: '0,5',
+      usaCategory: 'EXEMPT',
+      contractType: 'INDETERMINATO',
+      status: 'ATTIVO',
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.tfr).toBeUndefined();
+  });
+
   it('rejects duplicate selected import rows', () => {
     const result = importCommitSchema.safeParse({ selectedRows: [2, 3, 2] });
 

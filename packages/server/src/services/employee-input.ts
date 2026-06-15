@@ -1,4 +1,4 @@
-import type { EmployeeWriteInput, RetirementPolicy } from '@itatti/shared';
+import type { EmployeeWriteInput, RetirementPolicy, TfrOption } from '@itatti/shared';
 import { resolveRetirementDate } from '@itatti/shared';
 
 function dateOnlyToUtc(value: string): Date {
@@ -16,6 +16,7 @@ function nullableDateToUtc(value: string | null | undefined): Date | null {
 export type ExistingRetirement = {
   retirementDate: string | null;
   retirementDateOverridden: boolean;
+  tfr?: TfrOption | null;
 };
 
 export function toEmployeeData(
@@ -50,7 +51,7 @@ export function toEmployeeData(
     fte: input.fte,
     usaCategory: input.usaCategory,
     contractType: input.contractType,
-    tfr: input.tfr,
+    tfr: input.tfr ?? existing?.tfr ?? 'I_TATTI',
     status: input.status,
   };
 }

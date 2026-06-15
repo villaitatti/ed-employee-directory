@@ -101,7 +101,7 @@ export const employeeWriteBaseSchema = z.object({
     }),
     usaCategory: usaCategorySchema,
     contractType: contractTypeSchema,
-    tfr: tfrSchema.default('I_TATTI'),
+    tfr: tfrSchema.optional(),
     status: employeeStatusSchema,
   });
 

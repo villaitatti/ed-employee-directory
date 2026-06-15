@@ -11,7 +11,7 @@ if (!dbUp) {
 }
 
 // Seeds one department + one employee, returning the created employee row.
-async function seedEmployee(overrides: { retirementDateOverridden?: boolean } = {}) {
+async function seedEmployee(overrides: { retirementDateOverridden?: boolean; tfr?: 'I_TATTI' | 'FONDO_PENSIONE' } = {}) {
   const department = await testPrisma.department.create({
     data: { name: 'Amministrazione', normalizedName: 'amministrazione' },
   });
@@ -29,7 +29,7 @@ async function seedEmployee(overrides: { retirementDateOverridden?: boolean } = 
       fte: 1,
       usaCategory: 'EXEMPT',
       contractType: 'INDETERMINATO',
-      tfr: 'I_TATTI',
+      tfr: overrides.tfr ?? 'I_TATTI',
       status: 'ATTIVO',
     },
   });
@@ -156,6 +156,33 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
     expect(res.body.data.retirementDate).toBe('2053-04-12');
   });
 
+  it('preserves existing TFR when an employee update omits the field', async () => {
+    const employee = await seedEmployee({ tfr: 'FONDO_PENSIONE' });
+
+    const res = await request(app)
+      .put(`/api/admin/employees/${employee.id}`)
+      .send({
+        employeeNumber: 1001,
+        firstName: 'Giulia',
+        lastName: 'Rossi',
+        departmentId: employee.departmentId,
+        birthDate: '1985-04-12',
+        hireDate: '2015-09-01',
+        terminationDate: null,
+        retirementDate: null,
+        fte: 1,
+        usaCategory: 'EXEMPT',
+        contractType: 'INDETERMINATO',
+        status: 'ATTIVO',
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.tfr).toBe('FONDO_PENSIONE');
+
+    const updated = await testPrisma.employee.findUniqueOrThrow({ where: { employeeNumber: 1001 } });
+    expect(updated.tfr).toBe('FONDO_PENSIONE');
+  });
+
   it('re-importing an exported calculated date does not freeze it as an override', async () => {
     // Export → change policy → re-import. The exported row carries the OLD
     // calculated date with "Retirement Date Confirmed" = false. After the
@@ -209,6 +236,30 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
     const employee = await testPrisma.employee.findUniqueOrThrow({ where: { employeeNumber: 1001 } });
     expect(employee.retirementDate.toISOString().slice(0, 10)).toBe('2060-01-01');
     expect(employee.retirementDateOverridden).toBe(true);
+  });
+
+  it('preserves existing TFR when an import update omits the TFR column', async () => {
+    await seedEmployee({ tfr: 'FONDO_PENSIONE' });
+    const department = await testPrisma.department.findFirstOrThrow();
+
+    const csv = [
+      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,Status',
+      `1001,Giulia,Rossi,${department.name},1985-04-12,2015-09-01,1,Exempt,Indeterminato,Attivo`,
+    ].join('\n');
+
+    const preview = await request(app)
+      .post('/api/admin/imports/preview')
+      .attach('file', Buffer.from(csv), { filename: 'employees.csv', contentType: 'text/csv' });
+    expect(preview.status).toBe(201);
+    expect(preview.body.data.rows[0].normalized).not.toHaveProperty('tfr');
+
+    const commit = await request(app)
+      .post(`/api/admin/imports/${preview.body.data.batchId}/commit`)
+      .send({ selectedRows: [2] });
+    expect(commit.status).toBe(200);
+
+    const employee = await testPrisma.employee.findUniqueOrThrow({ where: { employeeNumber: 1001 } });
+    expect(employee.tfr).toBe('FONDO_PENSIONE');
   });
 
   it('imports employees from an Excel workbook', async () => {

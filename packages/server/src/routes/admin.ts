@@ -468,6 +468,7 @@ adminRouter.put(
           {
             retirementDate: before.retirementDate.toISOString().slice(0, 10),
             retirementDateOverridden: before.retirementDateOverridden,
+            tfr: before.tfr,
           },
           policy
         ),
@@ -727,6 +728,7 @@ adminRouter.post(
       const importedRetirementDate = parseNullableDate(
         readFirst(row, ['data pensionamento', 'retirement date', 'retirementdate'])
       );
+      const parsedTfr = parseTfr(readFirst(row, ['tfr']));
       const rawInput = {
         employeeNumber,
         firstName: readFirst(row, ['nome', 'first name', 'firstname']),
@@ -741,7 +743,7 @@ adminRouter.post(
         fte: readFirst(row, ['fte']),
         usaCategory: parseUsaCategory(readFirst(row, ['categoria usa', 'usa category'])),
         contractType: parseContractType(readFirst(row, ['tipo contratto', 'contract type'])),
-        tfr: parseTfr(readFirst(row, ['tfr'])),
+        ...(parsedTfr !== undefined ? { tfr: parsedTfr } : {}),
         status: parseStatus(readFirst(row, ['stato', 'status'])),
       };
 
@@ -857,6 +859,7 @@ adminRouter.post(
                 {
                   retirementDate: before.retirementDate.toISOString().slice(0, 10),
                   retirementDateOverridden: before.retirementDateOverridden,
+                  tfr: before.tfr,
                 },
                 policy
               ),
