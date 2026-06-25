@@ -40,6 +40,42 @@ export function emptyApprovalRoleIds(): EmployeeApprovalRoleIds {
   };
 }
 
+/** Maps each role-id field on EmployeeApprovalRoleIds to its ApprovalRole enum. */
+const ROLE_ID_FIELDS = [
+  ['preApproverIds', 'PRE_APPROVER'],
+  ['responsabileIds', 'RESPONSABILE'],
+  ['substituteResponsabileIds', 'SUBSTITUTE_RESPONSABILE'],
+] as const;
+
+/** Flattens the three role-id arrays into tagged {id, role} entries. */
+export function approvalRoleEntries(roleIds: EmployeeApprovalRoleIds): Array<{ id: string; role: ApprovalRole }> {
+  return ROLE_ID_FIELDS.flatMap(([field, role]) => roleIds[field].map((id) => ({ id, role })));
+}
+
+/**
+ * The single source of truth for the "active employee must have approvers" rule.
+ * Both the id-based API validators and the number-based import preview consult
+ * this so the two paths can't drift. Returns the violated error codes (empty when
+ * the rule is satisfied).
+ */
+export type RequiredApproverError = 'RESPONSABILE_REQUIRED' | 'SOSTITUTO_RESPONSABILE_REQUIRED';
+
+export const REQUIRED_APPROVER_MESSAGES: Record<RequiredApproverError, string> = {
+  RESPONSABILE_REQUIRED: 'Active employees require at least one Responsabile.',
+  SOSTITUTO_RESPONSABILE_REQUIRED: 'Active employees require at least one Sostituto-Responsabile.',
+};
+
+export function missingRequiredApprovers(
+  status: EmployeeStatus,
+  counts: { hasResponsabile: boolean; hasSubstitute: boolean }
+): RequiredApproverError[] {
+  if (status !== 'ATTIVO') return [];
+  const missing: RequiredApproverError[] = [];
+  if (!counts.hasResponsabile) missing.push('RESPONSABILE_REQUIRED');
+  if (!counts.hasSubstitute) missing.push('SOSTITUTO_RESPONSABILE_REQUIRED');
+  return missing;
+}
+
 export async function existingApprovalRoleIds(
   tx: Prisma.TransactionClient,
   employeeId: string
@@ -66,29 +102,26 @@ export async function validateApprovalRoleIds(
     employeeNumber: number;
     status: EmployeeStatus;
     currentEmployeeId?: string | undefined;
+    /**
+     * Approver ids already assigned to this employee. Entries in this set are
+     * "grandfathered": they were valid when first assigned, so an unrelated edit
+     * (or an import that doesn't touch approvals) must not fail just because one
+     * of them later went inactive or lost substitute eligibility. New approvers
+     * are always fully validated. The required-count and self-approval rules
+     * always apply regardless.
+     */
+    grandfatheredApproverIds?: ReadonlySet<string> | undefined;
   }
 ): Promise<void> {
-  if (input.status === 'ATTIVO') {
-    if (input.roleIds.responsabileIds.length === 0) {
-      throw new HttpError(400, 'RESPONSABILE_REQUIRED', 'Active employees require at least one Responsabile.');
-    }
-    if (input.roleIds.substituteResponsabileIds.length === 0) {
-      throw new HttpError(
-        400,
-        'SOSTITUTO_RESPONSABILE_REQUIRED',
-        'Active employees require at least one Sostituto-Responsabile.'
-      );
-    }
+  const missing = missingRequiredApprovers(input.status, {
+    hasResponsabile: input.roleIds.responsabileIds.length > 0,
+    hasSubstitute: input.roleIds.substituteResponsabileIds.length > 0,
+  });
+  for (const code of missing) {
+    throw new HttpError(400, code, REQUIRED_APPROVER_MESSAGES[code]);
   }
 
-  const roleEntries = [
-    ...input.roleIds.preApproverIds.map((id) => ({ id, role: 'PRE_APPROVER' as const })),
-    ...input.roleIds.responsabileIds.map((id) => ({ id, role: 'RESPONSABILE' as const })),
-    ...input.roleIds.substituteResponsabileIds.map((id) => ({
-      id,
-      role: 'SUBSTITUTE_RESPONSABILE' as const,
-    })),
-  ];
+  const roleEntries = approvalRoleEntries(input.roleIds);
   const approverIds = [...new Set(roleEntries.map((entry) => entry.id))];
   if (approverIds.length === 0) return;
 
@@ -113,6 +146,10 @@ export async function validateApprovalRoleIds(
     if (id === input.currentEmployeeId || approver.employeeNumber === input.employeeNumber) {
       throw new HttpError(400, 'SELF_APPROVER_NOT_ALLOWED', 'Employees cannot approve themselves.');
     }
+    // Don't re-litigate approvers that were already assigned: they passed
+    // validation when first set, and an unrelated edit must not be blocked by a
+    // later change to someone else's record.
+    if (input.grandfatheredApproverIds?.has(id)) continue;
     if (approver.status !== 'ATTIVO') {
       throw new HttpError(
         400,
@@ -136,50 +173,31 @@ export async function replaceApprovalAssignments(
   roleIds: EmployeeApprovalRoleIds
 ): Promise<void> {
   await tx.employeeApprovalAssignment.deleteMany({ where: { employeeId } });
-  const data = [
-    ...roleIds.preApproverIds.map((approverId) => ({
-      employeeId,
-      approverId,
-      role: 'PRE_APPROVER' as const,
-    })),
-    ...roleIds.responsabileIds.map((approverId) => ({
-      employeeId,
-      approverId,
-      role: 'RESPONSABILE' as const,
-    })),
-    ...roleIds.substituteResponsabileIds.map((approverId) => ({
-      employeeId,
-      approverId,
-      role: 'SUBSTITUTE_RESPONSABILE' as const,
-    })),
-  ];
+  const data = approvalRoleEntries(roleIds).map(({ id, role }) => ({
+    employeeId,
+    approverId: id,
+    role,
+  }));
   if (data.length > 0) {
     await tx.employeeApprovalAssignment.createMany({ data });
   }
 }
 
-function referencedEmployeeNumbers(
-  references: Array<{
-    employee: {
-      employeeNumber: number;
-    };
-  }>
-): string {
-  return references
-    .map((reference) => reference.employee.employeeNumber)
-    .sort((left, right) => left - right)
-    .join(', ');
-}
-
-export async function assertEmployeeHasNoApprovalReferences(
+/**
+ * Returns the Employee Numbers of employees that reference `approverId` as an
+ * approver, sorted ascending and de-duplicated. Subjects whose Employee Number
+ * is in `ignoreSubjectEmployeeNumbers` are excluded — used by the import preview
+ * to ignore subjects whose assignments the same import will authoritatively
+ * rewrite.
+ */
+export async function findApprovalReferenceEmployeeNumbers(
   tx: Prisma.TransactionClient,
   input: {
     approverId: string;
     roles?: ApprovalRole[] | undefined;
-    code: string;
-    message: (employeeNumbers: string) => string;
+    ignoreSubjectEmployeeNumbers?: ReadonlySet<number> | undefined;
   }
-): Promise<void> {
+): Promise<number[]> {
   const references = await tx.employeeApprovalAssignment.findMany({
     where: {
       approverId: input.approverId,
@@ -193,10 +211,28 @@ export async function assertEmployeeHasNoApprovalReferences(
       },
     },
   });
+  const numbers = references
+    .map((reference) => reference.employee.employeeNumber)
+    .filter((employeeNumber) => !input.ignoreSubjectEmployeeNumbers?.has(employeeNumber));
+  return [...new Set(numbers)].sort((left, right) => left - right);
+}
 
-  if (references.length === 0) return;
+export async function assertEmployeeHasNoApprovalReferences(
+  tx: Prisma.TransactionClient,
+  input: {
+    approverId: string;
+    roles?: ApprovalRole[] | undefined;
+    code: string;
+    message: (employeeNumbers: string) => string;
+  }
+): Promise<void> {
+  const numbers = await findApprovalReferenceEmployeeNumbers(tx, {
+    approverId: input.approverId,
+    roles: input.roles,
+  });
+  if (numbers.length === 0) return;
 
-  throw new HttpError(409, input.code, input.message(referencedEmployeeNumbers(references)));
+  throw new HttpError(409, input.code, input.message(numbers.join(', ')));
 }
 
 export async function validateEmployeeCanLoseApprovalEligibility(
@@ -207,24 +243,41 @@ export async function validateEmployeeCanLoseApprovalEligibility(
     nextStatus: EmployeeStatus;
     currentCanBeSubstituteResponsible: boolean;
     nextCanBeSubstituteResponsible: boolean;
+    /**
+     * Subject Employee Numbers whose inbound references this caller is rewriting
+     * in the same transaction; they are excluded from the DB reference scan so a
+     * re-affirmed (or removed) assignment in the same import isn't counted as a
+     * conflict. See the import-commit caller.
+     */
+    ignoreSubjectEmployeeNumbers?: ReadonlySet<number> | undefined;
   }
 ): Promise<void> {
   if (input.currentStatus === 'ATTIVO' && input.nextStatus !== 'ATTIVO') {
-    await assertEmployeeHasNoApprovalReferences(tx, {
+    const numbers = await findApprovalReferenceEmployeeNumbers(tx, {
       approverId: input.employeeId,
-      code: 'APPROVER_IN_USE',
-      message: (employeeNumbers) =>
-        `This employee is used in approval workflows by Employee Numbers ${employeeNumbers}. Remove those approval assignments before making the employee inactive.`,
+      ignoreSubjectEmployeeNumbers: input.ignoreSubjectEmployeeNumbers,
     });
+    if (numbers.length > 0) {
+      throw new HttpError(
+        409,
+        'APPROVER_IN_USE',
+        `This employee is used in approval workflows by Employee Numbers ${numbers.join(', ')}. Remove those approval assignments before making the employee inactive.`
+      );
+    }
   }
 
   if (input.currentCanBeSubstituteResponsible && !input.nextCanBeSubstituteResponsible) {
-    await assertEmployeeHasNoApprovalReferences(tx, {
+    const numbers = await findApprovalReferenceEmployeeNumbers(tx, {
       approverId: input.employeeId,
       roles: ['SUBSTITUTE_RESPONSABILE'],
-      code: 'SUBSTITUTE_APPROVER_IN_USE',
-      message: (employeeNumbers) =>
-        `This employee is used as Sostituto-Responsabile by Employee Numbers ${employeeNumbers}. Remove those assignments before disabling substitute eligibility.`,
+      ignoreSubjectEmployeeNumbers: input.ignoreSubjectEmployeeNumbers,
     });
+    if (numbers.length > 0) {
+      throw new HttpError(
+        409,
+        'SUBSTITUTE_APPROVER_IN_USE',
+        `This employee is used as Sostituto-Responsabile by Employee Numbers ${numbers.join(', ')}. Remove those assignments before disabling substitute eligibility.`
+      );
+    }
   }
 }

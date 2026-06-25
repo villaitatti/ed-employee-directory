@@ -591,6 +591,38 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
     expect(employee.mondayMinutes).toBe(450);
   });
 
+  it('defaults blank weekday columns to full time instead of rejecting the row', async () => {
+    const department = await testPrisma.department.create({
+      data: { name: 'Biblioteca', normalizedName: 'biblioteca' },
+    });
+    const approvers = await seedApprovers(department.id);
+    // Only LU is filled; the other weekday columns are present but blank.
+    const csv = [
+      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,Status,Responsabile,Sostituto-Responsabile,LU,MA,ME,GIO,VE',
+      `6001,Ada,Uno,${department.name},1985-04-12,2020-01-01,1,Exempt,Indeterminato,Attivo,${approvers.responsabile.employeeNumber},${approvers.substitute.employeeNumber},"6,00",,,,`,
+    ].join('\n');
+
+    const preview = await request(app)
+      .post('/api/admin/imports/preview')
+      .attach('file', Buffer.from(csv), { filename: 'employees.csv', contentType: 'text/csv' });
+
+    expect(preview.status).toBe(201);
+    const row = (preview.body.data.rows as Array<{ rowNumber: number; errors: string[]; selected: boolean }>).find(
+      (r) => r.rowNumber === 2
+    );
+    expect(row?.errors).toEqual([]);
+    expect(row?.selected).toBe(true);
+
+    const commit = await request(app)
+      .post(`/api/admin/imports/${preview.body.data.batchId}/commit`)
+      .send({ selectedRows: [2] });
+    expect(commit.status).toBe(200);
+    const employee = await testPrisma.employee.findUniqueOrThrow({ where: { employeeNumber: 6001 } });
+    expect(employee.mondayMinutes).toBe(360);
+    expect(employee.tuesdayMinutes).toBe(450);
+    expect(employee.fridayMinutes).toBe(450);
+  });
+
   it('imports approval roles that reference employees from the same file', async () => {
     const department = await testPrisma.department.create({
       data: { name: 'Biblioteca', normalizedName: 'biblioteca' },
@@ -644,5 +676,96 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
     expect(rows.find((row) => row.rowNumber === 3)?.errors).toContain(
       'Active employees require at least one Responsabile.'
     );
+  });
+
+  it('rejects a reference to an existing employee whose own (invalid) row is deselected', async () => {
+    const department = await testPrisma.department.create({
+      data: { name: 'Biblioteca', normalizedName: 'biblioteca' },
+    });
+    const approvers = await seedApprovers(department.id);
+    // 9001 (the existing Responsabile) is also a subject row in this file, but
+    // that row is invalid (blank first name) so it won't be applied. A second
+    // row references 9001 — it must NOT silently pass against the stale DB copy.
+    const csv = [
+      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,TFR,Status,Sostituto Abilitato,Responsabile,Sostituto-Responsabile',
+      `${approvers.responsabile.employeeNumber},,Uno,${department.name},1980-01-01,2010-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,false,${approvers.substitute.employeeNumber},${approvers.substitute.employeeNumber}`,
+      `5001,Marco,Bianchi,${department.name},1985-04-12,2020-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,false,${approvers.responsabile.employeeNumber},${approvers.substitute.employeeNumber}`,
+    ].join('\n');
+
+    const preview = await request(app)
+      .post('/api/admin/imports/preview')
+      .attach('file', Buffer.from(csv), { filename: 'employees.csv', contentType: 'text/csv' });
+
+    expect(preview.status).toBe(201);
+    const rows = preview.body.data.rows as Array<{ rowNumber: number; errors: string[]; selected: boolean }>;
+    expect(rows.find((row) => row.rowNumber === 2)?.selected).toBe(false);
+    expect(rows.find((row) => row.rowNumber === 3)?.selected).toBe(false);
+    expect(rows.find((row) => row.rowNumber === 3)?.errors).toContain(
+      `Approver Employee Number ${approvers.responsabile.employeeNumber} is not a valid row in this import.`
+    );
+  });
+
+  it('flags at preview a row that inactivates an approver still used elsewhere', async () => {
+    const department = await testPrisma.department.create({
+      data: { name: 'Biblioteca', normalizedName: 'biblioteca' },
+    });
+    const approvers = await seedApprovers(department.id);
+    await seedEmployeeUsingApprovers(department.id, approvers);
+    // Out-of-file employee 2002 references 9001 as Responsabile. An import that
+    // inactivates 9001 must be flagged at preview, not blow up the commit.
+    const csv = [
+      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,Termination Date,FTE,USA Category,Contract Type,TFR,Status',
+      `${approvers.responsabile.employeeNumber},Responsabile,Uno,${department.name},1980-01-01,2010-01-01,2026-01-01,1,Exempt,Indeterminato,I Tatti,Cessato`,
+    ].join('\n');
+
+    const preview = await request(app)
+      .post('/api/admin/imports/preview')
+      .attach('file', Buffer.from(csv), { filename: 'employees.csv', contentType: 'text/csv' });
+
+    expect(preview.status).toBe(201);
+    const row = (preview.body.data.rows as Array<{ rowNumber: number; errors: string[]; selected: boolean }>).find(
+      (r) => r.rowNumber === 2
+    );
+    expect(row?.selected).toBe(false);
+    expect(row?.errors.join(' ')).toContain('cannot be made inactive');
+  });
+
+  it('allows a field-only re-import of an employee whose assigned approver later went inactive', async () => {
+    const department = await testPrisma.department.create({
+      data: { name: 'Biblioteca', normalizedName: 'biblioteca' },
+    });
+    const approvers = await seedApprovers(department.id);
+    const employee = await seedEmployeeUsingApprovers(department.id, approvers);
+    // The Responsabile becomes inactive directly in the DB after assignment.
+    await testPrisma.employee.update({
+      where: { id: approvers.responsabile.id },
+      data: { status: 'CESSATO' },
+    });
+
+    // A re-import of the dependent employee that omits role columns must succeed:
+    // it doesn't touch approvals, so the now-inactive grandfathered approver
+    // must not block it.
+    const csv = [
+      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,Status',
+      `${employee.employeeNumber},Marco,Bianchi,${department.name},1985-04-12,2020-01-02,1,Exempt,Indeterminato,Attivo`,
+    ].join('\n');
+
+    const preview = await request(app)
+      .post('/api/admin/imports/preview')
+      .attach('file', Buffer.from(csv), { filename: 'employees.csv', contentType: 'text/csv' });
+    expect(preview.status).toBe(201);
+    const row = (preview.body.data.rows as Array<{ rowNumber: number; selected: boolean }>).find(
+      (r) => r.rowNumber === 2
+    );
+    expect(row?.selected).toBe(true);
+
+    const commit = await request(app)
+      .post(`/api/admin/imports/${preview.body.data.batchId}/commit`)
+      .send({ selectedRows: [2] });
+    expect(commit.status).toBe(200);
+    const updated = await testPrisma.employee.findUniqueOrThrow({
+      where: { employeeNumber: employee.employeeNumber },
+    });
+    expect(updated.hireDate?.toISOString().slice(0, 10)).toBe('2020-01-02');
   });
 });

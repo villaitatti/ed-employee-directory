@@ -873,6 +873,7 @@ export function EmployeeForm({
                 <EmployeeMultiSelect
                   label={t('fields.preApprovers')}
                   options={approverOptions}
+                  labelOptions={employeeOptions}
                   value={draft.approvalRoleIds.preApproverIds}
                   onChange={(value) => setApprovalRoleIds('preApproverIds', value)}
                 />
@@ -881,6 +882,7 @@ export function EmployeeForm({
                 <EmployeeMultiSelect
                   label={t('fields.responsabili')}
                   options={approverOptions}
+                  labelOptions={employeeOptions}
                   value={draft.approvalRoleIds.responsabileIds}
                   onChange={(value) => setApprovalRoleIds('responsabileIds', value)}
                 />
@@ -889,6 +891,7 @@ export function EmployeeForm({
                 <EmployeeMultiSelect
                   label={t('fields.substituteResponsabili')}
                   options={substituteOptions}
+                  labelOptions={employeeOptions}
                   value={draft.approvalRoleIds.substituteResponsabileIds}
                   onChange={(value) => setApprovalRoleIds('substituteResponsabileIds', value)}
                 />
@@ -1456,36 +1459,47 @@ function employeeOptionLabel(option: EmployeeOption): string {
 function EmployeeMultiSelect({
   label,
   options,
+  labelOptions,
   value,
   onChange,
 }: {
   label: string;
+  /** Selectable options for the dropdown (already filtered for eligibility). */
   options: EmployeeOption[];
+  /** Broader pool used only to label already-selected chips (e.g. an approver
+   * who has since lost eligibility and is no longer in `options`). */
+  labelOptions: EmployeeOption[];
   value: string[];
   onChange: (value: string[]) => void;
 }) {
   const { t } = useTranslation();
-  const selected = value
-    .map((id) => options.find((option) => option.id === id))
-    .filter((option): option is EmployeeOption => Boolean(option));
+  // Render a chip for EVERY selected id, even ones missing from the option list
+  // (an approver who became inactive or lost substitute eligibility after being
+  // assigned). They must stay visible and removable rather than silently
+  // lingering in the payload where the server would reject the save.
+  const labelById = new Map(labelOptions.map((option) => [option.id, option]));
   const available = options.filter((option) => !value.includes(option.id));
 
   return (
     <div className="employee-multi-select">
-      {selected.length > 0 ? (
+      {value.length > 0 ? (
         <div className="selected-employees">
-          {selected.map((option) => (
-            <span className="employee-chip" key={option.id}>
-              {employeeOptionLabel(option)}
-              <button
-                type="button"
-                onClick={() => onChange(value.filter((id) => id !== option.id))}
-                aria-label={`${t('actions.remove')} ${employeeOptionLabel(option)}`}
-              >
-                <X size={14} />
-              </button>
-            </span>
-          ))}
+          {value.map((id) => {
+            const option = labelById.get(id);
+            const text = option ? employeeOptionLabel(option) : t('copy.ineligibleApprover');
+            return (
+              <span className={option ? 'employee-chip' : 'employee-chip employee-chip-invalid'} key={id}>
+                {text}
+                <button
+                  type="button"
+                  onClick={() => onChange(value.filter((selectedId) => selectedId !== id))}
+                  aria-label={`${t('actions.remove')} ${text}`}
+                >
+                  <X size={14} />
+                </button>
+              </span>
+            );
+          })}
         </div>
       ) : null}
       <select

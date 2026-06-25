@@ -183,4 +183,34 @@ describe('EmployeeForm modal', () => {
     expect(within(substituteSelect).getByRole('option', { name: 'Bianchi Bruno (1002)' })).toBeInTheDocument();
     expect(within(substituteSelect).queryByRole('option', { name: 'Rossi Ada (1001)' })).not.toBeInTheDocument();
   });
+
+  it('keeps a selected approver visible and removable even when no longer eligible', () => {
+    const onChange = vi.fn();
+    // 'emp_3' is selected as a Responsabile but is absent from employeeOptions
+    // (e.g. it became inactive after assignment). It must still render a
+    // removable chip rather than vanishing into the payload.
+    renderWithProviders(
+      <EmployeeForm
+        draft={{
+          ...emptyEmployeeDraft,
+          approvalRoleIds: { ...emptyEmployeeDraft.approvalRoleIds, responsabileIds: ['emp_3'] },
+        }}
+        departments={departments}
+        employeeOptions={employeeOptions}
+        onCancel={vi.fn()}
+        onChange={onChange}
+        onSave={vi.fn()}
+        isSaving={false}
+      />
+    );
+
+    const removeButton = screen.getByRole('button', { name: /Rimuovi Approvatore non più idoneo/i });
+    expect(removeButton).toBeInTheDocument();
+    removeButton.click();
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        approvalRoleIds: expect.objectContaining({ responsabileIds: [] }),
+      })
+    );
+  });
 });

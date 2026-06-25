@@ -483,6 +483,11 @@ button:focus-visible {
   font-weight: 800;
 }
 
+.employee-chip-invalid {
+  border-color: var(--warning-ink);
+  color: var(--warning-ink);
+}
+
 .employee-chip button {
   display: inline-grid;
   place-items: center;

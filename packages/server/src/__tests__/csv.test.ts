@@ -96,13 +96,27 @@ describe('parseOptionalBoolean', () => {
   it('preserves blank values as omitted and parses explicit false', () => {
     expect(parseOptionalBoolean('')).toBeUndefined();
     expect(parseOptionalBoolean('false')).toBe(false);
+    expect(parseOptionalBoolean('no')).toBe(false);
     expect(parseOptionalBoolean('si')).toBe(true);
+  });
+
+  it('treats unrecognized tokens as omitted rather than false', () => {
+    expect(parseOptionalBoolean('n/a')).toBeUndefined();
+    expect(parseOptionalBoolean('-')).toBeUndefined();
+    expect(parseOptionalBoolean('maybe')).toBeUndefined();
   });
 });
 
 describe('parseEmployeeNumberList', () => {
   it('parses semicolon-separated Employee Numbers', () => {
     expect(parseEmployeeNumberList('1001; 1002;1003')).toEqual({
+      values: [1001, 1002, 1003],
+      errors: [],
+    });
+  });
+
+  it('also accepts comma-separated Employee Numbers', () => {
+    expect(parseEmployeeNumberList('1001, 1002,1003')).toEqual({
       values: [1001, 1002, 1003],
       errors: [],
     });

@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import type { ApprovalRole as ApprovalRoleValue } from '@prisma/client';
 import { parse } from 'csv-parse/sync';
 import ExcelJS from 'exceljs';
 import { Router, type Request } from 'express';
@@ -14,10 +15,12 @@ import {
   importCommitSchema,
   normalizeDepartmentName,
   retirementPolicySchema,
+  WEEKDAY_KEYS,
   type EmployeeApprovalRoleIds,
   type EmployeeApprovalRoleNumbers,
   type EmployeeWriteInput,
   type ImportPreviewRow,
+  type WeekdayKey,
 } from '@itatti/shared';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../middleware/async-handler.js';
@@ -45,6 +48,9 @@ import {
   emptyApprovalRoleIds,
   existingApprovalRoleIds,
   assertEmployeeHasNoApprovalReferences,
+  findApprovalReferenceEmployeeNumbers,
+  missingRequiredApprovers,
+  REQUIRED_APPROVER_MESSAGES,
   replaceApprovalAssignments,
   validateApprovalRoleIds,
   validateEmployeeCanLoseApprovalEligibility,
@@ -220,16 +226,18 @@ function parseRoleNumbers(row: Record<string, string>): {
   };
 }
 
-function parseWeeklyScheduleFromRow(row: Record<string, string>) {
+function parseWeeklyScheduleFromRow(row: Record<string, string>): Partial<Record<WeekdayKey, string>> | undefined {
   const hasWeeklyColumns = Object.values(weekdayAliases).some((aliases) => hasHeader(row, [...aliases]));
   if (!hasWeeklyColumns) return undefined;
-  return {
-    monday: readFirst(row, [...weekdayAliases.monday]),
-    tuesday: readFirst(row, [...weekdayAliases.tuesday]),
-    wednesday: readFirst(row, [...weekdayAliases.wednesday]),
-    thursday: readFirst(row, [...weekdayAliases.thursday]),
-    friday: readFirst(row, [...weekdayAliases.friday]),
-  };
+  // Only include days whose cell is non-blank. Blank/missing day columns are
+  // omitted so the schema's per-field default (full-time 7,30) applies, rather
+  // than feeding '' to the sessantesimi parser and rejecting the whole row.
+  const schedule: Partial<Record<WeekdayKey, string>> = {};
+  for (const key of WEEKDAY_KEYS) {
+    const value = readFirst(row, [...weekdayAliases[key]]);
+    if (value) schedule[key] = value;
+  }
+  return schedule;
 }
 
 type ApprovalCandidate = {
@@ -250,34 +258,32 @@ function validateRoleNumberCandidates(input: {
   status: EmployeeWriteInput['status'];
   roleNumbers: EmployeeApprovalRoleNumbers;
   candidateByNumber: Map<number, ApprovalCandidate>;
+  /** Employee Numbers that appear as a subject row anywhere in this import. */
+  inFileEmployeeNumbers: ReadonlySet<number>;
+  /** Subject rows currently considered valid+selected in this iteration. */
+  selectedImportNumbers: ReadonlySet<number>;
   errors: string[];
 }): void {
-  if (input.status === 'ATTIVO') {
-    if (input.roleNumbers.responsabileNumbers.length === 0) {
-      input.errors.push('Active employees require at least one Responsabile.');
-    }
-    if (input.roleNumbers.substituteResponsabileNumbers.length === 0) {
-      input.errors.push('Active employees require at least one Sostituto-Responsabile.');
-    }
+  for (const code of missingRequiredApprovers(input.status, {
+    hasResponsabile: input.roleNumbers.responsabileNumbers.length > 0,
+    hasSubstitute: input.roleNumbers.substituteResponsabileNumbers.length > 0,
+  })) {
+    input.errors.push(REQUIRED_APPROVER_MESSAGES[code]);
   }
 
-  const roleEntries = [
-    ...input.roleNumbers.preApproverNumbers.map((employeeNumber) => ({
-      employeeNumber,
-      role: 'PRE_APPROVER' as const,
-    })),
-    ...input.roleNumbers.responsabileNumbers.map((employeeNumber) => ({
-      employeeNumber,
-      role: 'RESPONSABILE' as const,
-    })),
-    ...input.roleNumbers.substituteResponsabileNumbers.map((employeeNumber) => ({
-      employeeNumber,
-      role: 'SUBSTITUTE_RESPONSABILE' as const,
-    })),
-  ];
-  for (const { employeeNumber, role } of roleEntries) {
+  for (const { employeeNumber, role } of roleNumberEntries(input.roleNumbers)) {
     if (employeeNumber === input.employeeNumber) {
       input.errors.push('Employees cannot approve themselves.');
+      continue;
+    }
+    // When the operator includes the approver as its own row in this file, that
+    // pending row is authoritative — the reference is only valid if that row is
+    // itself valid and selected. This holds even when the approver also exists
+    // in the DB, so a reference can't quietly fall back to stale DB state for a
+    // row the operator chose not to apply. Feeding this into the fixpoint also
+    // propagates transitively (A→B→invalid C invalidates both B and A).
+    if (input.inFileEmployeeNumbers.has(employeeNumber) && !input.selectedImportNumbers.has(employeeNumber)) {
+      input.errors.push(`Approver Employee Number ${employeeNumber} is not a valid row in this import.`);
       continue;
     }
     const candidate = input.candidateByNumber.get(employeeNumber);
@@ -319,6 +325,26 @@ function allApprovalRoleNumbers(roleNumbers: EmployeeApprovalRoleNumbers | undef
     ...(roleNumbers?.responsabileNumbers ?? []),
     ...(roleNumbers?.substituteResponsabileNumbers ?? []),
   ];
+}
+
+function allRoleIds(roleIds: EmployeeApprovalRoleIds): string[] {
+  return [...roleIds.preApproverIds, ...roleIds.responsabileIds, ...roleIds.substituteResponsabileIds];
+}
+
+/** Maps each number-list field on EmployeeApprovalRoleNumbers to its ApprovalRole. */
+const ROLE_NUMBER_FIELDS = [
+  ['preApproverNumbers', 'PRE_APPROVER'],
+  ['responsabileNumbers', 'RESPONSABILE'],
+  ['substituteResponsabileNumbers', 'SUBSTITUTE_RESPONSABILE'],
+] as const;
+
+/** Flattens the three number arrays into tagged {employeeNumber, role} entries. */
+function roleNumberEntries(
+  roleNumbers: EmployeeApprovalRoleNumbers
+): Array<{ employeeNumber: number; role: ApprovalRoleValue }> {
+  return ROLE_NUMBER_FIELDS.flatMap(([field, role]) =>
+    roleNumbers[field].map((employeeNumber) => ({ employeeNumber, role }))
+  );
 }
 
 function roleNumbersForExport(employee: EmployeeDetails, role: EmployeeDetails['approvalAssignments'][number]['role']): string {
@@ -673,12 +699,19 @@ adminRouter.put(
       const before = await tx.employee.findUnique({ where: { id: employeeId }, include: employeeDetailsInclude });
       if (!before) throw new HttpError(404, 'EMPLOYEE_NOT_FOUND', 'Employee not found.');
       const policy = await getRetirementPolicy(tx);
-      const roleIds = input.approvalRoleIds ?? (await existingApprovalRoleIds(tx, employeeId));
+      const existingRoleIds = await existingApprovalRoleIds(tx, employeeId);
+      const roleIds = input.approvalRoleIds ?? existingRoleIds;
+      // Approvers already assigned to this employee are grandfathered: they were
+      // valid when set, so re-saving (or editing an unrelated field) must not
+      // fail because another employee's record changed in the meantime. Newly
+      // added approvers are still fully validated.
+      const grandfatheredApproverIds = new Set(allRoleIds(existingRoleIds));
       await validateApprovalRoleIds(tx, {
         roleIds,
         employeeNumber: input.employeeNumber,
         status: input.status,
         currentEmployeeId: employeeId,
+        grandfatheredApproverIds,
       });
       await validateEmployeeCanLoseApprovalEligibility(tx, {
         employeeId,
@@ -955,7 +988,7 @@ adminRouter.post(
 
     const records = await parseUploadRecords(file);
 
-    const [departments, employees] = await Promise.all([
+    const [departments, employees, existingAssignments] = await Promise.all([
       prisma.department.findMany(),
       prisma.employee.findMany({
         select: {
@@ -967,9 +1000,18 @@ adminRouter.post(
           canBeSubstituteResponsible: true,
         },
       }),
+      prisma.employeeApprovalAssignment.findMany({ select: { employeeId: true, role: true } }),
     ]);
     const departmentByName = new Map(departments.map((department) => [department.normalizedName, department]));
     const employeeByNumber = new Map(employees.map((employee) => [employee.employeeNumber, employee]));
+    // Role coverage each existing employee already has, so a re-import that
+    // omits the role columns preserves (rather than re-demands) their approvers.
+    const existingRolesByEmployeeId = new Map<string, Set<ApprovalRoleValue>>();
+    for (const assignment of existingAssignments) {
+      const roles = existingRolesByEmployeeId.get(assignment.employeeId) ?? new Set<ApprovalRoleValue>();
+      roles.add(assignment.role);
+      existingRolesByEmployeeId.set(assignment.employeeId, roles);
+    }
     const employeeNumberRows = new Map<number, number[]>();
     for (const { row, rowNumber } of records) {
       const employeeNumber = Number(readFirst(row, ['numero matricola', 'employee number', 'employee id']));
@@ -1051,6 +1093,7 @@ adminRouter.post(
       return {
         rowNumber,
         original: row,
+        employeeNumber,
         parsed: parsed.success ? parsed.data : null,
         roleNumbers,
         baseErrors: errors,
@@ -1059,7 +1102,31 @@ adminRouter.post(
       };
     });
 
-    let candidateImportNumbers = new Set(
+    // Every Employee Number that appears as a subject row in this file (even
+    // ones that fail to parse), so references to a same-file row are judged
+    // against that pending row rather than silently falling back to DB state.
+    const inFileEmployeeNumbers = new Set(
+      parsedRows
+        .map((row) => row.employeeNumber)
+        .filter((employeeNumber): employeeNumber is number => Number.isInteger(employeeNumber) && employeeNumber > 0)
+    );
+
+    // Base candidate map of all existing DB employees, built once. Each
+    // iteration overlays only the in-file rows currently considered selected;
+    // we restore the overlaid entries afterwards so the base can be reused.
+    const candidateByNumber = new Map<number, ApprovalCandidate>();
+    for (const employee of employees) {
+      candidateByNumber.set(employee.employeeNumber, {
+        id: employee.id,
+        employeeNumber: employee.employeeNumber,
+        firstName: employee.firstName,
+        lastName: employee.lastName,
+        status: employee.status,
+        canBeSubstituteResponsible: employee.canBeSubstituteResponsible,
+      });
+    }
+
+    let selectedImportNumbers = new Set(
       parsedRows
         .filter((row) => row.parsed && row.baseErrors.length === 0)
         .map((row) => row.parsed?.employeeNumber)
@@ -1067,19 +1134,9 @@ adminRouter.post(
     );
     let previewRows: ImportPreviewRow[] = [];
     for (let iteration = 0; iteration <= parsedRows.length; iteration += 1) {
-      const candidateByNumber = new Map<number, ApprovalCandidate>();
-      for (const employee of employees) {
-        candidateByNumber.set(employee.employeeNumber, {
-          id: employee.id,
-          employeeNumber: employee.employeeNumber,
-          firstName: employee.firstName,
-          lastName: employee.lastName,
-          status: employee.status,
-          canBeSubstituteResponsible: employee.canBeSubstituteResponsible,
-        });
-      }
+      const overlaid: number[] = [];
       for (const row of parsedRows) {
-        if (!row.parsed || !candidateImportNumbers.has(row.parsed.employeeNumber)) continue;
+        if (!row.parsed || !selectedImportNumbers.has(row.parsed.employeeNumber)) continue;
         const existingEmployee = employeeByNumber.get(row.parsed.employeeNumber);
         candidateByNumber.set(row.parsed.employeeNumber, {
           id: existingEmployee?.id ?? null,
@@ -1090,6 +1147,7 @@ adminRouter.post(
           canBeSubstituteResponsible:
             row.parsed.canBeSubstituteResponsible ?? existingEmployee?.canBeSubstituteResponsible ?? false,
         });
+        overlaid.push(row.parsed.employeeNumber);
       }
 
       previewRows = parsedRows.map((row) => {
@@ -1100,11 +1158,22 @@ adminRouter.post(
             status: row.parsed.status,
             roleNumbers: row.roleNumbers,
             candidateByNumber,
+            inFileEmployeeNumbers,
+            selectedImportNumbers,
             errors,
           });
-        } else if (row.parsed && row.parsed.status === 'ATTIVO') {
-          errors.push('Active employees require at least one Responsabile.');
-          errors.push('Active employees require at least one Sostituto-Responsabile.');
+        } else if (row.parsed) {
+          // No role columns in the file: the employee keeps whatever approvers
+          // they already have. Only a brand-new employee (no existing coverage)
+          // can be missing required approvers here.
+          const existingId = row.existingEmployeeId;
+          const existingRoles = existingId ? existingRolesByEmployeeId.get(existingId) : undefined;
+          for (const code of missingRequiredApprovers(row.parsed.status, {
+            hasResponsabile: existingRoles?.has('RESPONSABILE') ?? false,
+            hasSubstitute: existingRoles?.has('SUBSTITUTE_RESPONSABILE') ?? false,
+          })) {
+            errors.push(REQUIRED_APPROVER_MESSAGES[code]);
+          }
         }
 
         const normalized = row.parsed
@@ -1124,36 +1193,99 @@ adminRouter.post(
         };
       });
 
-      const nextCandidateImportNumbers = new Set(
+      // Restore the base map for the next iteration (drop in-file overlays).
+      for (const employeeNumber of overlaid) {
+        const existingEmployee = employeeByNumber.get(employeeNumber);
+        if (existingEmployee) {
+          candidateByNumber.set(employeeNumber, {
+            id: existingEmployee.id,
+            employeeNumber: existingEmployee.employeeNumber,
+            firstName: existingEmployee.firstName,
+            lastName: existingEmployee.lastName,
+            status: existingEmployee.status,
+            canBeSubstituteResponsible: existingEmployee.canBeSubstituteResponsible,
+          });
+        } else {
+          candidateByNumber.delete(employeeNumber);
+        }
+      }
+
+      const nextSelectedImportNumbers = new Set(
         previewRows
           .filter((row) => row.selected)
           .map((row) => row.normalized?.employeeNumber)
           .filter((employeeNumber): employeeNumber is number => typeof employeeNumber === 'number')
       );
       const unchanged =
-        nextCandidateImportNumbers.size === candidateImportNumbers.size &&
-        [...nextCandidateImportNumbers].every((employeeNumber) => candidateImportNumbers.has(employeeNumber));
-      candidateImportNumbers = nextCandidateImportNumbers;
+        nextSelectedImportNumbers.size === selectedImportNumbers.size &&
+        [...nextSelectedImportNumbers].every((employeeNumber) => selectedImportNumbers.has(employeeNumber));
+      selectedImportNumbers = nextSelectedImportNumbers;
       if (unchanged) break;
     }
 
-    const invalidImportNumbers = new Set(
-      previewRows
-        .filter((row) => row.errors.length > 0)
-        .map((row) => row.normalized?.employeeNumber)
-        .filter(
-          (employeeNumber): employeeNumber is number =>
-            typeof employeeNumber === 'number' && !employeeByNumber.has(employeeNumber)
-        )
+    // Mirror the commit-time eligibility-loss guard at preview time: a row that
+    // inactivates an existing approver, or disables their substitute
+    // eligibility, while they remain referenced by an employee the import will
+    // NOT rewrite, would abort the whole commit transaction. Surface it as a
+    // per-row error here so the operator can deselect it instead.
+    //
+    // Subjects that this import authoritatively rewrites (selected rows that
+    // carry role columns) are excluded from the DB reference scan; their
+    // post-import references are recomputed from the file instead.
+    const rewrittenSubjectNumbers = new Set(
+      parsedRows
+        .filter((row) => row.parsed && row.roleNumbers && selectedImportNumbers.has(row.parsed.employeeNumber))
+        .map((row) => row.parsed?.employeeNumber)
+        .filter((employeeNumber): employeeNumber is number => typeof employeeNumber === 'number')
     );
+    // approverNumber -> roles still referencing it from the rewritten in-file rows.
+    const reaffirmedRoles = new Map<number, Set<ApprovalRoleValue>>();
+    for (const row of parsedRows) {
+      if (!row.parsed || !row.roleNumbers || !selectedImportNumbers.has(row.parsed.employeeNumber)) continue;
+      for (const { employeeNumber, role } of roleNumberEntries(row.roleNumbers)) {
+        const roles = reaffirmedRoles.get(employeeNumber) ?? new Set<ApprovalRoleValue>();
+        roles.add(role);
+        reaffirmedRoles.set(employeeNumber, roles);
+      }
+    }
+
     for (const row of previewRows) {
-      const roleNumbers = roleNumbersFromNormalized(row.normalized);
-      const invalidReference = allApprovalRoleNumbers(roleNumbers).find((employeeNumber) =>
-        invalidImportNumbers.has(employeeNumber)
-      );
-      if (invalidReference !== undefined) {
-        const message = `Approver Employee Number ${invalidReference} is not a valid row in this import.`;
-        if (!row.errors.includes(message)) row.errors.push(message);
+      if (!row.selected || !row.existingEmployeeId) continue;
+      const parsed = row.normalized;
+      const existing = typeof parsed?.employeeNumber === 'number' ? employeeByNumber.get(parsed.employeeNumber) : undefined;
+      if (!parsed || !existing) continue;
+      const nextStatus = parsed.status ?? existing.status;
+      const nextCanBeSubstitute = parsed.canBeSubstituteResponsible ?? existing.canBeSubstituteResponsible;
+      const employeeNumber = existing.employeeNumber;
+
+      if (existing.status === 'ATTIVO' && nextStatus !== 'ATTIVO') {
+        const dbRefs = await findApprovalReferenceEmployeeNumbers(prisma, {
+          approverId: existing.id,
+          ignoreSubjectEmployeeNumbers: rewrittenSubjectNumbers,
+        });
+        const reaffirmed = (reaffirmedRoles.get(employeeNumber)?.size ?? 0) > 0;
+        if (dbRefs.length > 0 || reaffirmed) {
+          row.errors.push(
+            `This employee is still used in approval workflows and cannot be made inactive in this import. Remove those approval assignments first.`
+          );
+        }
+      }
+
+      if (existing.canBeSubstituteResponsible && !nextCanBeSubstitute) {
+        const dbRefs = await findApprovalReferenceEmployeeNumbers(prisma, {
+          approverId: existing.id,
+          roles: ['SUBSTITUTE_RESPONSABILE'],
+          ignoreSubjectEmployeeNumbers: rewrittenSubjectNumbers,
+        });
+        const reaffirmed = reaffirmedRoles.get(employeeNumber)?.has('SUBSTITUTE_RESPONSABILE') ?? false;
+        if (dbRefs.length > 0 || reaffirmed) {
+          row.errors.push(
+            `This employee is still used as Sostituto-Responsabile and cannot have substitute eligibility disabled in this import.`
+          );
+        }
+      }
+
+      if (row.errors.length > 0) {
         row.proposedAction = null;
         row.selected = false;
       }
@@ -1231,7 +1363,7 @@ adminRouter.post(
       }
 
       const savedRows = [];
-      for (const { row, parsed } of parsedRows) {
+      for (const { row, parsed, roleNumbers } of parsedRows) {
         const before = await tx.employee.findUnique({
           where: { employeeNumber: parsed.employeeNumber },
           include: employeeDetailsInclude,
@@ -1269,7 +1401,7 @@ adminRouter.post(
               data: toEmployeeData(parsed, undefined, policy),
             });
 
-        savedRows.push({ row, parsed, before, employeeId: employee.id });
+        savedRows.push({ row, parsed, roleNumbers, before, employeeId: employee.id });
       }
 
       const referencedEmployeeNumbers = new Set<number>();
@@ -1284,10 +1416,15 @@ adminRouter.post(
       const employeeByNumberAfterSave = new Map(
         employeesByNumber.map((employee) => [employee.employeeNumber, employee])
       );
+      // Subjects this import rewrites authoritatively (rows carrying role
+      // columns). Their post-import inbound references come entirely from the
+      // file, so the DB reference scan in the eligibility check must ignore them.
+      const rewrittenSubjectNumbers = new Set(
+        savedRows.filter((saved) => saved.roleNumbers).map((saved) => saved.parsed.employeeNumber)
+      );
 
       for (const saved of savedRows) {
-        const parsedRow = parsedRows.find(({ row }) => row.id === saved.row.id);
-        const missingApproverNumber = allApprovalRoleNumbers(parsedRow?.roleNumbers).find(
+        const missingApproverNumber = allApprovalRoleNumbers(saved.roleNumbers).find(
           (employeeNumber) => !employeeByNumberAfterSave.has(employeeNumber)
         );
         if (missingApproverNumber !== undefined) {
@@ -1298,15 +1435,22 @@ adminRouter.post(
           );
         }
         const roleIds =
-          approvalRoleIdsFromNumbers(parsedRow?.roleNumbers, employeeByNumberAfterSave) ??
+          approvalRoleIdsFromNumbers(saved.roleNumbers, employeeByNumberAfterSave) ??
           (saved.before ? await existingApprovalRoleIds(tx, saved.employeeId) : emptyApprovalRoleIds());
+        // Grandfather approvers this employee already had: a plain field-only
+        // re-import (no role columns) must not fail just because someone else's
+        // record changed since those approvers were assigned.
+        const grandfatheredApproverIds = saved.roleNumbers
+          ? undefined
+          : new Set(saved.before ? allRoleIds(roleIds) : []);
         await validateApprovalRoleIds(tx, {
           roleIds,
           employeeNumber: saved.parsed.employeeNumber,
           status: saved.parsed.status,
           currentEmployeeId: saved.employeeId,
+          grandfatheredApproverIds,
         });
-        if (parsedRow?.roleNumbers) {
+        if (saved.roleNumbers) {
           await replaceApprovalAssignments(tx, saved.employeeId, roleIds);
         }
       }
@@ -1314,20 +1458,30 @@ adminRouter.post(
       for (const saved of savedRows) {
         await validateEmployeeCanLoseApprovalEligibility(tx, {
           employeeId: saved.employeeId,
-          currentStatus: saved.before?.status ?? 'ATTIVO',
+          // New employees have no prior state: model them as not-yet-active and
+          // not-yet-eligible so the "losing eligibility" branches don't fire on
+          // a record that never had anything to lose.
+          currentStatus: saved.before?.status ?? 'DA_ASSUMERE',
           nextStatus: saved.parsed.status,
-          currentCanBeSubstituteResponsible: saved.before?.canBeSubstituteResponsible ?? true,
+          currentCanBeSubstituteResponsible: saved.before?.canBeSubstituteResponsible ?? false,
           nextCanBeSubstituteResponsible:
             saved.parsed.canBeSubstituteResponsible ?? saved.before?.canBeSubstituteResponsible ?? false,
+          ignoreSubjectEmployeeNumbers: rewrittenSubjectNumbers,
         });
       }
 
+      const refreshed = await tx.employee.findMany({
+        where: { id: { in: savedRows.map((saved) => saved.employeeId) } },
+        include: employeeDetailsInclude,
+      });
+      const refreshedById = new Map(refreshed.map((employee) => [employee.id, employee]));
+
       const committed = [];
       for (const saved of savedRows) {
-        const employee = await tx.employee.findUniqueOrThrow({
-          where: { id: saved.employeeId },
-          include: employeeDetailsInclude,
-        });
+        const employee = refreshedById.get(saved.employeeId);
+        if (!employee) {
+          throw new HttpError(500, 'IMPORT_COMMIT_FAILED', 'A committed employee could not be reloaded.');
+        }
         await writeAuditLog({
           tx,
           user,

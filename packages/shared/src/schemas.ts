@@ -14,6 +14,7 @@ import {
   TFR_OPTIONS,
   USA_CATEGORIES,
   WEEKDAY_KEYS,
+  type WeekdayKey,
 } from './constants.js';
 import {
   DEFAULT_WEEKLY_SCHEDULE_MINUTES,
@@ -50,13 +51,12 @@ const sessantesimiInputSchema = z.union([z.string(), z.number()]).transform((val
   }
 });
 
-export const weeklyScheduleInputSchema = z.object({
-  monday: sessantesimiInputSchema.default(FULL_TIME_DAILY_MINUTES),
-  tuesday: sessantesimiInputSchema.default(FULL_TIME_DAILY_MINUTES),
-  wednesday: sessantesimiInputSchema.default(FULL_TIME_DAILY_MINUTES),
-  thursday: sessantesimiInputSchema.default(FULL_TIME_DAILY_MINUTES),
-  friday: sessantesimiInputSchema.default(FULL_TIME_DAILY_MINUTES),
-});
+const weekdayShape = <T extends z.ZodTypeAny>(value: T) =>
+  Object.fromEntries(WEEKDAY_KEYS.map((key) => [key, value])) as Record<WeekdayKey, T>;
+
+export const weeklyScheduleInputSchema = z.object(
+  weekdayShape(sessantesimiInputSchema.default(FULL_TIME_DAILY_MINUTES))
+);
 export type WeeklyScheduleInput = z.infer<typeof weeklyScheduleInputSchema>;
 
 const scheduleDaySchema = z.object({
@@ -65,11 +65,7 @@ const scheduleDaySchema = z.object({
 });
 
 export const weeklyScheduleSchema = z.object({
-  monday: scheduleDaySchema,
-  tuesday: scheduleDaySchema,
-  wednesday: scheduleDaySchema,
-  thursday: scheduleDaySchema,
-  friday: scheduleDaySchema,
+  ...weekdayShape(scheduleDaySchema),
   total: z.object({
     minutes: z.number().int().min(0),
     display: z.string(),
@@ -79,12 +75,11 @@ export type WeeklySchedule = z.infer<typeof weeklyScheduleSchema>;
 
 export function serializeWeeklySchedule(input: WeeklyScheduleInput): WeeklySchedule {
   const total = weeklyScheduleTotalMinutes(input);
+  const days = Object.fromEntries(
+    WEEKDAY_KEYS.map((key) => [key, { minutes: input[key], display: formatSessantesimiMinutes(input[key]) }])
+  ) as Record<WeekdayKey, { minutes: number; display: string }>;
   return {
-    monday: { minutes: input.monday, display: formatSessantesimiMinutes(input.monday) },
-    tuesday: { minutes: input.tuesday, display: formatSessantesimiMinutes(input.tuesday) },
-    wednesday: { minutes: input.wednesday, display: formatSessantesimiMinutes(input.wednesday) },
-    thursday: { minutes: input.thursday, display: formatSessantesimiMinutes(input.thursday) },
-    friday: { minutes: input.friday, display: formatSessantesimiMinutes(input.friday) },
+    ...days,
     total: { minutes: total, display: formatSessantesimiMinutes(total) },
   };
 }
