@@ -57,6 +57,12 @@ enum ImportProposedAction {
   UPDATE
 }
 
+enum ApprovalRole {
+  PRE_APPROVER
+  RESPONSABILE
+  SUBSTITUTE_RESPONSABILE
+}
+
 /// Singleton-ish key/value store for org-wide configuration the staff can edit
 /// at runtime (e.g. the statutory retirement age, which changes by Italian law).
 model Setting {
@@ -77,33 +83,55 @@ model Department {
 }
 
 model Employee {
-  id                       String         @id @default(cuid())
-  employeeNumber           Int            @unique
-  firstName                String
-  lastName                 String
-  departmentId             String
-  department               Department     @relation(fields: [departmentId], references: [id], onDelete: Restrict)
-  birthDate                DateTime       @db.Date
-  hireDate                 DateTime?      @db.Date
-  terminationDate          DateTime?      @db.Date
-  retirementDate           DateTime       @db.Date
-  retirementDateOverridden Boolean        @default(false)
-  fte                      Decimal        @db.Decimal(4, 3)
-  usaCategory              UsaCategory
-  contractType             ContractType
-  tfr                      TfrOption      @default(I_TATTI)
-  status                   EmployeeStatus
-  createdAt                DateTime       @default(now())
-  updatedAt                DateTime       @updatedAt
+  id                            String                       @id @default(cuid())
+  employeeNumber                Int                          @unique
+  firstName                     String
+  lastName                      String
+  departmentId                  String
+  department                    Department                   @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  birthDate                     DateTime                     @db.Date
+  hireDate                      DateTime?                    @db.Date
+  terminationDate               DateTime?                    @db.Date
+  retirementDate                DateTime                     @db.Date
+  retirementDateOverridden      Boolean                      @default(false)
+  fte                           Decimal                      @db.Decimal(4, 3)
+  usaCategory                   UsaCategory
+  contractType                  ContractType
+  tfr                           TfrOption                    @default(I_TATTI)
+  status                        EmployeeStatus
+  canBeSubstituteResponsible    Boolean                      @default(false)
+  mondayMinutes                 Int                          @default(450)
+  tuesdayMinutes                Int                          @default(450)
+  wednesdayMinutes              Int                          @default(450)
+  thursdayMinutes               Int                          @default(450)
+  fridayMinutes                 Int                          @default(450)
+  approvalAssignments           EmployeeApprovalAssignment[] @relation("EmployeeApprovalSubject")
+  approvalAssignmentsAsApprover EmployeeApprovalAssignment[] @relation("EmployeeApprovalApprover")
+  createdAt                     DateTime                     @default(now())
+  updatedAt                     DateTime                     @updatedAt
 
   @@index([lastName, firstName])
   @@index([departmentId])
   @@index([status])
+  @@index([canBeSubstituteResponsible, status])
   @@index([updatedAt])
 }
 
+model EmployeeApprovalAssignment {
+  employeeId String
+  approverId String
+  role       ApprovalRole
+  employee   Employee     @relation("EmployeeApprovalSubject", fields: [employeeId], references: [id], onDelete: Cascade)
+  approver   Employee     @relation("EmployeeApprovalApprover", fields: [approverId], references: [id], onDelete: Restrict)
+  createdAt  DateTime     @default(now())
+
+  @@id([employeeId, approverId, role])
+  @@index([approverId])
+  @@index([role])
+}
+
 model AuditLog {
-  id             String      @id @default(cuid())
+  id             String       @id @default(cuid())
   actorSub       String
   actorEmail     String?
   entityType     EntityType
@@ -115,7 +143,7 @@ model AuditLog {
   requestId      String
   importBatchId  String?
   importBatch    ImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
-  createdAt      DateTime    @default(now())
+  createdAt      DateTime     @default(now())
 
   @@index([entityType, entityId])
   @@index([employeeNumber])
@@ -125,15 +153,15 @@ model AuditLog {
 }
 
 model ImportBatch {
-  id         String      @id @default(cuid())
-  filename   String
-  actorSub   String
-  actorEmail String?
-  rowCount   Int
-  createdAt  DateTime    @default(now())
+  id          String      @id @default(cuid())
+  filename    String
+  actorSub    String
+  actorEmail  String?
+  rowCount    Int
+  createdAt   DateTime    @default(now())
   committedAt DateTime?
-  rows       ImportRow[]
-  auditLogs  AuditLog[]
+  rows        ImportRow[]
+  auditLogs   AuditLog[]
 }
 
 model ImportRow {

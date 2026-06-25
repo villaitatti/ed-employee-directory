@@ -1,5 +1,5 @@
-import type { EmployeeWriteInput, RetirementPolicy, TfrOption } from '@itatti/shared';
-import { resolveRetirementDate } from '@itatti/shared';
+import type { EmployeeWriteInput, RetirementPolicy, TfrOption, WeeklyScheduleInput } from '@itatti/shared';
+import { DEFAULT_WEEKLY_SCHEDULE_MINUTES, resolveRetirementDate } from '@itatti/shared';
 
 function dateOnlyToUtc(value: string): Date {
   return new Date(`${value}T00:00:00.000Z`);
@@ -17,6 +17,8 @@ export type ExistingRetirement = {
   retirementDate: string | null;
   retirementDateOverridden: boolean;
   tfr?: TfrOption | null;
+  canBeSubstituteResponsible?: boolean | null;
+  weeklySchedule?: WeeklyScheduleInput | null;
 };
 
 export function toEmployeeData(
@@ -37,6 +39,7 @@ export function toEmployeeData(
         }
       : {}),
   });
+  const weeklySchedule = input.weeklySchedule ?? existing?.weeklySchedule ?? DEFAULT_WEEKLY_SCHEDULE_MINUTES;
 
   return {
     employeeNumber: input.employeeNumber,
@@ -53,5 +56,11 @@ export function toEmployeeData(
     contractType: input.contractType,
     tfr: input.tfr ?? existing?.tfr ?? 'I_TATTI',
     status: input.status,
+    canBeSubstituteResponsible: input.canBeSubstituteResponsible ?? existing?.canBeSubstituteResponsible ?? false,
+    mondayMinutes: weeklySchedule.monday,
+    tuesdayMinutes: weeklySchedule.tuesday,
+    wednesdayMinutes: weeklySchedule.wednesday,
+    thursdayMinutes: weeklySchedule.thursday,
+    fridayMinutes: weeklySchedule.friday,
   };
 }

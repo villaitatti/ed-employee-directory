@@ -15,6 +15,23 @@ export type TfrOption = (typeof TFR_OPTIONS)[number];
 export const EMPLOYEE_STATUSES = ['ATTIVO', 'CESSATO', 'DA_ASSUMERE'] as const;
 export type EmployeeStatus = (typeof EMPLOYEE_STATUSES)[number];
 
+export const APPROVAL_ROLES = ['PRE_APPROVER', 'RESPONSABILE', 'SUBSTITUTE_RESPONSABILE'] as const;
+export type ApprovalRole = (typeof APPROVAL_ROLES)[number];
+
+export const WEEKDAY_KEYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'] as const;
+export type WeekdayKey = (typeof WEEKDAY_KEYS)[number];
+
+export const WEEKDAY_LABELS_IT: Record<WeekdayKey, string> = {
+  monday: 'LU',
+  tuesday: 'MA',
+  wednesday: 'ME',
+  thursday: 'GIO',
+  friday: 'VE',
+};
+
+export const FULL_TIME_DAILY_MINUTES = 7 * 60 + 30;
+export const FULL_TIME_WEEKLY_MINUTES = FULL_TIME_DAILY_MINUTES * WEEKDAY_KEYS.length;
+
 export const AUDIT_ACTIONS = ['CREATE', 'UPDATE', 'DELETE', 'IMPORT_COMMIT'] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

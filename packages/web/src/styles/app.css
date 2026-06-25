@@ -432,6 +432,74 @@ button:focus-visible {
   gap: var(--space-lg) var(--space-md);
 }
 
+.weekday-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(4.5rem, 1fr));
+  gap: var(--space-sm);
+}
+
+.weekday-grid input {
+  font-variant-numeric: tabular-nums;
+}
+
+.form-note,
+.form-warning {
+  margin: var(--space-sm) 0 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.form-note {
+  color: var(--muted);
+}
+
+.form-warning {
+  color: var(--warning-ink);
+}
+
+.employee-multi-select,
+.selected-employees {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.selected-employees {
+  grid-template-columns: repeat(auto-fit, minmax(12rem, max-content));
+}
+
+.employee-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs);
+  max-width: 100%;
+  min-height: 2rem;
+  padding: 0.25rem 0.35rem 0.25rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.employee-chip button {
+  display: inline-grid;
+  place-items: center;
+  width: 1.45rem;
+  height: 1.45rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+}
+
+.employee-chip button:hover {
+  color: var(--ink);
+  background: var(--surface-strong);
+}
+
 .field {
   display: grid;
   gap: var(--space-xs);
@@ -694,6 +762,10 @@ button:focus-visible {
 
   .form-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .weekday-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .modal-header,

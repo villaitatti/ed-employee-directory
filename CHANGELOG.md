@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.0 - 2026-06-25
+
+### Added
+
+- Added employee approval-role master data for future time-off workflows, including pre-approvers, responsabili, substitute responsabili, substitute eligibility, and validation against self-approval, inactive approvers, duplicates, and invalid substitutes.
+- Added Monday-Friday scheduled hours stored as minutes and displayed in Italian sessantesimi format, with full-time defaults, weekly totals, and FTE consistency warnings in the employee form.
+- Added approval-role and weekly-hours fields to admin import/export, read-only v1 employee APIs, OpenAPI documentation, audit snapshots, and employee list setup indicators.
+
+### Fixed
+
+- Prevented deleting, inactivating, or disabling substitute eligibility for employees still referenced by other employees' approval assignments.
+- Tightened import preview and commit validation so same-file approver references only pass when the referenced rows are valid and selected.
+- Refreshed employee picker options after employee saves, deletes, and imports so approval selectors do not use stale eligibility data.
+
 ## 0.4.0 - 2026-06-15
 
 ### Added

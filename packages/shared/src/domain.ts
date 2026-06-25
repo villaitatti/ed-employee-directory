@@ -1,4 +1,4 @@
-import type { EmployeeStatus } from './constants.js';
+import { FULL_TIME_WEEKLY_MINUTES, WEEKDAY_KEYS, type EmployeeStatus, type WeekdayKey } from './constants.js';
 
 export type DateString = `${number}-${number}-${number}`;
 
@@ -96,6 +96,55 @@ export function parseFteInput(input: string | number): number {
   }
 
   return value;
+}
+
+export type WeeklyScheduleMinutes = Record<WeekdayKey, number>;
+
+export const DEFAULT_WEEKLY_SCHEDULE_MINUTES: WeeklyScheduleMinutes = {
+  monday: 450,
+  tuesday: 450,
+  wednesday: 450,
+  thursday: 450,
+  friday: 450,
+};
+
+export function parseSessantesimiInput(input: string | number): number {
+  if (typeof input === 'number') {
+    if (Number.isInteger(input) && input >= 0 && input <= 24 * 60) return input;
+    throw new Error('Hours must be whole minutes between 0 and 1440.');
+  }
+
+  const normalized = input.trim();
+  const match = /^(\d{1,2})(?:,([0-5]\d))?$/.exec(normalized);
+  if (!match) {
+    throw new Error('Hours must use the H,MM sessantesimi format, for example 7,30.');
+  }
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2] ?? '00');
+  const total = hours * 60 + minutes;
+  if (total > 24 * 60) {
+    throw new Error('Hours must be between 0,00 and 24,00.');
+  }
+  return total;
+}
+
+export function formatSessantesimiMinutes(minutes: number): string {
+  if (!Number.isInteger(minutes) || minutes < 0 || minutes > 24 * 60 * WEEKDAY_KEYS.length) {
+    throw new Error('Minutes must be a non-negative whole number.');
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return `${hours},${String(remainder).padStart(2, '0')}`;
+}
+
+export function weeklyScheduleTotalMinutes(schedule: WeeklyScheduleMinutes): number {
+  return WEEKDAY_KEYS.reduce((total, key) => total + schedule[key], 0);
+}
+
+export function expectedWeeklyMinutesForFte(fte: number): number {
+  return Math.round(fte * FULL_TIME_WEEKLY_MINUTES);
 }
 
 export function normalizeDepartmentName(name: string): string {

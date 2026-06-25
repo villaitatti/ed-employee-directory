@@ -33,6 +33,17 @@ describe('api client', () => {
     expect(url).toBe('/api/admin/settings');
   });
 
+  it('fetches substitute-eligible employee options', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ data: [] }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const api = createApiClient(async () => 'token-123');
+    await api.employeeOptions({ substituteEligible: true });
+
+    const [url] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/api/admin/employee-options?substituteEligible=true');
+  });
+
   it('PUTs a retirement-policy update as JSON', async () => {
     const result = { retirementPolicy: { years: 68, months: 0 }, updatedAt: '2026-06-05T00:00:00.000Z', recalculatedEmployees: 12 };
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ data: result }), { status: 200 }));

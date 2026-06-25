@@ -130,6 +130,9 @@ components:
         - contractType
         - tfr
         - status
+        - canBeSubstituteResponsible
+        - weeklySchedule
+        - approvalRoles
         - createdAt
         - updatedAt
       properties:
@@ -175,9 +178,82 @@ components:
           enum: [I_TATTI, FONDO_PENSIONE]
         status:
           $ref: "#/components/schemas/EmployeeStatus"
+        canBeSubstituteResponsible:
+          type: boolean
+          description: True when the employee can be selected as Sostituto-Responsabile.
+        weeklySchedule:
+          $ref: "#/components/schemas/WeeklySchedule"
+        approvalRoles:
+          $ref: "#/components/schemas/EmployeeApprovalRoles"
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
+    WeeklyScheduleDay:
+      type: object
+      required: [minutes, display]
+      properties:
+        minutes:
+          type: integer
+          minimum: 0
+          maximum: 1440
+        display:
+          type: string
+          description: Italian sessantesimi display string, for example 7,30.
+    WeeklySchedule:
+      type: object
+      required: [monday, tuesday, wednesday, thursday, friday, total]
+      properties:
+        monday:
+          $ref: "#/components/schemas/WeeklyScheduleDay"
+        tuesday:
+          $ref: "#/components/schemas/WeeklyScheduleDay"
+        wednesday:
+          $ref: "#/components/schemas/WeeklyScheduleDay"
+        thursday:
+          $ref: "#/components/schemas/WeeklyScheduleDay"
+        friday:
+          $ref: "#/components/schemas/WeeklyScheduleDay"
+        total:
+          type: object
+          required: [minutes, display]
+          properties:
+            minutes:
+              type: integer
+              minimum: 0
+            display:
+              type: string
+    EmployeeApprovalReference:
+      type: object
+      required: [id, employeeNumber, firstName, lastName, status, department]
+      properties:
+        id:
+          type: string
+        employeeNumber:
+          type: integer
+        firstName:
+          type: string
+        lastName:
+          type: string
+        status:
+          $ref: "#/components/schemas/EmployeeStatus"
+        department:
+          $ref: "#/components/schemas/Department"
+    EmployeeApprovalRoles:
+      type: object
+      required: [preApprovers, responsabili, substituteResponsabili]
+      properties:
+        preApprovers:
+          type: array
+          items:
+            $ref: "#/components/schemas/EmployeeApprovalReference"
+        responsabili:
+          type: array
+          items:
+            $ref: "#/components/schemas/EmployeeApprovalReference"
+        substituteResponsabili:
+          type: array
+          items:
+            $ref: "#/components/schemas/EmployeeApprovalReference"

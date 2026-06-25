@@ -36,6 +36,8 @@ docker build .
 ## V1 Scope
 
 - Department and employee CRUD
+- Employee approval-role master data for future time-off workflows
+- Monday-Friday scheduled hours in Italian sessantesimi payroll format
 - Italian-first bilingual UI
 - Staff-only admin and write access
 - Settings page for the statutory retirement age, with table-wide retirement-date recalculation for non-overridden employees

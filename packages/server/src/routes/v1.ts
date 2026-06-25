@@ -5,6 +5,7 @@ import { requireAuth, requireReadAccess } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/async-handler.js';
 import { HttpError } from '../middleware/error.js';
 import { serializeDepartment, serializeEmployee } from '../services/serializers.js';
+import { employeeDetailsInclude } from '../services/approvals.js';
 
 export const v1Router = Router();
 
@@ -30,7 +31,7 @@ v1Router.get(
     if (query.updatedSince) where.updatedAt = { gte: new Date(query.updatedSince) };
     const employees = await prisma.employee.findMany({
       where,
-      include: { department: true },
+      include: employeeDetailsInclude,
       orderBy: [{ employeeNumber: 'asc' }, { id: 'asc' }],
       take: query.limit + 1,
       ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
@@ -55,7 +56,7 @@ v1Router.get(
 
     const employee = await prisma.employee.findUnique({
       where: { employeeNumber },
-      include: { department: true },
+      include: employeeDetailsInclude,
     });
     if (!employee) {
       throw new HttpError(404, 'EMPLOYEE_NOT_FOUND', 'No employee exists with that Employee Number.');
