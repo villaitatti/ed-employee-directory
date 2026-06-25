@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.5.0 - 2026-06-25
+
+### Added
+
+- Added employee approval-role master data for future time-off workflows, including pre-approvers, responsabili, substitute responsabili, substitute eligibility, and validation against self-approval, inactive approvers, duplicates, and invalid substitutes.
+- Added Monday-Friday scheduled hours stored as minutes and displayed in Italian sessantesimi format, with full-time defaults, weekly totals, and FTE consistency warnings in the employee form.
+- Added approval-role and weekly-hours fields to admin import/export, read-only v1 employee APIs, OpenAPI documentation, audit snapshots, and employee list setup indicators.
+
+### Fixed
+
+- Prevented deleting, inactivating, or disabling substitute eligibility for employees still referenced by other employees' approval assignments.
+- Tightened import preview and commit validation so same-file approver references only pass when the referenced rows are valid and selected, including transitive chains and rows shadowing existing employees.
+- Surfaced "approver still in use" conflicts during import preview instead of aborting the whole commit transaction, and excluded same-import reaffirmed assignments from the conflict check.
+- Stopped re-importing or editing an employee from failing when a previously-assigned approver later went inactive or lost eligibility; existing approvers are now grandfathered unless the row changes them.
+- Defaulted blank weekday columns to full-time hours on import rather than rejecting the row, and accepted comma-separated approver lists in addition to semicolons.
+- Treated unrecognized boolean cells (for example `n/a`) as unspecified on import so they no longer silently disable substitute eligibility.
+- Kept already-selected approvers visible and removable in the employee form even after they lose eligibility, instead of dropping them silently while still submitting them.
+- Refreshed employee picker options after employee saves, deletes, and imports so approval selectors do not use stale eligibility data.
+
 ## 0.4.0 - 2026-06-15
 
 ### Added

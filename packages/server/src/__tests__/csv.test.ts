@@ -3,7 +3,9 @@ import {
   csvEscape,
   parseBoolean,
   parseContractType,
+  parseEmployeeNumberList,
   parseNullableDate,
+  parseOptionalBoolean,
   parseStatus,
   parseTfr,
   parseUsaCategory,
@@ -87,6 +89,44 @@ describe('parseBoolean', () => {
     for (const falsy of ['', '   ', 'false', 'no', '0', 'maybe']) {
       expect(parseBoolean(falsy)).toBe(false);
     }
+  });
+});
+
+describe('parseOptionalBoolean', () => {
+  it('preserves blank values as omitted and parses explicit false', () => {
+    expect(parseOptionalBoolean('')).toBeUndefined();
+    expect(parseOptionalBoolean('false')).toBe(false);
+    expect(parseOptionalBoolean('no')).toBe(false);
+    expect(parseOptionalBoolean('si')).toBe(true);
+  });
+
+  it('treats unrecognized tokens as omitted rather than false', () => {
+    expect(parseOptionalBoolean('n/a')).toBeUndefined();
+    expect(parseOptionalBoolean('-')).toBeUndefined();
+    expect(parseOptionalBoolean('maybe')).toBeUndefined();
+  });
+});
+
+describe('parseEmployeeNumberList', () => {
+  it('parses semicolon-separated Employee Numbers', () => {
+    expect(parseEmployeeNumberList('1001; 1002;1003')).toEqual({
+      values: [1001, 1002, 1003],
+      errors: [],
+    });
+  });
+
+  it('also accepts comma-separated Employee Numbers', () => {
+    expect(parseEmployeeNumberList('1001, 1002,1003')).toEqual({
+      values: [1001, 1002, 1003],
+      errors: [],
+    });
+  });
+
+  it('reports invalid and duplicate Employee Numbers', () => {
+    const result = parseEmployeeNumberList('1001; nope; 1001');
+    expect(result.values).toEqual([1001, 1001]);
+    expect(result.errors).toContain('Invalid Employee Number in approver list: nope.');
+    expect(result.errors).toContain('Employee Number 1001 appears more than once in the same approver list.');
   });
 });
 

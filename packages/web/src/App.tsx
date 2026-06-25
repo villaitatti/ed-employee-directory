@@ -22,7 +22,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast, Toaster } from 'sonner';
 import {
   CONTRACT_TYPES,
+  DEFAULT_WEEKLY_SCHEDULE_MINUTES,
   EMPLOYEE_STATUSES,
+  WEEKDAY_KEYS,
+  WEEKDAY_LABELS_IT,
+  expectedWeeklyMinutesForFte,
+  formatSessantesimiMinutes,
+  parseFteInput,
+  parseSessantesimiInput,
   RETIREMENT_MONTHS_MAX,
   RETIREMENT_MONTHS_MIN,
   RETIREMENT_YEARS_MAX,
@@ -33,10 +40,12 @@ import {
   type ContractType,
   type Department,
   type Employee,
+  type EmployeeOption,
   type EmployeeStatus,
   type ImportPreview,
   type TfrOption,
   type UsaCategory,
+  type WeekdayKey,
 } from '@itatti/shared';
 import { createApiClient } from './api/client.js';
 import { useEdAuth, wasSignedOut } from './auth/AuthProvider.js';
@@ -60,6 +69,13 @@ export type EmployeeDraft = {
   contractType: ContractType;
   tfr: TfrOption;
   status: EmployeeStatus;
+  canBeSubstituteResponsible: boolean;
+  weeklySchedule: Record<WeekdayKey, string>;
+  approvalRoleIds: {
+    preApproverIds: string[];
+    responsabileIds: string[];
+    substituteResponsabileIds: string[];
+  };
 };
 
 const tableDateFormatter = new Intl.DateTimeFormat('en-GB', {
@@ -94,6 +110,9 @@ const auditFieldTranslationKeys: Record<string, string> = {
   contractType: 'fields.contractType',
   tfr: 'fields.tfr',
   status: 'fields.status',
+  canBeSubstituteResponsible: 'fields.canBeSubstituteResponsible',
+  weeklySchedule: 'sections.weeklySchedule',
+  approvalRoles: 'sections.approvalWorkflow',
   retirementPolicy: 'settings.title',
 };
 
@@ -233,6 +252,19 @@ export const emptyEmployeeDraft: EmployeeDraft = {
   contractType: 'INDETERMINATO',
   tfr: 'I_TATTI',
   status: 'ATTIVO',
+  canBeSubstituteResponsible: false,
+  weeklySchedule: {
+    monday: formatSessantesimiMinutes(DEFAULT_WEEKLY_SCHEDULE_MINUTES.monday),
+    tuesday: formatSessantesimiMinutes(DEFAULT_WEEKLY_SCHEDULE_MINUTES.tuesday),
+    wednesday: formatSessantesimiMinutes(DEFAULT_WEEKLY_SCHEDULE_MINUTES.wednesday),
+    thursday: formatSessantesimiMinutes(DEFAULT_WEEKLY_SCHEDULE_MINUTES.thursday),
+    friday: formatSessantesimiMinutes(DEFAULT_WEEKLY_SCHEDULE_MINUTES.friday),
+  },
+  approvalRoleIds: {
+    preApproverIds: [],
+    responsabileIds: [],
+    substituteResponsabileIds: [],
+  },
 };
 
 function toEmployeeDraft(employee: Employee): EmployeeDraft {
@@ -252,7 +284,28 @@ function toEmployeeDraft(employee: Employee): EmployeeDraft {
     contractType: employee.contractType,
     tfr: employee.tfr,
     status: employee.status,
+    canBeSubstituteResponsible: employee.canBeSubstituteResponsible,
+    weeklySchedule: {
+      monday: employee.weeklySchedule.monday.display,
+      tuesday: employee.weeklySchedule.tuesday.display,
+      wednesday: employee.weeklySchedule.wednesday.display,
+      thursday: employee.weeklySchedule.thursday.display,
+      friday: employee.weeklySchedule.friday.display,
+    },
+    approvalRoleIds: {
+      preApproverIds: employee.approvalRoles.preApprovers.map((approver) => approver.id),
+      responsabileIds: employee.approvalRoles.responsabili.map((approver) => approver.id),
+      substituteResponsabileIds: employee.approvalRoles.substituteResponsabili.map((approver) => approver.id),
+    },
   };
+}
+
+function approvalSummary(employee: Employee, t: Translate): string {
+  if (employee.status !== 'ATTIVO') return '-';
+  const responsabili = employee.approvalRoles.responsabili.length;
+  const substitutes = employee.approvalRoles.substituteResponsabili.length;
+  if (responsabili > 0 && substitutes > 0) return `R ${responsabili} / S ${substitutes}`;
+  return t('copy.incompleteApproval');
 }
 
 function useApi() {
@@ -414,6 +467,10 @@ function EmployeesPage() {
   const [filters, setFilters] = useState({ q: '', status: '', departmentId: '' });
   const [draft, setDraft] = useState<EmployeeDraft | null>(null);
   const departments = useDepartments(api);
+  const employeeOptions = useQuery({
+    queryKey: ['employee-options'],
+    queryFn: () => api.employeeOptions(),
+  });
   const employees = useQuery({
     queryKey: ['employees', filters],
     queryFn: () =>
@@ -426,6 +483,8 @@ function EmployeesPage() {
 
   const saveEmployee = useMutation({
     mutationFn: async (input: EmployeeDraft) => {
+      const weeklySchedule = parseDraftWeeklySchedule(input.weeklySchedule);
+      if (!weeklySchedule) throw new Error(t('copy.invalidWeeklySchedule'));
       const payload = {
         employeeNumber: Number(input.employeeNumber),
         firstName: input.firstName,
@@ -442,6 +501,9 @@ function EmployeesPage() {
         contractType: input.contractType,
         tfr: input.tfr,
         status: input.status,
+        canBeSubstituteResponsible: input.canBeSubstituteResponsible,
+        weeklySchedule,
+        approvalRoleIds: input.approvalRoleIds,
       };
       return input.id ? api.updateEmployee(input.id, payload) : api.createEmployee(payload);
     },
@@ -449,6 +511,7 @@ function EmployeesPage() {
       setDraft(null);
       toast.success(t('actions.save'));
       void queryClient.invalidateQueries({ queryKey: ['employees'] });
+      void queryClient.invalidateQueries({ queryKey: ['employee-options'] });
       void queryClient.invalidateQueries({ queryKey: ['audit'] });
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : 'Error'),
@@ -459,6 +522,7 @@ function EmployeesPage() {
     onSuccess: () => {
       toast.success(t('actions.delete'));
       void queryClient.invalidateQueries({ queryKey: ['employees'] });
+      void queryClient.invalidateQueries({ queryKey: ['employee-options'] });
       void queryClient.invalidateQueries({ queryKey: ['audit'] });
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : 'Error'),
@@ -549,6 +613,8 @@ function EmployeesPage() {
               <th>{t('fields.status')}</th>
               <th>{t('fields.fte')}</th>
               <th>{t('fields.tfr')}</th>
+              <th>{t('fields.weeklyTotal')}</th>
+              <th>{t('fields.approvalWorkflow')}</th>
               <th>{t('fields.retirementDate')}</th>
               <th aria-label="Actions" />
             </tr>
@@ -565,6 +631,8 @@ function EmployeesPage() {
                 </td>
                 <td>{employee.fte}</td>
                 <td>{t(`tfr.${employee.tfr}`)}</td>
+                <td>{employee.weeklySchedule.total.display}</td>
+                <td>{approvalSummary(employee, t)}</td>
                 <td>{formatTableDate(employee.retirementDate)}</td>
                 <td className="row-actions">
                   <button className="text-button" type="button" onClick={() => setDraft(toEmployeeDraft(employee))}>
@@ -587,6 +655,7 @@ function EmployeesPage() {
         <EmployeeForm
           draft={draft}
           departments={departments.data ?? []}
+          employeeOptions={employeeOptions.data ?? []}
           onCancel={() => setDraft(null)}
           onChange={setDraft}
           onSave={() => saveEmployee.mutate(draft)}
@@ -600,6 +669,7 @@ function EmployeesPage() {
 export function EmployeeForm({
   draft,
   departments,
+  employeeOptions,
   onCancel,
   onChange,
   onSave,
@@ -607,6 +677,7 @@ export function EmployeeForm({
 }: {
   draft: EmployeeDraft;
   departments: Department[];
+  employeeOptions: EmployeeOption[];
   onCancel: () => void;
   onChange: (draft: EmployeeDraft) => void;
   onSave: () => void;
@@ -616,6 +687,23 @@ export function EmployeeForm({
   const set = <K extends keyof EmployeeDraft>(key: K, value: EmployeeDraft[K]) => {
     onChange({ ...draft, [key]: value });
   };
+  const setWeeklySchedule = (key: WeekdayKey, value: string) => {
+    onChange({ ...draft, weeklySchedule: { ...draft.weeklySchedule, [key]: value } });
+  };
+  const setApprovalRoleIds = (key: keyof EmployeeDraft['approvalRoleIds'], value: string[]) => {
+    onChange({ ...draft, approvalRoleIds: { ...draft.approvalRoleIds, [key]: value } });
+  };
+
+  const approverOptions = employeeOptions.filter((option) => option.id !== draft.id);
+  const substituteOptions = approverOptions.filter((option) => option.canBeSubstituteResponsible);
+  const weeklyScheduleMinutes = parseDraftWeeklySchedule(draft.weeklySchedule);
+  const weeklyTotal = weeklyScheduleMinutes
+    ? WEEKDAY_KEYS.reduce((total, key) => total + weeklyScheduleMinutes[key], 0)
+    : null;
+  const fte = parseDraftFte(draft.fte);
+  const expectedWeeklyMinutes = fte === null ? null : expectedWeeklyMinutesForFte(fte);
+  const showWeeklyWarning =
+    weeklyTotal !== null && expectedWeeklyMinutes !== null && weeklyTotal !== expectedWeeklyMinutes;
 
   const initialDraft = useRef(draft);
   const isDirty = JSON.stringify(draft) !== JSON.stringify(initialDraft.current);
@@ -766,6 +854,75 @@ export function EmployeeForm({
                 </select>
               </Field>
             </div>
+          </fieldset>
+
+          <fieldset className="form-section">
+            <legend>{t('sections.approvalWorkflow')}</legend>
+            <div className="form-grid">
+              <Field label={t('fields.canBeSubstituteResponsible')} full>
+                <label className="checkbox-row">
+                  <input
+                    type="checkbox"
+                    checked={draft.canBeSubstituteResponsible}
+                    onChange={(e) => set('canBeSubstituteResponsible', e.target.checked)}
+                  />
+                  {t('fields.canBeSubstituteResponsible')}
+                </label>
+              </Field>
+              <Field label={t('fields.preApprovers')} full>
+                <EmployeeMultiSelect
+                  label={t('fields.preApprovers')}
+                  options={approverOptions}
+                  labelOptions={employeeOptions}
+                  value={draft.approvalRoleIds.preApproverIds}
+                  onChange={(value) => setApprovalRoleIds('preApproverIds', value)}
+                />
+              </Field>
+              <Field label={t('fields.responsabili')} full>
+                <EmployeeMultiSelect
+                  label={t('fields.responsabili')}
+                  options={approverOptions}
+                  labelOptions={employeeOptions}
+                  value={draft.approvalRoleIds.responsabileIds}
+                  onChange={(value) => setApprovalRoleIds('responsabileIds', value)}
+                />
+              </Field>
+              <Field label={t('fields.substituteResponsabili')} full>
+                <EmployeeMultiSelect
+                  label={t('fields.substituteResponsabili')}
+                  options={substituteOptions}
+                  labelOptions={employeeOptions}
+                  value={draft.approvalRoleIds.substituteResponsabileIds}
+                  onChange={(value) => setApprovalRoleIds('substituteResponsabileIds', value)}
+                />
+              </Field>
+            </div>
+          </fieldset>
+
+          <fieldset className="form-section">
+            <legend>{t('sections.weeklySchedule')}</legend>
+            <div className="weekday-grid">
+              {WEEKDAY_KEYS.map((key) => (
+                <Field key={key} label={WEEKDAY_LABELS_IT[key]}>
+                  <input
+                    required
+                    inputMode="decimal"
+                    value={draft.weeklySchedule[key]}
+                    onChange={(event) => setWeeklySchedule(key, event.target.value)}
+                  />
+                </Field>
+              ))}
+            </div>
+            <p className={showWeeklyWarning ? 'form-warning' : 'form-note'}>
+              {weeklyTotal === null
+                ? t('copy.invalidWeeklySchedule')
+                : showWeeklyWarning && expectedWeeklyMinutes !== null
+                  ? t('copy.weeklyScheduleMismatch', {
+                      total: formatSessantesimiMinutes(weeklyTotal),
+                      expected: formatSessantesimiMinutes(expectedWeeklyMinutes),
+                    })
+                  : t('copy.weeklyScheduleTotal', { total: formatSessantesimiMinutes(weeklyTotal) })}
+            </p>
           </fieldset>
         </div>
 
@@ -998,6 +1155,7 @@ function ImportPage() {
       setSelectedRows([]);
       setFile(null);
       void queryClient.invalidateQueries({ queryKey: ['employees'] });
+      void queryClient.invalidateQueries({ queryKey: ['employee-options'] });
       void queryClient.invalidateQueries({ queryKey: ['audit'] });
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : 'Error'),
@@ -1269,6 +1427,97 @@ export function SettingsPage() {
         </div>
       </form>
     </section>
+  );
+}
+
+function parseDraftFte(value: string): number | null {
+  try {
+    return parseFteInput(value);
+  } catch {
+    return null;
+  }
+}
+
+function parseDraftWeeklySchedule(schedule: Record<WeekdayKey, string>): Record<WeekdayKey, number> | null {
+  try {
+    return {
+      monday: parseSessantesimiInput(schedule.monday),
+      tuesday: parseSessantesimiInput(schedule.tuesday),
+      wednesday: parseSessantesimiInput(schedule.wednesday),
+      thursday: parseSessantesimiInput(schedule.thursday),
+      friday: parseSessantesimiInput(schedule.friday),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function employeeOptionLabel(option: EmployeeOption): string {
+  return `${option.lastName} ${option.firstName} (${option.employeeNumber})`;
+}
+
+function EmployeeMultiSelect({
+  label,
+  options,
+  labelOptions,
+  value,
+  onChange,
+}: {
+  label: string;
+  /** Selectable options for the dropdown (already filtered for eligibility). */
+  options: EmployeeOption[];
+  /** Broader pool used only to label already-selected chips (e.g. an approver
+   * who has since lost eligibility and is no longer in `options`). */
+  labelOptions: EmployeeOption[];
+  value: string[];
+  onChange: (value: string[]) => void;
+}) {
+  const { t } = useTranslation();
+  // Render a chip for EVERY selected id, even ones missing from the option list
+  // (an approver who became inactive or lost substitute eligibility after being
+  // assigned). They must stay visible and removable rather than silently
+  // lingering in the payload where the server would reject the save.
+  const labelById = new Map(labelOptions.map((option) => [option.id, option]));
+  const available = options.filter((option) => !value.includes(option.id));
+
+  return (
+    <div className="employee-multi-select">
+      {value.length > 0 ? (
+        <div className="selected-employees">
+          {value.map((id) => {
+            const option = labelById.get(id);
+            const text = option ? employeeOptionLabel(option) : t('copy.ineligibleApprover');
+            return (
+              <span className={option ? 'employee-chip' : 'employee-chip employee-chip-invalid'} key={id}>
+                {text}
+                <button
+                  type="button"
+                  onClick={() => onChange(value.filter((selectedId) => selectedId !== id))}
+                  aria-label={`${t('actions.remove')} ${text}`}
+                >
+                  <X size={14} />
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      ) : null}
+      <select
+        aria-label={label}
+        value=""
+        onChange={(event) => {
+          if (!event.target.value) return;
+          onChange([...value, event.target.value]);
+        }}
+      >
+        <option value="">{t('actions.addApprover')}</option>
+        {available.map((option) => (
+          <option key={option.id} value={option.id}>
+            {employeeOptionLabel(option)}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }
 

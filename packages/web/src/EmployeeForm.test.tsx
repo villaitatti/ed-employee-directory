@@ -1,10 +1,31 @@
 import { describe, expect, it, vi } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { EmployeeForm, emptyEmployeeDraft } from './App.js';
 import { renderWithProviders } from './test/render.js';
 
-const departments = [{ id: 'dept_1', name: 'Amministrazione', normalizedName: 'amministrazione', createdAt: '', updatedAt: '' }];
+const department = { id: 'dept_1', name: 'Amministrazione', normalizedName: 'amministrazione', createdAt: '', updatedAt: '' };
+const departments = [department];
+const employeeOptions = [
+  {
+    id: 'emp_1',
+    employeeNumber: 1001,
+    firstName: 'Ada',
+    lastName: 'Rossi',
+    status: 'ATTIVO' as const,
+    department,
+    canBeSubstituteResponsible: false,
+  },
+  {
+    id: 'emp_2',
+    employeeNumber: 1002,
+    firstName: 'Bruno',
+    lastName: 'Bianchi',
+    status: 'ATTIVO' as const,
+    department,
+    canBeSubstituteResponsible: true,
+  },
+];
 
 describe('EmployeeForm modal', () => {
   it('renders as a modal dialog', () => {
@@ -12,6 +33,7 @@ describe('EmployeeForm modal', () => {
       <EmployeeForm
         draft={emptyEmployeeDraft}
         departments={departments}
+        employeeOptions={employeeOptions}
         onCancel={vi.fn()}
         onChange={vi.fn()}
         onSave={vi.fn()}
@@ -26,6 +48,7 @@ describe('EmployeeForm modal', () => {
       <EmployeeForm
         draft={emptyEmployeeDraft}
         departments={departments}
+        employeeOptions={employeeOptions}
         onCancel={vi.fn()}
         onChange={vi.fn()}
         onSave={vi.fn()}
@@ -45,6 +68,7 @@ describe('EmployeeForm modal', () => {
       <EmployeeForm
         draft={emptyEmployeeDraft}
         departments={departments}
+        employeeOptions={employeeOptions}
         onCancel={onCancel}
         onChange={vi.fn()}
         onSave={vi.fn()}
@@ -71,6 +95,7 @@ describe('EmployeeForm modal', () => {
       <EmployeeForm
         draft={draft}
         departments={departments}
+        employeeOptions={employeeOptions}
         onCancel={onCancel}
         onChange={onChange}
         onSave={vi.fn()}
@@ -84,6 +109,7 @@ describe('EmployeeForm modal', () => {
       <EmployeeForm
         draft={{ ...draft, firstName: 'Ada' }}
         departments={departments}
+        employeeOptions={employeeOptions}
         onCancel={onCancel}
         onChange={onChange}
         onSave={vi.fn()}
@@ -102,5 +128,89 @@ describe('EmployeeForm modal', () => {
     await user.keyboard('{Escape}');
     expect(onCancel).toHaveBeenCalledTimes(1);
     confirmSpy.mockRestore();
+  });
+
+  it('shows full-time weekday defaults and weekly total', () => {
+    renderWithProviders(
+      <EmployeeForm
+        draft={emptyEmployeeDraft}
+        departments={departments}
+        employeeOptions={employeeOptions}
+        onCancel={vi.fn()}
+        onChange={vi.fn()}
+        onSave={vi.fn()}
+        isSaving={false}
+      />
+    );
+
+    expect(screen.getAllByDisplayValue('7,30')).toHaveLength(5);
+    expect(screen.getByText('Totale settimanale: 37,30.')).toBeInTheDocument();
+  });
+
+  it('warns when weekly hours differ from FTE', () => {
+    renderWithProviders(
+      <EmployeeForm
+        draft={{
+          ...emptyEmployeeDraft,
+          weeklySchedule: { ...emptyEmployeeDraft.weeklySchedule, monday: '5,00' },
+        }}
+        departments={departments}
+        employeeOptions={employeeOptions}
+        onCancel={vi.fn()}
+        onChange={vi.fn()}
+        onSave={vi.fn()}
+        isSaving={false}
+      />
+    );
+
+    expect(screen.getByText('Totale settimanale 35,00; atteso da FTE 37,30.')).toBeInTheDocument();
+  });
+
+  it('filters the Sostituto-Responsabile picker to eligible employees', () => {
+    renderWithProviders(
+      <EmployeeForm
+        draft={emptyEmployeeDraft}
+        departments={departments}
+        employeeOptions={employeeOptions}
+        onCancel={vi.fn()}
+        onChange={vi.fn()}
+        onSave={vi.fn()}
+        isSaving={false}
+      />
+    );
+
+    const substituteSelect = screen.getByLabelText('Sostituto-Responsabile');
+    expect(within(substituteSelect).getByRole('option', { name: 'Bianchi Bruno (1002)' })).toBeInTheDocument();
+    expect(within(substituteSelect).queryByRole('option', { name: 'Rossi Ada (1001)' })).not.toBeInTheDocument();
+  });
+
+  it('keeps a selected approver visible and removable even when no longer eligible', () => {
+    const onChange = vi.fn();
+    // 'emp_3' is selected as a Responsabile but is absent from employeeOptions
+    // (e.g. it became inactive after assignment). It must still render a
+    // removable chip rather than vanishing into the payload.
+    renderWithProviders(
+      <EmployeeForm
+        draft={{
+          ...emptyEmployeeDraft,
+          approvalRoleIds: { ...emptyEmployeeDraft.approvalRoleIds, responsabileIds: ['emp_3'] },
+        }}
+        departments={departments}
+        employeeOptions={employeeOptions}
+        onCancel={vi.fn()}
+        onChange={onChange}
+        onSave={vi.fn()}
+        isSaving={false}
+      />
+    );
+
+    const removeButton = screen.getByRole('button', { name: /Rimuovi Approvatore non più idoneo/i });
+    expect(removeButton).toBeInTheDocument();
+    removeButton.click();
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        approvalRoleIds: expect.objectContaining({ responsabileIds: [] }),
+      })
+    );
   });
 });

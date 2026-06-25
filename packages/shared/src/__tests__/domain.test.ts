@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   calculateRetirementDate,
   employeeWriteSchema,
+  expectedWeeklyMinutesForFte,
+  formatSessantesimiMinutes,
   importCommitSchema,
   normalizeDepartmentName,
   parseFteInput,
+  parseSessantesimiInput,
   resolveRetirementDate,
   retirementPolicySchema,
   settingsSchema,
@@ -93,6 +96,26 @@ describe('employee domain rules', () => {
     expect(() => parseFteInput('0.0004')).toThrow();
     expect(() => parseFteInput('0.1234')).toThrow();
     expect(parseFteInput('0.125')).toBe(0.125);
+  });
+
+  it('parses and formats sessantesimi payroll hours', () => {
+    expect(parseSessantesimiInput('5,00')).toBe(300);
+    expect(parseSessantesimiInput('7,30')).toBe(450);
+    expect(parseSessantesimiInput(450)).toBe(450);
+    expect(formatSessantesimiMinutes(450)).toBe('7,30');
+    expect(formatSessantesimiMinutes(2250)).toBe('37,30');
+  });
+
+  it('rejects invalid sessantesimi hour values', () => {
+    expect(() => parseSessantesimiInput('7.30')).toThrow();
+    expect(() => parseSessantesimiInput('7,75')).toThrow();
+    expect(() => parseSessantesimiInput('25,00')).toThrow();
+    expect(() => parseSessantesimiInput(7.5)).toThrow();
+  });
+
+  it('calculates expected weekly minutes from FTE', () => {
+    expect(expectedWeeklyMinutesForFte(1)).toBe(2250);
+    expect(expectedWeeklyMinutesForFte(0.5)).toBe(1125);
   });
 
   it('tracks a confirmed retirement date until reset', () => {

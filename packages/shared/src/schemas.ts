@@ -4,6 +4,7 @@ import {
   CONTRACT_TYPES,
   EMPLOYEE_STATUSES,
   ENTITY_TYPES,
+  FULL_TIME_DAILY_MINUTES,
   IMPORT_PROPOSED_ACTIONS,
   IMPORT_ROW_STATUSES,
   RETIREMENT_MONTHS_MAX,
@@ -12,8 +13,18 @@ import {
   RETIREMENT_YEARS_MIN,
   TFR_OPTIONS,
   USA_CATEGORIES,
+  WEEKDAY_KEYS,
+  type WeekdayKey,
 } from './constants.js';
-import { isValidDateString, parseFteInput, validateStatusDates } from './domain.js';
+import {
+  DEFAULT_WEEKLY_SCHEDULE_MINUTES,
+  formatSessantesimiMinutes,
+  isValidDateString,
+  parseFteInput,
+  parseSessantesimiInput,
+  validateStatusDates,
+  weeklyScheduleTotalMinutes,
+} from './domain.js';
 
 export const dateStringSchema = z.string().refine(isValidDateString, {
   message: 'Date must be a valid YYYY-MM-DD calendar date.',
@@ -27,6 +38,74 @@ export const auditActionSchema = z.enum(AUDIT_ACTIONS);
 export const entityTypeSchema = z.enum(ENTITY_TYPES);
 export const importRowStatusSchema = z.enum(IMPORT_ROW_STATUSES);
 export const importProposedActionSchema = z.enum(IMPORT_PROPOSED_ACTIONS);
+
+const sessantesimiInputSchema = z.union([z.string(), z.number()]).transform((value, ctx) => {
+  try {
+    return parseSessantesimiInput(value);
+  } catch (error) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: error instanceof Error ? error.message : 'Invalid hours.',
+    });
+    return z.NEVER;
+  }
+});
+
+const weekdayShape = <T extends z.ZodTypeAny>(value: T) =>
+  Object.fromEntries(WEEKDAY_KEYS.map((key) => [key, value])) as Record<WeekdayKey, T>;
+
+export const weeklyScheduleInputSchema = z.object(
+  weekdayShape(sessantesimiInputSchema.default(FULL_TIME_DAILY_MINUTES))
+);
+export type WeeklyScheduleInput = z.infer<typeof weeklyScheduleInputSchema>;
+
+const scheduleDaySchema = z.object({
+  minutes: z.number().int().min(0).max(24 * 60),
+  display: z.string(),
+});
+
+export const weeklyScheduleSchema = z.object({
+  ...weekdayShape(scheduleDaySchema),
+  total: z.object({
+    minutes: z.number().int().min(0),
+    display: z.string(),
+  }),
+});
+export type WeeklySchedule = z.infer<typeof weeklyScheduleSchema>;
+
+export function serializeWeeklySchedule(input: WeeklyScheduleInput): WeeklySchedule {
+  const total = weeklyScheduleTotalMinutes(input);
+  const days = Object.fromEntries(
+    WEEKDAY_KEYS.map((key) => [key, { minutes: input[key], display: formatSessantesimiMinutes(input[key]) }])
+  ) as Record<WeekdayKey, { minutes: number; display: string }>;
+  return {
+    ...days,
+    total: { minutes: total, display: formatSessantesimiMinutes(total) },
+  };
+}
+
+const idArraySchema = z.array(z.string().min(1));
+const employeeNumberArraySchema = z.array(z.coerce.number().int().positive());
+
+export const emptyEmployeeApprovalRoleIds = {
+  preApproverIds: [],
+  responsabileIds: [],
+  substituteResponsabileIds: [],
+} as const;
+
+export const employeeApprovalRoleIdsSchema = z.object({
+  preApproverIds: idArraySchema.default([]),
+  responsabileIds: idArraySchema.default([]),
+  substituteResponsabileIds: idArraySchema.default([]),
+});
+export type EmployeeApprovalRoleIds = z.infer<typeof employeeApprovalRoleIdsSchema>;
+
+export const employeeApprovalRoleNumbersSchema = z.object({
+  preApproverNumbers: employeeNumberArraySchema.default([]),
+  responsabileNumbers: employeeNumberArraySchema.default([]),
+  substituteResponsabileNumbers: employeeNumberArraySchema.default([]),
+});
+export type EmployeeApprovalRoleNumbers = z.infer<typeof employeeApprovalRoleNumbersSchema>;
 
 export const retirementPolicySchema = z.object({
   years: z.coerce.number().int().min(RETIREMENT_YEARS_MIN).max(RETIREMENT_YEARS_MAX),
@@ -55,6 +134,28 @@ export const departmentCreateSchema = z.object({
 });
 export type DepartmentCreateInput = z.infer<typeof departmentCreateSchema>;
 
+export const employeeApprovalReferenceSchema = z.object({
+  id: z.string(),
+  employeeNumber: z.number().int().positive(),
+  firstName: z.string(),
+  lastName: z.string(),
+  status: employeeStatusSchema,
+  department: departmentSchema,
+});
+export type EmployeeApprovalReference = z.infer<typeof employeeApprovalReferenceSchema>;
+
+export const employeeOptionSchema = employeeApprovalReferenceSchema.extend({
+  canBeSubstituteResponsible: z.boolean(),
+});
+export type EmployeeOption = z.infer<typeof employeeOptionSchema>;
+
+export const employeeApprovalRolesSchema = z.object({
+  preApprovers: z.array(employeeApprovalReferenceSchema),
+  responsabili: z.array(employeeApprovalReferenceSchema),
+  substituteResponsabili: z.array(employeeApprovalReferenceSchema),
+});
+export type EmployeeApprovalRoles = z.infer<typeof employeeApprovalRolesSchema>;
+
 export const employeeSchema = z.object({
   id: z.string(),
   employeeNumber: z.number().int().positive(),
@@ -72,6 +173,9 @@ export const employeeSchema = z.object({
   contractType: contractTypeSchema,
   tfr: tfrSchema,
   status: employeeStatusSchema,
+  canBeSubstituteResponsible: z.boolean(),
+  weeklySchedule: weeklyScheduleSchema,
+  approvalRoles: employeeApprovalRolesSchema,
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -103,10 +207,30 @@ export const employeeWriteBaseSchema = z.object({
     contractType: contractTypeSchema,
     tfr: tfrSchema.optional(),
     status: employeeStatusSchema,
+    canBeSubstituteResponsible: z.boolean().optional(),
+    weeklySchedule: weeklyScheduleInputSchema.optional(),
+    approvalRoleIds: employeeApprovalRoleIdsSchema.optional(),
   });
 
 export const employeeWriteSchema = employeeWriteBaseSchema
   .superRefine((value, ctx) => {
+    const roleIds = value.approvalRoleIds;
+    if (roleIds) {
+      const roleGroups = [
+        { path: ['approvalRoleIds', 'preApproverIds'], ids: roleIds.preApproverIds },
+        { path: ['approvalRoleIds', 'responsabileIds'], ids: roleIds.responsabileIds },
+        { path: ['approvalRoleIds', 'substituteResponsabileIds'], ids: roleIds.substituteResponsabileIds },
+      ] as const;
+      for (const { path, ids } of roleGroups) {
+        if (new Set(ids).size !== ids.length) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [...path],
+            message: 'Duplicate approvers are not allowed in the same role.',
+          });
+        }
+      }
+    }
     if (value.retirementDateOverridden && !value.retirementDate) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -155,7 +279,12 @@ export type AuditLog = z.infer<typeof auditLogSchema>;
 export const importPreviewRowSchema = z.object({
   rowNumber: z.number().int().positive(),
   original: z.record(z.string()),
-  normalized: employeeWriteBaseSchema.partial().nullable(),
+  normalized: employeeWriteBaseSchema
+    .extend({
+      approvalRoleEmployeeNumbers: employeeApprovalRoleNumbersSchema.optional(),
+    })
+    .partial()
+    .nullable(),
   errors: z.array(z.string()),
   proposedAction: importProposedActionSchema.nullable(),
   existingEmployeeId: z.string().nullable(),

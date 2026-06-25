@@ -41,9 +41,52 @@ export function parseNullableDate(value: string): string | null {
  * truthy tokens; everything else (including blank) is false. Returns false when
  * the column is absent so a CSV without it recalculates rather than freezing.
  */
+const TRUTHY_TOKENS = ['true', 'si', 'yes', 'y', 'x', '1', 'vero'];
+const FALSY_TOKENS = ['false', 'no', 'n', '0', 'falso'];
+
 export function parseBoolean(value: string): boolean {
+  return TRUTHY_TOKENS.includes(normalizeHeader(value));
+}
+
+/**
+ * Parses an optional boolean column. Returns undefined when the cell is blank
+ * OR holds an unrecognized token (e.g. 'n/a', '-'), so noise data is treated as
+ * "not specified" and leaves the existing value untouched rather than silently
+ * flipping it to false.
+ */
+export function parseOptionalBoolean(value: string): boolean | undefined {
   const normalized = normalizeHeader(value);
-  return ['true', 'si', 'yes', 'y', 'x', '1', 'vero'].includes(normalized);
+  if (!normalized) return undefined;
+  if (TRUTHY_TOKENS.includes(normalized)) return true;
+  if (FALSY_TOKENS.includes(normalized)) return false;
+  return undefined;
+}
+
+export function parseEmployeeNumberList(value: string): { values: number[]; errors: string[] } {
+  const trimmed = value.trim();
+  if (!trimmed) return { values: [], errors: [] };
+
+  const values: number[] = [];
+  const errors: string[] = [];
+  // Accept comma as well as semicolon/newline: exports use '; ', but operators
+  // hand-editing the file naturally reach for commas. Both round-trip cleanly.
+  for (const token of trimmed.split(/[;,\n]+/)) {
+    const normalized = token.trim();
+    if (!normalized) continue;
+    const employeeNumber = Number(normalized);
+    if (!Number.isInteger(employeeNumber) || employeeNumber <= 0) {
+      errors.push(`Invalid Employee Number in approver list: ${normalized}.`);
+      continue;
+    }
+    values.push(employeeNumber);
+  }
+
+  const duplicates = [...new Set(values.filter((value, index) => values.indexOf(value) !== index))];
+  for (const duplicate of duplicates) {
+    errors.push(`Employee Number ${duplicate} appears more than once in the same approver list.`);
+  }
+
+  return { values, errors };
 }
 
 export function parseUsaCategory(value: string): EmployeeWriteInput['usaCategory'] | undefined {

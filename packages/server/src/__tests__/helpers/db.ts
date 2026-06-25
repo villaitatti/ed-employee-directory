@@ -21,6 +21,6 @@ export async function resetDb(): Promise<void> {
   // Order matters: children before parents to respect FK constraints. TRUNCATE
   // ... CASCADE keeps it simple and resets identity sequences too.
   await testPrisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "AuditLog", "ImportRow", "ImportBatch", "Employee", "Department", "Setting" RESTART IDENTITY CASCADE'
+    'TRUNCATE TABLE "AuditLog", "ImportRow", "ImportBatch", "EmployeeApprovalAssignment", "Employee", "Department", "Setting" RESTART IDENTITY CASCADE'
   );
 }

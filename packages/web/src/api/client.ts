@@ -3,6 +3,7 @@ import type {
   Department,
   DepartmentCreateInput,
   Employee,
+  EmployeeOption,
   EmployeeWriteInput,
   ImportPreview,
   PaginatedEmployees,
@@ -75,6 +76,12 @@ export function createApiClient(getToken: TokenGetter) {
 
     employees: async (params: ListEmployeeParams = {}) =>
       request<PaginatedEmployees>(`/api/admin/employees${queryString(params)}`),
+    employeeOptions: async (params: { substituteEligible?: boolean } = {}) =>
+      (await request<{ data: EmployeeOption[] }>(
+        `/api/admin/employee-options${queryString({
+          substituteEligible: params.substituteEligible ? 'true' : undefined,
+        })}`
+      )).data,
     createEmployee: async (input: EmployeeWriteInput) =>
       (await request<{ data: Employee }>('/api/admin/employees', {
         method: 'POST',
