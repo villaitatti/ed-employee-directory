@@ -13,6 +13,7 @@ import {
   employeeWriteSchema,
   entityTypeSchema,
   importCommitSchema,
+  isValidEmployeeNumber,
   normalizeDepartmentName,
   retirementPolicySchema,
   WEEKDAY_KEYS,
@@ -44,6 +45,7 @@ import { toEmployeeData } from '../services/employee-input.js';
 import { serializeAuditLog, serializeDepartment, serializeEmployee } from '../services/serializers.js';
 import { getRetirementPolicy, getRetirementSetting, RETIREMENT_POLICY_KEY } from '../services/settings.js';
 import {
+  approvalRoleEntries,
   employeeDetailsInclude,
   emptyApprovalRoleIds,
   existingApprovalRoleIds,
@@ -52,11 +54,18 @@ import {
   missingRequiredApprovers,
   REQUIRED_APPROVER_MESSAGES,
   replaceApprovalAssignments,
+  roleApproverKey,
   validateApprovalRoleIds,
   validateEmployeeCanLoseApprovalEligibility,
   weeklyScheduleFromEmployee,
   type EmployeeDetails,
 } from '../services/approvals.js';
+
+// Upper bound on rows accepted per import file. The preview runs an O(rows²)
+// reference fixpoint plus per-row DB lookups, so an unbounded upload is a DoS
+// surface even for authenticated staff. The org has a few hundred employees;
+// this is comfortably above any real payroll file.
+const MAX_IMPORT_ROWS = 2000;
 
 const CSV_MIME_TYPES = new Set([
   'text/csv',
@@ -98,10 +107,15 @@ const upload = multer({
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireStaff);
 
+// Cap the client-supplied correlation id so a caller can't persist multi-KB
+// junk into every audit row. Anything absent or over the limit gets a fresh
+// server-generated UUID instead.
+const MAX_REQUEST_ID_LENGTH = 200;
+
 function requestId(req: AuthenticatedRequest): string {
   const header = req.headers['x-request-id'];
-  if (typeof header === 'string') return header;
-  if (Array.isArray(header) && header[0]) return header[0];
+  const raw = typeof header === 'string' ? header : Array.isArray(header) ? header[0] : undefined;
+  if (raw && raw.length > 0 && raw.length <= MAX_REQUEST_ID_LENGTH) return raw;
   return crypto.randomUUID();
 }
 
@@ -189,6 +203,15 @@ const preApproverAliases = [
   'preapprover',
 ];
 const responsabileAliases = ['responsabile', 'approver'];
+const retirementDateAliases = ['data pensionamento', 'retirement date', 'retirementdate'];
+const retirementConfirmedAliases = [
+  'data pensionamento confermata',
+  'data pensionamento manuale',
+  'retirement date confirmed',
+  'retirement date overridden',
+  'retirementdateconfirmed',
+  'retirementdateoverridden',
+];
 const substituteResponsabileAliases = [
   'sostituto responsabile',
   'sostituto responsabile employee number',
@@ -327,10 +350,6 @@ function allApprovalRoleNumbers(roleNumbers: EmployeeApprovalRoleNumbers | undef
   ];
 }
 
-function allRoleIds(roleIds: EmployeeApprovalRoleIds): string[] {
-  return [...roleIds.preApproverIds, ...roleIds.responsabileIds, ...roleIds.substituteResponsabileIds];
-}
-
 /** Maps each number-list field on EmployeeApprovalRoleNumbers to its ApprovalRole. */
 const ROLE_NUMBER_FIELDS = [
   ['preApproverNumbers', 'PRE_APPROVER'],
@@ -406,7 +425,12 @@ function employeeWhereFromQuery(query: ReturnType<typeof employeeListQuerySchema
       { lastName: { contains: query.q, mode: Prisma.QueryMode.insensitive } },
     ];
     if (/^\d+$/.test(query.q)) {
-      terms.push({ employeeNumber: Number(query.q) });
+      const asNumber = Number(query.q);
+      // Skip the employeeNumber term when the query is too large for the int4
+      // column; the name terms still apply. Feeding it to Prisma would 500.
+      if (isValidEmployeeNumber(asNumber)) {
+        terms.push({ employeeNumber: asNumber });
+      }
     }
     where.OR = terms;
   }
@@ -701,17 +725,20 @@ adminRouter.put(
       const policy = await getRetirementPolicy(tx);
       const existingRoleIds = await existingApprovalRoleIds(tx, employeeId);
       const roleIds = input.approvalRoleIds ?? existingRoleIds;
-      // Approvers already assigned to this employee are grandfathered: they were
-      // valid when set, so re-saving (or editing an unrelated field) must not
-      // fail because another employee's record changed in the meantime. Newly
-      // added approvers are still fully validated.
-      const grandfatheredApproverIds = new Set(allRoleIds(existingRoleIds));
+      // Approvers already assigned to this employee are grandfathered per (role,
+      // approver): they were valid when set, so re-saving (or editing an
+      // unrelated field) must not fail because another employee's record changed
+      // in the meantime. Newly added approvers — including an existing approver
+      // added to a new role — are still fully validated.
+      const grandfatheredApprovers = new Set(
+        approvalRoleEntries(existingRoleIds).map(({ id, role }) => roleApproverKey(role, id))
+      );
       await validateApprovalRoleIds(tx, {
         roleIds,
         employeeNumber: input.employeeNumber,
         status: input.status,
         currentEmployeeId: employeeId,
-        grandfatheredApproverIds,
+        grandfatheredApprovers,
       });
       await validateEmployeeCanLoseApprovalEligibility(tx, {
         employeeId,
@@ -957,7 +984,7 @@ adminRouter.get(
     const employeeNumber =
       typeof req.query.employeeNumber === 'string' ? Number(req.query.employeeNumber) : undefined;
     const where: Prisma.AuditLogWhereInput = {};
-    if (typeof employeeNumber === 'number' && Number.isInteger(employeeNumber)) {
+    if (typeof employeeNumber === 'number' && isValidEmployeeNumber(employeeNumber)) {
       where.employeeNumber = employeeNumber;
     }
     if (typeof req.query.entityType === 'string') {
@@ -987,6 +1014,13 @@ adminRouter.post(
     if (!file) throw new HttpError(400, 'EMPLOYEE_FILE_REQUIRED', 'Upload an employee file in the file field.');
 
     const records = await parseUploadRecords(file);
+    if (records.length > MAX_IMPORT_ROWS) {
+      throw new HttpError(
+        400,
+        'IMPORT_TOO_MANY_ROWS',
+        `The import file has ${records.length} rows; the maximum is ${MAX_IMPORT_ROWS}.`
+      );
+    }
 
     const [departments, employees, existingAssignments] = await Promise.all([
       prisma.department.findMany(),
@@ -1039,24 +1073,17 @@ adminRouter.post(
       }
 
       // Honor the "Retirement Date Confirmed" flag (the same column export
-      // emits). When true, the imported retirement date is an approved date and
-      // is passed through. When false/absent, recalculate from the
-      // current policy instead of freezing the imported (possibly stale) date —
-      // otherwise an export → policy-change → re-import would silently turn every
-      // calculated date into a bogus confirmed date.
-      const retirementOverridden = parseBoolean(
-        readFirst(row, [
-          'data pensionamento confermata',
-          'data pensionamento manuale',
-          'retirement date confirmed',
-          'retirement date overridden',
-          'retirementdateconfirmed',
-          'retirementdateoverridden',
-        ])
-      );
-      const importedRetirementDate = parseNullableDate(
-        readFirst(row, ['data pensionamento', 'retirement date', 'retirementdate'])
-      );
+      // emits) — but ONLY when the file actually carries retirement columns.
+      // When true, the imported retirement date is an approved date and is
+      // passed through. When present-but-false, recalculate from the current
+      // policy instead of freezing the imported (possibly stale) date. When the
+      // columns are absent entirely (e.g. a names-only partial import), omit the
+      // retirement fields so a previously-confirmed government date is preserved
+      // rather than reset — this matches resolveRetirementDate's contract.
+      const hasRetirementColumns =
+        hasHeader(row, retirementDateAliases) || hasHeader(row, retirementConfirmedAliases);
+      const retirementOverridden = parseBoolean(readFirst(row, retirementConfirmedAliases));
+      const importedRetirementDate = parseNullableDate(readFirst(row, retirementDateAliases));
       const parsedTfr = parseTfr(readFirst(row, ['tfr']));
       const canBeSubstituteResponsible = parseOptionalBoolean(
         readFirst(row, ['sostituto abilitato', 'puo essere sostituto responsabile', 'can be substitute responsible'])
@@ -1070,9 +1097,13 @@ adminRouter.post(
         birthDate: parseNullableDate(readFirst(row, ['data di nascita', 'birth date', 'birthdate'])),
         hireDate: parseNullableDate(readFirst(row, ['data assunzione', 'hire date', 'hiredate'])),
         terminationDate: parseNullableDate(readFirst(row, ['data cessazione', 'termination date', 'terminationdate'])),
-        retirementDate: retirementOverridden ? importedRetirementDate : null,
-        resetRetirementDate: !retirementOverridden,
-        retirementDateOverridden: retirementOverridden,
+        ...(hasRetirementColumns
+          ? {
+              retirementDate: retirementOverridden ? importedRetirementDate : null,
+              resetRetirementDate: !retirementOverridden,
+              retirementDateOverridden: retirementOverridden,
+            }
+          : {}),
         fte: readFirst(row, ['fte']),
         usaCategory: parseUsaCategory(readFirst(row, ['categoria usa', 'usa category'])),
         contractType: parseContractType(readFirst(row, ['tipo contratto', 'contract type'])),
@@ -1437,18 +1468,22 @@ adminRouter.post(
         const roleIds =
           approvalRoleIdsFromNumbers(saved.roleNumbers, employeeByNumberAfterSave) ??
           (saved.before ? await existingApprovalRoleIds(tx, saved.employeeId) : emptyApprovalRoleIds());
-        // Grandfather approvers this employee already had: a plain field-only
-        // re-import (no role columns) must not fail just because someone else's
-        // record changed since those approvers were assigned.
-        const grandfatheredApproverIds = saved.roleNumbers
+        // Grandfather (role, approver) pairs this employee already had: a plain
+        // field-only re-import (no role columns) must not fail just because
+        // someone else's record changed since those approvers were assigned.
+        const grandfatheredApprovers = saved.roleNumbers
           ? undefined
-          : new Set(saved.before ? allRoleIds(roleIds) : []);
+          : new Set(
+              saved.before
+                ? approvalRoleEntries(roleIds).map(({ id, role }) => roleApproverKey(role, id))
+                : []
+            );
         await validateApprovalRoleIds(tx, {
           roleIds,
           employeeNumber: saved.parsed.employeeNumber,
           status: saved.parsed.status,
           currentEmployeeId: saved.employeeId,
-          grandfatheredApproverIds,
+          grandfatheredApprovers,
         });
         if (saved.roleNumbers) {
           await replaceApprovalAssignments(tx, saved.employeeId, roleIds);

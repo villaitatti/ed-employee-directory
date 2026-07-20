@@ -32,6 +32,15 @@ export const WEEKDAY_LABELS_IT: Record<WeekdayKey, string> = {
 export const FULL_TIME_DAILY_MINUTES = 7 * 60 + 30;
 export const FULL_TIME_WEEKLY_MINUTES = FULL_TIME_DAILY_MINUTES * WEEKDAY_KEYS.length;
 
+// Largest value the Postgres Int (int4) employeeNumber column can hold. Query
+// handlers must reject numbers above this before handing them to Prisma —
+// otherwise Postgres raises an out-of-range error surfaced as a 500.
+export const MAX_EMPLOYEE_NUMBER = 2_147_483_647;
+
+export function isValidEmployeeNumber(value: number): boolean {
+  return Number.isInteger(value) && value > 0 && value <= MAX_EMPLOYEE_NUMBER;
+}
+
 export const AUDIT_ACTIONS = ['CREATE', 'UPDATE', 'DELETE', 'IMPORT_COMMIT'] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
