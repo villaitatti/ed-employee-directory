@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.6.0 - 2026-07-20
+
+### Fixed
+
+- Fixed the employee create/edit form being unsubmittable in a real browser: a double-escaped date validation pattern rejected every valid date.
+- Fixed production serving of the web app, whose bundle path was resolved incorrectly and served nothing; unknown `/api/*` routes now return a JSON 404 instead of the app shell.
+- The employee directory now loads every employee instead of silently stopping after the first 50.
+- Data-loading failures, including an expired session, now show a retryable error message instead of an empty page.
+- Approver eligibility is re-checked per role, so adding an existing approver to a different role can no longer skip the active / substitute-eligibility rules.
+- Duplicate Employee Numbers, other unique-constraint violations, oversized uploads, and out-of-range Employee Numbers now return clear 4xx errors instead of 500s.
+- A partial import that omits the retirement columns no longer overwrites confirmed retirement dates; import files are capped at 2000 rows.
+- An unchanged retirement-age save no longer bumps the settings timestamp or writes a no-op audit entry, and a corrupt stored policy is now surfaced on the Settings page.
+
+### Changed
+
+- The retirement-date field is editable only when "Confirmed" is checked; unchecking a confirmed date warns before it is recalculated.
+- Deleting an employee or department, and saving a retirement-age change, now ask for confirmation.
+- **Breaking (deployment):** `NODE_ENV` is now required at server startup with no silent `development` default, so a misconfigured deployment fails immediately instead of running with permissive CORS/CSP. Set `NODE_ENV` in every environment.
+- Localized the remaining interface strings and weekday labels, remembered the selected language across reloads, and preserved deep links through Auth0 sign-in.
+
+### Security
+
+- The production Docker image now runs as a non-root user and contains only production dependencies and compiled output — no source or build tooling.
+- The local development database now listens on loopback only.
+- Added a modal focus trap with keyboard focus management, a top-level error boundary, and a cap on the client-supplied request id.
+
 ## 0.5.0 - 2026-06-25
 
 ### Added
