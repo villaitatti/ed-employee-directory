@@ -10,12 +10,15 @@ export const resources = {
         import: 'Importa Excel',
         audit: 'Audit',
         settings: 'Impostazioni',
+        primary: 'Navigazione principale',
       },
       actions: {
         createEmployee: 'Nuovo dipendente',
         createDepartment: 'Nuovo dipartimento',
         save: 'Salva',
         cancel: 'Annulla',
+        close: 'Chiudi',
+        edit: 'Modifica',
         delete: 'Elimina',
         export: 'Esporta Excel',
         preview: 'Anteprima',
@@ -25,6 +28,8 @@ export const resources = {
         signOut: 'Esci',
         addApprover: 'Aggiungi responsabile',
         remove: 'Rimuovi',
+        retry: 'Riprova',
+        language: 'Lingua',
       },
       fields: {
         firstName: 'Nome',
@@ -50,6 +55,19 @@ export const resources = {
         substituteResponsabili: 'Sostituto-Responsabile',
         weeklyTotal: 'Totale orario',
         approvalWorkflow: 'Workflow',
+        actions: 'Azioni',
+        select: 'Seleziona',
+        updated: 'Aggiornato',
+        row: 'Riga',
+        action: 'Azione',
+        errors: 'Errori',
+      },
+      weekday: {
+        monday: 'LU',
+        tuesday: 'MA',
+        wednesday: 'ME',
+        thursday: 'GIO',
+        friday: 'VE',
       },
       sections: {
         identity: 'Anagrafica',
@@ -69,6 +87,10 @@ export const resources = {
         recalcNote:
           'Salvando, la data di pensionamento prevista verrà ricalcolata per tutti i dipendenti. Le date confermate non vengono toccate.',
         recalcDone: 'Aggiornato. Ricalcolati {{count}} dipendenti.',
+        confirmRecalc:
+          'Questo ricalcola la data di pensionamento prevista per tutti i dipendenti non confermati. Continuare?',
+        corruptWarning:
+          'Il valore salvato non è valido; viene mostrato il valore predefinito di legge. Salva per ripristinarlo.',
       },
       audit: {
         title: 'Cronologia modifiche',
@@ -117,6 +139,7 @@ export const resources = {
       copy: {
         productEyebrow: 'Anagrafica',
         subtitle: 'Lista dei dipendenti.',
+        departmentsSubtitle: 'Gestisci i dipartimenti.',
         discardChanges: 'Ci sono modifiche non salvate. Vuoi chiudere senza salvare?',
         emptyEmployees: 'Nessun dipendente trovato.',
         emptyDepartments: 'Aggiungi i dipartimenti prima di importare il file Excel.',
@@ -128,6 +151,18 @@ export const resources = {
         invalidWeeklySchedule: 'Inserisci l’orario nel formato 7,30.',
         weeklyScheduleTotal: 'Totale settimanale: {{total}}.',
         weeklyScheduleMismatch: 'Totale settimanale {{total}}; atteso da FTE {{expected}}.',
+        error: 'Errore',
+        loadError: 'Impossibile caricare i dati. Riprova.',
+        confirmDeleteEmployee: 'Eliminare definitivamente questo dipendente? L’operazione non è reversibile.',
+        confirmDeleteDepartment: 'Eliminare definitivamente questo dipartimento? L’operazione non è reversibile.',
+        confirmUnconfirmRetirement:
+          'La data di pensionamento confermata verrà ricalcolata dai dati anagrafici al salvataggio. Continuare?',
+        excelFileRequired: 'Seleziona un file Excel.',
+        previewRequired: 'Genera prima l’anteprima.',
+        rowsCount: '{{count}} righe',
+        rowsCommitted: '{{count}} righe importate',
+        saved: 'Salvato',
+        deleted: 'Eliminato',
       },
     },
   },
@@ -139,12 +174,15 @@ export const resources = {
         import: 'Excel Import',
         audit: 'Audit',
         settings: 'Settings',
+        primary: 'Primary navigation',
       },
       actions: {
         createEmployee: 'New employee',
         createDepartment: 'New department',
         save: 'Save',
         cancel: 'Cancel',
+        close: 'Close',
+        edit: 'Edit',
         delete: 'Delete',
         export: 'Export Excel',
         preview: 'Preview',
@@ -154,6 +192,8 @@ export const resources = {
         signOut: 'Sign out',
         addApprover: 'Add approver',
         remove: 'Remove',
+        retry: 'Retry',
+        language: 'Language',
       },
       fields: {
         firstName: 'First Name',
@@ -179,6 +219,19 @@ export const resources = {
         substituteResponsabili: 'Substitute-Responsible',
         weeklyTotal: 'Weekly Hours',
         approvalWorkflow: 'Workflow',
+        actions: 'Actions',
+        select: 'Select',
+        updated: 'Updated',
+        row: 'Row',
+        action: 'Action',
+        errors: 'Errors',
+      },
+      weekday: {
+        monday: 'Mon',
+        tuesday: 'Tue',
+        wednesday: 'Wed',
+        thursday: 'Thu',
+        friday: 'Fri',
       },
       sections: {
         identity: 'Identity',
@@ -198,6 +251,10 @@ export const resources = {
         recalcNote:
           'On save, the projected retirement date is recalculated for all employees. Confirmed dates are left untouched.',
         recalcDone: 'Updated. Recalculated {{count}} employees.',
+        confirmRecalc:
+          'This recalculates the projected retirement date for all non-confirmed employees. Continue?',
+        corruptWarning:
+          'The saved value is invalid; the statutory default is shown. Save to reset it.',
       },
       audit: {
         title: 'Change history',
@@ -246,6 +303,7 @@ export const resources = {
       copy: {
         productEyebrow: '',
         subtitle: 'Employee list.',
+        departmentsSubtitle: 'Manage departments.',
         discardChanges: 'You have unsaved changes. Close without saving?',
         emptyEmployees: 'No employees found.',
         emptyDepartments: 'Add departments before importing Excel data.',
@@ -257,16 +315,50 @@ export const resources = {
         invalidWeeklySchedule: 'Enter hours in 7,30 format.',
         weeklyScheduleTotal: 'Weekly total: {{total}}.',
         weeklyScheduleMismatch: 'Weekly total {{total}}; expected from FTE {{expected}}.',
+        error: 'Error',
+        loadError: 'Could not load data. Try again.',
+        confirmDeleteEmployee: 'Permanently delete this employee? This cannot be undone.',
+        confirmDeleteDepartment: 'Permanently delete this department? This cannot be undone.',
+        confirmUnconfirmRetirement:
+          'The confirmed retirement date will be recalculated from the birth date on save. Continue?',
+        excelFileRequired: 'Select an Excel file.',
+        previewRequired: 'Generate the preview first.',
+        rowsCount: '{{count}} rows',
+        rowsCommitted: '{{count}} rows committed',
+        saved: 'Saved',
+        deleted: 'Deleted',
       },
     },
   },
 } as const;
 
+const LANGUAGE_STORAGE_KEY = 'ed:lang';
+
+function storedLanguage(): 'it' | 'en' {
+  try {
+    const value = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+    if (value === 'en' || value === 'it') return value;
+  } catch {
+    // localStorage can throw in private modes / sandboxed iframes.
+  }
+  return 'it';
+}
+
 void i18n.use(initReactI18next).init({
   resources,
-  lng: 'it',
+  lng: storedLanguage(),
   fallbackLng: 'it',
   interpolation: { escapeValue: false },
+});
+
+// Persist the choice so a reload keeps the selected language rather than
+// snapping back to Italian.
+i18n.on('languageChanged', (language) => {
+  try {
+    window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+  } catch {
+    // Ignore storage failures — persistence is best-effort.
+  }
 });
 
 export default i18n;

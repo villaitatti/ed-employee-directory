@@ -9,7 +9,10 @@ const booleanFlag = z
   .transform((value) => value === 'true');
 
 const envSchema = z.object({
-  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  // Required, with no default: the CORS/CSP hardening and the DEV_SKIP_AUTH
+  // production guard all key off NODE_ENV, so a deploy that forgets to set it
+  // must fail loudly at boot rather than silently run in permissive dev mode.
+  NODE_ENV: z.enum(['development', 'production', 'test']),
   PORT: z.coerce.number().int().positive().default(3000),
   DATABASE_URL: z.string().min(1),
   CORS_ORIGIN: optionalUrl,

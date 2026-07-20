@@ -117,6 +117,9 @@ export const settingsSchema = z.object({
   // Reuse the policy schema so the shape has a single source of truth.
   retirementPolicy: retirementPolicySchema,
   updatedAt: z.string().nullable(),
+  // True when a stored policy row exists but failed to parse; the retirementPolicy
+  // above is then the statutory fallback, not the configured value.
+  malformed: z.boolean().default(false),
 });
 export type Settings = z.infer<typeof settingsSchema>;
 

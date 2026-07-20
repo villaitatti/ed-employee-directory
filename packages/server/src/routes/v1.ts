@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { employeeListQuerySchema } from '@itatti/shared';
+import { employeeListQuerySchema, isValidEmployeeNumber } from '@itatti/shared';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, requireReadAccess } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/async-handler.js';
@@ -50,7 +50,7 @@ v1Router.get(
   '/employees/:employeeNumber',
   asyncHandler(async (req, res) => {
     const employeeNumber = Number(req.params.employeeNumber);
-    if (!Number.isInteger(employeeNumber) || employeeNumber <= 0) {
+    if (!isValidEmployeeNumber(employeeNumber)) {
       throw new HttpError(400, 'INVALID_EMPLOYEE_NUMBER', 'Employee Number must be a positive integer.');
     }
 

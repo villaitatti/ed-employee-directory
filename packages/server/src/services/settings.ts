@@ -34,10 +34,15 @@ export async function getRetirementPolicy(reader: Reader): Promise<RetirementPol
 
 export async function getRetirementSetting(
   reader: Reader
-): Promise<{ retirementPolicy: RetirementPolicy; updatedAt: string | null }> {
+): Promise<{ retirementPolicy: RetirementPolicy; updatedAt: string | null; malformed: boolean }> {
   const row = await reader.setting.findUnique({ where: { key: RETIREMENT_POLICY_KEY } });
+  // A row that exists but doesn't parse means the stored policy is corrupt. Flag
+  // it so the UI can warn instead of presenting the fallback default as if it
+  // were the configured value.
+  const malformed = row?.value != null && !retirementPolicySchema.safeParse(row.value).success;
   return {
     retirementPolicy: parsePolicy(row?.value),
     updatedAt: row ? row.updatedAt.toISOString() : null,
+    malformed,
   };
 }

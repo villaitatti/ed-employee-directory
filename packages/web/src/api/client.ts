@@ -13,6 +13,17 @@ import type {
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
+/** Error carrying the HTTP status so callers can react to 401/403 vs 5xx. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 type TokenGetter = () => Promise<string | null>;
 
 type ListEmployeeParams = {
@@ -46,7 +57,7 @@ export function createApiClient(getToken: TokenGetter) {
     const response = await authorizedFetch(path, init);
     if (!response.ok) {
       const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
-      throw new Error(payload?.error?.message ?? `Request failed with ${response.status}`);
+      throw new ApiError(payload?.error?.message ?? `Request failed with ${response.status}`, response.status);
     }
     if (response.status === 204) return undefined as T;
     return (await response.json()) as T;
@@ -76,6 +87,20 @@ export function createApiClient(getToken: TokenGetter) {
 
     employees: async (params: ListEmployeeParams = {}) =>
       request<PaginatedEmployees>(`/api/admin/employees${queryString(params)}`),
+    // Follow the server's cursor pagination to return every matching employee.
+    // The directory table must not silently stop at the first 50 rows.
+    allEmployees: async (params: ListEmployeeParams = {}): Promise<Employee[]> => {
+      const all: Employee[] = [];
+      let cursor: string | undefined;
+      do {
+        const page = await request<PaginatedEmployees>(
+          `/api/admin/employees${queryString({ ...params, limit: '100', cursor })}`
+        );
+        all.push(...page.data);
+        cursor = page.nextCursor ?? undefined;
+      } while (cursor);
+      return all;
+    },
     employeeOptions: async (params: { substituteEligible?: boolean } = {}) =>
       (await request<{ data: EmployeeOption[] }>(
         `/api/admin/employee-options${queryString({

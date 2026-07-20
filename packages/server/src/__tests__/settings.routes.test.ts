@@ -135,6 +135,7 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
     expect(res.body.data).toEqual({
       retirementPolicy: { years: 67, months: 3 },
       updatedAt: null,
+      malformed: false,
     });
   });
 
@@ -194,6 +195,23 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
     expect(res.body.data.recalculatedEmployees).toBe(0);
     const employee = await testPrisma.employee.findUniqueOrThrow({ where: { employeeNumber: 1001 } });
     expect(employee.retirementDate.toISOString().slice(0, 10)).toBe('2052-07-12');
+  });
+
+  it('PUT with an unchanged policy does not re-audit or bump updatedAt', async () => {
+    // First save establishes the row and one audit entry.
+    const first = await request(app).put('/api/admin/settings/retirement-policy').send({ years: 68, months: 0 });
+    expect(first.status).toBe(200);
+    const firstUpdatedAt = first.body.data.updatedAt as string;
+
+    // Saving the same value again is a no-op: no upsert (updatedAt unchanged) and
+    // no new audit entry.
+    const second = await request(app).put('/api/admin/settings/retirement-policy').send({ years: 68, months: 0 });
+    expect(second.status).toBe(200);
+    expect(second.body.data.recalculatedEmployees).toBe(0);
+    expect(second.body.data.updatedAt).toBe(firstUpdatedAt);
+
+    const logs = await testPrisma.auditLog.findMany({ where: { entityType: 'SETTING' } });
+    expect(logs).toHaveLength(1);
   });
 
   it('PUT rejects out-of-range values with a 400', async () => {
@@ -767,5 +785,124 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
       where: { employeeNumber: employee.employeeNumber },
     });
     expect(updated.hireDate?.toISOString().slice(0, 10)).toBe('2020-01-02');
+  });
+
+  it('grandfathering is role-specific: an existing approver added to a new role is re-validated', async () => {
+    const department = await testPrisma.department.create({
+      data: { name: 'Biblioteca', normalizedName: 'biblioteca' },
+    });
+    const approvers = await seedApprovers(department.id);
+    // 2002 already uses 9001 as Responsabile and 9002 as Sostituto-Responsabile.
+    const employee = await seedEmployeeUsingApprovers(department.id, approvers);
+
+    // Now also assign 9001 (the Responsabile — NOT substitute-eligible) as a
+    // Sostituto-Responsabile. Being grandfathered in the Responsabile role must
+    // not wave through this brand-new substitute assignment.
+    const res = await request(app)
+      .put(`/api/admin/employees/${employee.id}`)
+      .send({
+        employeeNumber: employee.employeeNumber,
+        firstName: employee.firstName,
+        lastName: employee.lastName,
+        departmentId: department.id,
+        birthDate: '1985-04-12',
+        hireDate: '2020-01-01',
+        fte: 1,
+        usaCategory: 'EXEMPT',
+        contractType: 'INDETERMINATO',
+        status: 'ATTIVO',
+        approvalRoleIds: {
+          preApproverIds: [],
+          responsabileIds: [approvers.responsabile.id],
+          substituteResponsabileIds: [approvers.substitute.id, approvers.responsabile.id],
+        },
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('APPROVER_NOT_SUBSTITUTE_ELIGIBLE');
+  });
+
+  it('rejects an import file that exceeds the row cap', async () => {
+    const header =
+      'Employee Number,First Name,Last Name,Department,Birth Date,FTE,USA Category,Contract Type,Status';
+    const lines = [header];
+    for (let i = 0; i < 2001; i += 1) {
+      lines.push(`${i + 1},A,B,Amministrazione,1990-01-01,1,Exempt,Indeterminato,Da Assumere`);
+    }
+
+    const res = await request(app)
+      .post('/api/admin/imports/preview')
+      .attach('file', Buffer.from(lines.join('\n')), { filename: 'big.csv', contentType: 'text/csv' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('IMPORT_TOO_MANY_ROWS');
+  });
+
+  it('maps a duplicate Employee Number to a 409 rather than a 500', async () => {
+    const employee = await seedEmployee();
+
+    const res = await request(app)
+      .post('/api/admin/employees')
+      .send({
+        employeeNumber: employee.employeeNumber,
+        firstName: 'Duplicate',
+        lastName: 'Person',
+        departmentId: employee.departmentId,
+        birthDate: '1990-01-01',
+        fte: 1,
+        usaCategory: 'EXEMPT',
+        contractType: 'INDETERMINATO',
+        // DA_ASSUMERE needs no approvers, so the create reaches the unique index.
+        status: 'DA_ASSUMERE',
+      });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('DUPLICATE_VALUE');
+  });
+
+  it('preserves a confirmed retirement date when the import omits the retirement columns', async () => {
+    const department = await testPrisma.department.create({
+      data: { name: 'Amministrazione', normalizedName: 'amministrazione' },
+    });
+    await testPrisma.employee.create({
+      data: {
+        employeeNumber: 4004,
+        firstName: 'Anna',
+        lastName: 'Verdi',
+        departmentId: department.id,
+        birthDate: new Date('1990-05-05T00:00:00.000Z'),
+        retirementDate: new Date('2050-01-01T00:00:00.000Z'),
+        retirementDateOverridden: true,
+        fte: 1,
+        usaCategory: 'EXEMPT',
+        contractType: 'INDETERMINATO',
+        status: 'DA_ASSUMERE',
+      },
+    });
+
+    // A partial re-import with no "Retirement Date"/"Confirmed" columns must not
+    // wipe the confirmed government date back to a calculated one.
+    const csv = [
+      'Employee Number,First Name,Last Name,Department,Birth Date,FTE,USA Category,Contract Type,Status',
+      `4004,Anna,Verdi,${department.name},1990-05-05,1,Exempt,Indeterminato,Da Assumere`,
+    ].join('\n');
+
+    const preview = await request(app)
+      .post('/api/admin/imports/preview')
+      .attach('file', Buffer.from(csv), { filename: 'employees.csv', contentType: 'text/csv' });
+    expect(preview.status).toBe(201);
+    const row = (preview.body.data.rows as Array<{ rowNumber: number; selected: boolean }>).find(
+      (r) => r.rowNumber === 2
+    );
+    expect(row?.selected).toBe(true);
+
+    const commit = await request(app)
+      .post(`/api/admin/imports/${preview.body.data.batchId}/commit`)
+      .send({ selectedRows: [2] });
+    expect(commit.status).toBe(200);
+
+    const updated = await testPrisma.employee.findUniqueOrThrow({ where: { employeeNumber: 4004 } });
+    expect(updated.retirementDateOverridden).toBe(true);
+    expect(updated.retirementDate.toISOString().slice(0, 10)).toBe('2050-01-01');
   });
 });

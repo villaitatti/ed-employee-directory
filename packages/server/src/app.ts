@@ -53,10 +53,22 @@ app.use(express.json({ limit: '1mb' }));
 registerRoutes(app);
 
 if (env.NODE_ENV === 'production') {
-  const { resolve } = await import('node:path');
-  const webDist = resolve(process.cwd(), 'packages/web/dist');
+  const { resolve, dirname } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  // Resolve the web bundle relative to THIS module, not process.cwd(): the
+  // production CMD runs the server from packages/server, so a cwd-relative path
+  // pointed at packages/server/packages/web/dist and served nothing. The built
+  // server lives at packages/server/dist/index.js, so the web bundle is two
+  // levels up under packages/web/dist.
+  const webDist = resolve(dirname(fileURLToPath(import.meta.url)), '../../web/dist');
   app.use(express.static(webDist));
-  app.get('*', (_req, res) => {
+  // SPA fallback for client-side routes only. Unknown /api paths must fall
+  // through to the JSON 404 handler rather than being served index.html.
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api/')) {
+      next();
+      return;
+    }
     res.sendFile(resolve(webDist, 'index.html'));
   });
 }

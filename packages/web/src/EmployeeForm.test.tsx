@@ -43,6 +43,26 @@ describe('EmployeeForm modal', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
+  it('uses a date pattern that matches real dates (regression: double-escaped \\\\d blocked all saves)', () => {
+    renderWithProviders(
+      <EmployeeForm
+        draft={emptyEmployeeDraft}
+        departments={departments}
+        employeeOptions={employeeOptions}
+        onCancel={vi.fn()}
+        onChange={vi.fn()}
+        onSave={vi.fn()}
+        isSaving={false}
+      />
+    );
+
+    const birthDate = screen.getByLabelText('Data di nascita');
+    const pattern = birthDate.getAttribute('pattern');
+    // The DOM attribute must be the single-backslash regex, not a literal "\\d".
+    expect(pattern).toBe('\\d{1,2}/\\d{1,2}/\\d{4}');
+    expect(new RegExp(`^(?:${pattern})$`).test('31/12/2024')).toBe(true);
+  });
+
   it('renders the TFR options', () => {
     renderWithProviders(
       <EmployeeForm
@@ -59,6 +79,23 @@ describe('EmployeeForm modal', () => {
     expect(screen.getByLabelText('TFR')).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'I Tatti' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Fondo Pensione' })).toBeInTheDocument();
+  });
+
+  it('moves focus into the dialog when it opens', () => {
+    renderWithProviders(
+      <EmployeeForm
+        draft={emptyEmployeeDraft}
+        departments={departments}
+        employeeOptions={employeeOptions}
+        onCancel={vi.fn()}
+        onChange={vi.fn()}
+        onSave={vi.fn()}
+        isSaving={false}
+      />
+    );
+
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.contains(document.activeElement)).toBe(true);
   });
 
   it('closes immediately via Escape when the form is pristine', async () => {

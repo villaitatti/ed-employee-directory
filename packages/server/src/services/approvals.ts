@@ -53,6 +53,17 @@ export function approvalRoleEntries(roleIds: EmployeeApprovalRoleIds): Array<{ i
 }
 
 /**
+ * Stable key identifying an approver *in a specific role*. Grandfathering is
+ * keyed on this pair — never on the approver id alone — so that being a valid
+ * approver in one role (e.g. Pre-approvatore) can never wave through a brand-new
+ * assignment of the same person to a different role (e.g. Sostituto-Responsabile)
+ * for which they may be ineligible.
+ */
+export function roleApproverKey(role: ApprovalRole, approverId: string): string {
+  return `${role}:${approverId}`;
+}
+
+/**
  * The single source of truth for the "active employee must have approvers" rule.
  * Both the id-based API validators and the number-based import preview consult
  * this so the two paths can't drift. Returns the violated error codes (empty when
@@ -103,14 +114,16 @@ export async function validateApprovalRoleIds(
     status: EmployeeStatus;
     currentEmployeeId?: string | undefined;
     /**
-     * Approver ids already assigned to this employee. Entries in this set are
-     * "grandfathered": they were valid when first assigned, so an unrelated edit
-     * (or an import that doesn't touch approvals) must not fail just because one
-     * of them later went inactive or lost substitute eligibility. New approvers
-     * are always fully validated. The required-count and self-approval rules
-     * always apply regardless.
+     * `(role, approverId)` pairs — see {@link roleApproverKey} — already assigned
+     * to this employee. Entries in this set are "grandfathered": they were valid
+     * when first assigned, so an unrelated edit (or an import that doesn't touch
+     * approvals) must not fail just because one of them later went inactive or
+     * lost substitute eligibility. Keying on the role (not the id alone) means a
+     * newly-added assignment of an existing approver to a *different* role is
+     * still fully validated. New approvers are always fully validated. The
+     * required-count and self-approval rules always apply regardless.
      */
-    grandfatheredApproverIds?: ReadonlySet<string> | undefined;
+    grandfatheredApprovers?: ReadonlySet<string> | undefined;
   }
 ): Promise<void> {
   const missing = missingRequiredApprovers(input.status, {
@@ -146,10 +159,11 @@ export async function validateApprovalRoleIds(
     if (id === input.currentEmployeeId || approver.employeeNumber === input.employeeNumber) {
       throw new HttpError(400, 'SELF_APPROVER_NOT_ALLOWED', 'Employees cannot approve themselves.');
     }
-    // Don't re-litigate approvers that were already assigned: they passed
-    // validation when first set, and an unrelated edit must not be blocked by a
-    // later change to someone else's record.
-    if (input.grandfatheredApproverIds?.has(id)) continue;
+    // Don't re-litigate approvers that were already assigned in THIS role: they
+    // passed validation when first set, and an unrelated edit must not be blocked
+    // by a later change to someone else's record. A new assignment of the same
+    // person to a different role is not grandfathered and is validated below.
+    if (input.grandfatheredApprovers?.has(roleApproverKey(role, id))) continue;
     if (approver.status !== 'ATTIVO') {
       throw new HttpError(
         400,
