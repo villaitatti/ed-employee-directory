@@ -17,6 +17,7 @@ export const resources = {
         createDepartment: 'Nuovo dipartimento',
         save: 'Salva',
         cancel: 'Annulla',
+        close: 'Chiudi',
         edit: 'Modifica',
         delete: 'Elimina',
         export: 'Esporta Excel',
@@ -86,6 +87,10 @@ export const resources = {
         recalcNote:
           'Salvando, la data di pensionamento prevista verrà ricalcolata per tutti i dipendenti. Le date confermate non vengono toccate.',
         recalcDone: 'Aggiornato. Ricalcolati {{count}} dipendenti.',
+        confirmRecalc:
+          'Questo ricalcola la data di pensionamento prevista per tutti i dipendenti non confermati. Continuare?',
+        corruptWarning:
+          'Il valore salvato non è valido; viene mostrato il valore predefinito di legge. Salva per ripristinarlo.',
       },
       audit: {
         title: 'Cronologia modifiche',
@@ -176,6 +181,7 @@ export const resources = {
         createDepartment: 'New department',
         save: 'Save',
         cancel: 'Cancel',
+        close: 'Close',
         edit: 'Edit',
         delete: 'Delete',
         export: 'Export Excel',
@@ -245,6 +251,10 @@ export const resources = {
         recalcNote:
           'On save, the projected retirement date is recalculated for all employees. Confirmed dates are left untouched.',
         recalcDone: 'Updated. Recalculated {{count}} employees.',
+        confirmRecalc:
+          'This recalculates the projected retirement date for all non-confirmed employees. Continue?',
+        corruptWarning:
+          'The saved value is invalid; the statutory default is shown. Save to reset it.',
       },
       audit: {
         title: 'Change history',

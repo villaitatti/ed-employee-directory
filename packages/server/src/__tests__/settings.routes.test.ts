@@ -135,6 +135,7 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
     expect(res.body.data).toEqual({
       retirementPolicy: { years: 67, months: 3 },
       updatedAt: null,
+      malformed: false,
     });
   });
 
@@ -194,6 +195,23 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
     expect(res.body.data.recalculatedEmployees).toBe(0);
     const employee = await testPrisma.employee.findUniqueOrThrow({ where: { employeeNumber: 1001 } });
     expect(employee.retirementDate.toISOString().slice(0, 10)).toBe('2052-07-12');
+  });
+
+  it('PUT with an unchanged policy does not re-audit or bump updatedAt', async () => {
+    // First save establishes the row and one audit entry.
+    const first = await request(app).put('/api/admin/settings/retirement-policy').send({ years: 68, months: 0 });
+    expect(first.status).toBe(200);
+    const firstUpdatedAt = first.body.data.updatedAt as string;
+
+    // Saving the same value again is a no-op: no upsert (updatedAt unchanged) and
+    // no new audit entry.
+    const second = await request(app).put('/api/admin/settings/retirement-policy').send({ years: 68, months: 0 });
+    expect(second.status).toBe(200);
+    expect(second.body.data.recalculatedEmployees).toBe(0);
+    expect(second.body.data.updatedAt).toBe(firstUpdatedAt);
+
+    const logs = await testPrisma.auditLog.findMany({ where: { entityType: 'SETTING' } });
+    expect(logs).toHaveLength(1);
   });
 
   it('PUT rejects out-of-range values with a 400', async () => {

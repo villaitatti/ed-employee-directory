@@ -841,7 +841,7 @@ export function EmployeeForm({
             <p className="eyebrow">{t('nav.employees')}</p>
             <h3>{draft.id ? `${draft.lastName} ${draft.firstName}` : t('actions.createEmployee')}</h3>
           </div>
-          <button className="modal-close" type="button" onClick={requestClose} aria-label={t('actions.cancel')}>
+          <button className="modal-close" type="button" onClick={requestClose} aria-label={t('actions.close')}>
             <X size={18} />
           </button>
         </header>
@@ -1195,7 +1195,7 @@ export function DepartmentForm({
             <p className="eyebrow">{t('nav.departments')}</p>
             <h3>{draft.id ? draft.name : t('actions.createDepartment')}</h3>
           </div>
-          <button className="modal-close" type="button" onClick={requestClose} aria-label={t('actions.cancel')}>
+          <button className="modal-close" type="button" onClick={requestClose} aria-label={t('actions.close')}>
             <X size={18} />
           </button>
         </header>
@@ -1497,12 +1497,19 @@ export function SettingsPage() {
       </div>
 
       {settings.isError ? <QueryError error={settings.error} onRetry={() => void settings.refetch()} /> : null}
+      {loaded?.malformed ? (
+        <p className="form-warning" role="alert">
+          {t('settings.corruptWarning')}
+        </p>
+      ) : null}
 
       <form
         className="settings-card"
         onSubmit={(event) => {
           event.preventDefault();
-          savePolicy.mutate();
+          // Table-wide write: confirm before recalculating every non-confirmed
+          // employee's projected retirement date.
+          if (window.confirm(t('settings.confirmRecalc'))) savePolicy.mutate();
         }}
       >
         <p className="settings-description">{t('settings.description')}</p>

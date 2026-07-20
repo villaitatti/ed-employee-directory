@@ -43,6 +43,7 @@ describe('getRetirementSetting', () => {
     expect(await getRetirementSetting(reader)).toEqual({
       retirementPolicy: { years: 67, months: 3 },
       updatedAt: updatedAt.toISOString(),
+      malformed: false,
     });
   });
 
@@ -50,6 +51,14 @@ describe('getRetirementSetting', () => {
     expect(await getRetirementSetting(fakeReader(null))).toEqual({
       retirementPolicy: DEFAULT_RETIREMENT_POLICY,
       updatedAt: null,
+      malformed: false,
     });
+  });
+
+  it('flags a stored row that fails to parse as malformed', async () => {
+    const reader = fakeReader({ value: { years: 'oops' }, updatedAt: new Date() });
+    const setting = await getRetirementSetting(reader);
+    expect(setting.malformed).toBe(true);
+    expect(setting.retirementPolicy).toEqual(DEFAULT_RETIREMENT_POLICY);
   });
 });

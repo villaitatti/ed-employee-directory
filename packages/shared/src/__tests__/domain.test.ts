@@ -295,7 +295,7 @@ describe('settingsSchema', () => {
         retirementPolicy: { years: 67, months: 3 },
         updatedAt: null,
       })
-    ).toEqual({ retirementPolicy: { years: 67, months: 3 }, updatedAt: null });
+    ).toEqual({ retirementPolicy: { years: 67, months: 3 }, updatedAt: null, malformed: false });
   });
 
   it('accepts an ISO updatedAt timestamp', () => {

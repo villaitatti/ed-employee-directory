@@ -458,6 +458,17 @@ adminRouter.put(
         before.retirementPolicy.years === policy.years &&
         before.retirementPolicy.months === policy.months;
 
+      // A no-op save: don't bump the Setting row's updatedAt or write a bogus
+      // "UPDATE ... recalculatedEmployees: 0" audit entry for a policy that
+      // didn't actually change.
+      if (unchanged) {
+        return {
+          retirementPolicy: before.retirementPolicy,
+          updatedAt: before.updatedAt,
+          recalculatedEmployees: 0,
+        };
+      }
+
       const setting = await tx.setting.upsert({
         where: { key: RETIREMENT_POLICY_KEY },
         create: { key: RETIREMENT_POLICY_KEY, value: policy },
@@ -466,15 +477,11 @@ adminRouter.put(
 
       // Recalculate the projected retirement date for every employee whose date
       // was never manually overridden, so the directory reflects the new law.
-      // Overridden dates are intentionally left untouched. Skip the table-wide
-      // recalc entirely when the policy didn't actually change — a repeated PUT
-      // with the same value shouldn't rescan and relock every employee row.
-      const employees = unchanged
-        ? []
-        : await tx.employee.findMany({
-            where: { retirementDateOverridden: false },
-            select: { id: true, birthDate: true },
-          });
+      // Overridden dates are intentionally left untouched.
+      const employees = await tx.employee.findMany({
+        where: { retirementDateOverridden: false },
+        select: { id: true, birthDate: true },
+      });
       // Group employees by their recomputed date and issue one updateMany per
       // distinct date instead of one UPDATE per employee. The date math stays in
       // calculateRetirementDate (single source of truth); only the writes are

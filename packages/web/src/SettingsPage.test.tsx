@@ -54,6 +54,7 @@ describe('SettingsPage', () => {
         jsonResponse({ data: { retirementPolicy: { years: 68, months: 0 }, updatedAt: '2026-06-05T00:00:00.000Z' } })
       );
     vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     const user = userEvent.setup();
     renderWithProviders(<SettingsPage />);
@@ -91,6 +92,7 @@ describe('SettingsPage', () => {
         jsonResponse({ error: { code: 'VALIDATION_ERROR', message: 'The request did not pass validation.' } }, 400)
       );
     vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     const user = userEvent.setup();
     renderWithProviders(<SettingsPage />);
