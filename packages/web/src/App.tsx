@@ -25,7 +25,6 @@ import {
   DEFAULT_WEEKLY_SCHEDULE_MINUTES,
   EMPLOYEE_STATUSES,
   WEEKDAY_KEYS,
-  WEEKDAY_LABELS_IT,
   expectedWeeklyMinutesForFte,
   formatSessantesimiMinutes,
   parseFteInput,
@@ -317,6 +316,86 @@ function useDepartments(api: ReturnType<typeof createApiClient>) {
   return useQuery({ queryKey: ['departments'], queryFn: api.departments });
 }
 
+/** Debounce a rapidly-changing value so keystrokes don't fire a query each. */
+function useDebounced<T>(value: T, delayMs = 250): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const handle = window.setTimeout(() => setDebounced(value), delayMs);
+    return () => window.clearTimeout(handle);
+  }, [value, delayMs]);
+  return debounced;
+}
+
+/** Visible, retryable banner for a failed data load — otherwise query failures
+ *  (including an expired session) render as a silently empty table. */
+function QueryError({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+  const { t } = useTranslation();
+  const message = error instanceof Error && error.message ? error.message : t('copy.loadError');
+  return (
+    <div className="data-error" role="alert">
+      <span>{message}</span>
+      <button type="button" className="button ghost" onClick={onRetry}>
+        {t('actions.retry')}
+      </button>
+    </div>
+  );
+}
+
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Modal-dialog behavior for an overlay form: locks body scroll, closes on
+ * Escape, traps Tab focus inside the dialog, and restores focus to the trigger
+ * element on close. Returns a ref to attach to the dialog element. Initial focus
+ * is left to an `autoFocus` field when present; otherwise the first focusable is
+ * focused.
+ */
+function useModalDialog(requestClose: () => void) {
+  const dialogRef = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const focusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR) ?? []);
+
+    if (dialog && !dialog.contains(document.activeElement)) {
+      (focusable()[0] ?? dialog).focus();
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        requestClose();
+        return;
+      }
+      if (event.key !== 'Tab' || !dialog) return;
+      const elements = focusable();
+      if (elements.length === 0) {
+        event.preventDefault();
+        return;
+      }
+      const first = elements[0]!;
+      const last = elements[elements.length - 1]!;
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || !dialog.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || !dialog.contains(active))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = '';
+      previouslyFocused?.focus?.();
+    };
+  }, [requestClose]);
+  return dialogRef;
+}
+
 function Shell() {
   const { t, i18n } = useTranslation();
   const auth = useEdAuth();
@@ -409,7 +488,7 @@ function Shell() {
             </div>
           </div>
           <div className="topbar-actions">
-            <button className="icon-button" type="button" onClick={toggleLanguage} title="Language">
+            <button className="icon-button" type="button" onClick={toggleLanguage} title={t('actions.language')}>
               <Languages size={18} />
               <span>{i18n.language.toUpperCase()}</span>
             </button>
@@ -419,7 +498,7 @@ function Shell() {
           </div>
         </header>
         <div className="workbench">
-          <nav className="sidebar" aria-label="Primary">
+          <nav className="sidebar" aria-label={t('nav.primary')}>
             <NavLink to="/employees">
               <UsersRound size={18} />
               {t('nav.employees')}
@@ -467,15 +546,16 @@ function EmployeesPage() {
   const [filters, setFilters] = useState({ q: '', status: '', departmentId: '' });
   const [draft, setDraft] = useState<EmployeeDraft | null>(null);
   const departments = useDepartments(api);
+  const debouncedQ = useDebounced(filters.q);
   const employeeOptions = useQuery({
     queryKey: ['employee-options'],
     queryFn: () => api.employeeOptions(),
   });
   const employees = useQuery({
-    queryKey: ['employees', filters],
+    queryKey: ['employees', debouncedQ, filters.status, filters.departmentId],
     queryFn: () =>
-      api.employees({
-        q: filters.q || undefined,
+      api.allEmployees({
+        q: debouncedQ || undefined,
         status: filters.status || undefined,
         departmentId: filters.departmentId || undefined,
       }),
@@ -509,24 +589,29 @@ function EmployeesPage() {
     },
     onSuccess: () => {
       setDraft(null);
-      toast.success(t('actions.save'));
+      toast.success(t('copy.saved'));
       void queryClient.invalidateQueries({ queryKey: ['employees'] });
       void queryClient.invalidateQueries({ queryKey: ['employee-options'] });
       void queryClient.invalidateQueries({ queryKey: ['audit'] });
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : 'Error'),
+    onError: (error) => toast.error(error instanceof Error ? error.message : t('copy.error')),
   });
 
   const deleteEmployee = useMutation({
     mutationFn: api.deleteEmployee,
     onSuccess: () => {
-      toast.success(t('actions.delete'));
+      toast.success(t('copy.deleted'));
       void queryClient.invalidateQueries({ queryKey: ['employees'] });
       void queryClient.invalidateQueries({ queryKey: ['employee-options'] });
       void queryClient.invalidateQueries({ queryKey: ['audit'] });
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : 'Error'),
+    onError: (error) => toast.error(error instanceof Error ? error.message : t('copy.error')),
   });
+
+  const confirmDeleteEmployee = (employee: Employee) => {
+    if (deleteEmployee.isPending) return;
+    if (window.confirm(t('copy.confirmDeleteEmployee'))) deleteEmployee.mutate(employee.id);
+  };
 
   const exportEmployees = async () => {
     try {
@@ -544,7 +629,7 @@ function EmployeesPage() {
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 0);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error');
+      toast.error(error instanceof Error ? error.message : t('copy.error'));
     }
   };
 
@@ -616,11 +701,11 @@ function EmployeesPage() {
               <th>{t('fields.weeklyTotal')}</th>
               <th>{t('fields.approvalWorkflow')}</th>
               <th>{t('fields.retirementDate')}</th>
-              <th aria-label="Actions" />
+              <th aria-label={t('fields.actions')} />
             </tr>
           </thead>
           <tbody>
-            {employees.data?.data.map((employee) => (
+            {employees.data?.map((employee) => (
               <tr key={employee.id}>
                 <td>{employee.employeeNumber}</td>
                 <td>{employee.lastName}</td>
@@ -636,9 +721,16 @@ function EmployeesPage() {
                 <td>{formatTableDate(employee.retirementDate)}</td>
                 <td className="row-actions">
                   <button className="text-button" type="button" onClick={() => setDraft(toEmployeeDraft(employee))}>
-                    Edit
+                    {t('actions.edit')}
                   </button>
-                  <button className="icon-danger" type="button" onClick={() => deleteEmployee.mutate(employee.id)} title={t('actions.delete')}>
+                  <button
+                    className="icon-danger"
+                    type="button"
+                    onClick={() => confirmDeleteEmployee(employee)}
+                    disabled={deleteEmployee.isPending}
+                    title={t('actions.delete')}
+                    aria-label={t('actions.delete')}
+                  >
                     <Trash2 size={16} />
                   </button>
                 </td>
@@ -646,7 +738,8 @@ function EmployeesPage() {
             ))}
           </tbody>
         </table>
-        {!employees.isLoading && employees.data?.data.length === 0 ? (
+        {employees.isError ? <QueryError error={employees.error} onRetry={() => void employees.refetch()} /> : null}
+        {!employees.isLoading && !employees.isError && employees.data?.length === 0 ? (
           <p className="empty-state">{t('copy.emptyEmployees')}</p>
         ) : null}
       </div>
@@ -693,6 +786,14 @@ export function EmployeeForm({
   const setApprovalRoleIds = (key: keyof EmployeeDraft['approvalRoleIds'], value: string[]) => {
     onChange({ ...draft, approvalRoleIds: { ...draft.approvalRoleIds, [key]: value } });
   };
+  const toggleRetirementOverride = (checked: boolean) => {
+    // Unchecking recalculates the date from the birth date on save — warn before
+    // discarding a date that was previously confirmed.
+    if (!checked && draft.retirementDateOverridden && draft.retirementDate) {
+      if (!window.confirm(t('copy.confirmUnconfirmRetirement'))) return;
+    }
+    set('retirementDateOverridden', checked);
+  };
 
   const approverOptions = employeeOptions.filter((option) => option.id !== draft.id);
   const substituteOptions = approverOptions.filter((option) => option.canBeSubstituteResponsible);
@@ -713,17 +814,7 @@ export function EmployeeForm({
     onCancel();
   }, [isDirty, onCancel, t]);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') requestClose();
-    };
-    document.addEventListener('keydown', onKeyDown);
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', onKeyDown);
-      document.body.style.overflow = '';
-    };
-  }, [requestClose]);
+  const dialogRef = useModalDialog(requestClose);
 
   return (
     <div
@@ -734,6 +825,8 @@ export function EmployeeForm({
       }}
     >
       <form
+        ref={dialogRef}
+        tabIndex={-1}
         className="modal-dialog"
         role="dialog"
         aria-modal="true"
@@ -758,7 +851,7 @@ export function EmployeeForm({
             <legend>{t('sections.identity')}</legend>
             <div className="form-grid">
               <Field label={t('fields.employeeNumber')}>
-                <input required inputMode="numeric" value={draft.employeeNumber} onChange={(e) => set('employeeNumber', e.target.value)} />
+                <input required autoFocus inputMode="numeric" value={draft.employeeNumber} onChange={(e) => set('employeeNumber', e.target.value)} />
               </Field>
               <Field label={t('fields.department')}>
                 <select required value={draft.departmentId} onChange={(e) => set('departmentId', e.target.value)}>
@@ -807,6 +900,7 @@ export function EmployeeForm({
                 <div className="inline-field">
                   <DateInput
                     required={draft.retirementDateOverridden}
+                    disabled={!draft.retirementDateOverridden}
                     value={draft.retirementDate}
                     onChange={(value) => set('retirementDate', value)}
                   />
@@ -814,7 +908,7 @@ export function EmployeeForm({
                     <input
                       type="checkbox"
                       checked={draft.retirementDateOverridden}
-                      onChange={(e) => set('retirementDateOverridden', e.target.checked)}
+                      onChange={(e) => toggleRetirementOverride(e.target.checked)}
                     />
                     {t('actions.confirmRetirementDate')}
                   </label>
@@ -903,7 +997,7 @@ export function EmployeeForm({
             <legend>{t('sections.weeklySchedule')}</legend>
             <div className="weekday-grid">
               {WEEKDAY_KEYS.map((key) => (
-                <Field key={key} label={WEEKDAY_LABELS_IT[key]}>
+                <Field key={key} label={t(`weekday.${key}`)}>
                   <input
                     required
                     inputMode="decimal"
@@ -960,26 +1054,31 @@ function DepartmentsPage() {
       input.id ? api.updateDepartment(input.id, { name: input.name }) : api.createDepartment({ name: input.name }),
     onSuccess: () => {
       setDraft(null);
-      toast.success(t('actions.save'));
+      toast.success(t('copy.saved'));
       void queryClient.invalidateQueries({ queryKey: ['departments'] });
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : 'Error'),
+    onError: (error) => toast.error(error instanceof Error ? error.message : t('copy.error')),
   });
   const deleteDepartment = useMutation({
     mutationFn: api.deleteDepartment,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['departments'] });
-      toast.success(t('actions.delete'));
+      toast.success(t('copy.deleted'));
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : 'Error'),
+    onError: (error) => toast.error(error instanceof Error ? error.message : t('copy.error')),
   });
+
+  const confirmDeleteDepartment = (department: Department) => {
+    if (deleteDepartment.isPending) return;
+    if (window.confirm(t('copy.confirmDeleteDepartment'))) deleteDepartment.mutate(department.id);
+  };
 
   return (
     <section className="page-grid">
       <div className="section-heading">
         <div>
           <p className="eyebrow">{t('nav.departments')}</p>
-          <h2>{t('copy.emptyDepartments')}</h2>
+          <h2>{t('copy.departmentsSubtitle')}</h2>
         </div>
         <div className="action-row">
           <button className="button primary" type="button" onClick={() => setDraft(emptyDepartmentDraft)}>
@@ -993,8 +1092,8 @@ function DepartmentsPage() {
           <thead>
             <tr>
               <th>{t('fields.department')}</th>
-              <th>Updated</th>
-              <th aria-label="Actions" />
+              <th>{t('fields.updated')}</th>
+              <th aria-label={t('fields.actions')} />
             </tr>
           </thead>
           <tbody>
@@ -1008,9 +1107,16 @@ function DepartmentsPage() {
                     type="button"
                     onClick={() => setDraft({ id: department.id, name: department.name })}
                   >
-                    Edit
+                    {t('actions.edit')}
                   </button>
-                  <button className="icon-danger" type="button" onClick={() => deleteDepartment.mutate(department.id)}>
+                  <button
+                    className="icon-danger"
+                    type="button"
+                    onClick={() => confirmDeleteDepartment(department)}
+                    disabled={deleteDepartment.isPending}
+                    title={t('actions.delete')}
+                    aria-label={t('actions.delete')}
+                  >
                     <Trash2 size={16} />
                   </button>
                 </td>
@@ -1018,6 +1124,12 @@ function DepartmentsPage() {
             ))}
           </tbody>
         </table>
+        {departments.isError ? (
+          <QueryError error={departments.error} onRetry={() => void departments.refetch()} />
+        ) : null}
+        {!departments.isLoading && !departments.isError && departments.data?.length === 0 ? (
+          <p className="empty-state">{t('copy.emptyDepartments')}</p>
+        ) : null}
       </div>
 
       {draft ? (
@@ -1056,17 +1168,7 @@ export function DepartmentForm({
     onCancel();
   }, [isDirty, onCancel, t]);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') requestClose();
-    };
-    document.addEventListener('keydown', onKeyDown);
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', onKeyDown);
-      document.body.style.overflow = '';
-    };
-  }, [requestClose]);
+  const dialogRef = useModalDialog(requestClose);
 
   return (
     <div
@@ -1077,6 +1179,8 @@ export function DepartmentForm({
       }}
     >
       <form
+        ref={dialogRef}
+        tabIndex={-1}
         className="modal-dialog"
         role="dialog"
         aria-modal="true"
@@ -1130,27 +1234,41 @@ function ImportPage() {
   const { t } = useTranslation();
   const api = useApi();
   const queryClient = useQueryClient();
+  const departments = useDepartments(api);
+  const departmentNameById = useMemo(
+    () => new Map((departments.data ?? []).map((department) => [department.id, department.name])),
+    [departments.data]
+  );
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [selectedRows, setSelectedRows] = useState<number[]>([]);
+
+  // Discard any previous preview when the operator picks a different file, so
+  // Commit can never submit the earlier file's batch.
+  const chooseFile = (next: File | null) => {
+    setFile(next);
+    setPreview(null);
+    setSelectedRows([]);
+  };
+
   const previewImport = useMutation({
     mutationFn: async () => {
-      if (!file) throw new Error('Excel file required.');
+      if (!file) throw new Error(t('copy.excelFileRequired'));
       return api.previewImport(file);
     },
     onSuccess: (data) => {
       setPreview(data);
       setSelectedRows(data.rows.filter((row) => row.selected).map((row) => row.rowNumber));
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : 'Error'),
+    onError: (error) => toast.error(error instanceof Error ? error.message : t('copy.error')),
   });
   const commitImport = useMutation({
     mutationFn: async () => {
-      if (!preview) throw new Error('Preview required.');
+      if (!preview) throw new Error(t('copy.previewRequired'));
       return api.commitImport(preview.batchId, selectedRows);
     },
     onSuccess: (result) => {
-      toast.success(`${result.data.committed.length} rows committed`);
+      toast.success(t('copy.rowsCommitted', { count: result.data.committed.length }));
       setPreview(null);
       setSelectedRows([]);
       setFile(null);
@@ -1158,7 +1276,7 @@ function ImportPage() {
       void queryClient.invalidateQueries({ queryKey: ['employee-options'] });
       void queryClient.invalidateQueries({ queryKey: ['audit'] });
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : 'Error'),
+    onError: (error) => toast.error(error instanceof Error ? error.message : t('copy.error')),
   });
 
   return (
@@ -1179,7 +1297,7 @@ function ImportPage() {
         <input
           type="file"
           accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+          onChange={(event) => chooseFile(event.target.files?.[0] ?? null)}
         />
         <button className="button primary" type="submit" disabled={!file || previewImport.isPending}>
           <FileCheck2 size={16} />
@@ -1189,7 +1307,7 @@ function ImportPage() {
       {preview ? (
         <div className="data-surface">
           <div className="table-topline">
-            <strong>{preview.rows.length} rows</strong>
+            <strong>{t('copy.rowsCount', { count: preview.rows.length })}</strong>
             <button
               className="button primary"
               type="button"
@@ -1203,13 +1321,13 @@ function ImportPage() {
           <table>
             <thead>
               <tr>
-                <th aria-label="Select" />
-                <th>Row</th>
+                <th aria-label={t('fields.select')} />
+                <th>{t('fields.row')}</th>
                 <th>{t('fields.employeeNumber')}</th>
                 <th>{t('fields.lastName')}</th>
                 <th>{t('fields.department')}</th>
-                <th>Action</th>
-                <th>Errors</th>
+                <th>{t('fields.action')}</th>
+                <th>{t('fields.errors')}</th>
               </tr>
             </thead>
             <tbody>
@@ -1232,7 +1350,11 @@ function ImportPage() {
                   <td>{row.rowNumber}</td>
                   <td>{row.normalized?.employeeNumber}</td>
                   <td>{row.normalized?.lastName}</td>
-                  <td>{row.normalized?.departmentId}</td>
+                  <td>
+                    {row.normalized?.departmentId
+                      ? departmentNameById.get(row.normalized.departmentId) ?? row.normalized.departmentId
+                      : ''}
+                  </td>
                   <td>{row.proposedAction}</td>
                   <td>{row.errors.join(' ')}</td>
                 </tr>
@@ -1249,9 +1371,10 @@ function AuditPage() {
   const { t } = useTranslation();
   const api = useApi();
   const [employeeNumber, setEmployeeNumber] = useState('');
+  const debouncedEmployeeNumber = useDebounced(employeeNumber);
   const audit = useQuery({
-    queryKey: ['audit', employeeNumber],
-    queryFn: () => api.auditLogs(employeeNumber || undefined),
+    queryKey: ['audit', debouncedEmployeeNumber],
+    queryFn: () => api.auditLogs(debouncedEmployeeNumber || undefined),
   });
 
   return (
@@ -1325,6 +1448,7 @@ function AuditPage() {
             })}
           </tbody>
         </table>
+        {audit.isError ? <QueryError error={audit.error} onRetry={() => void audit.refetch()} /> : null}
       </div>
     </section>
   );
@@ -1360,7 +1484,7 @@ export function SettingsPage() {
       void queryClient.invalidateQueries({ queryKey: ['employees'] });
       void queryClient.invalidateQueries({ queryKey: ['audit'] });
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : 'Error'),
+    onError: (error) => toast.error(error instanceof Error ? error.message : t('copy.error')),
   });
 
   return (
@@ -1371,6 +1495,8 @@ export function SettingsPage() {
           <h2>{t('settings.title')}</h2>
         </div>
       </div>
+
+      {settings.isError ? <QueryError error={settings.error} onRetry={() => void settings.refetch()} /> : null}
 
       <form
         className="settings-card"
@@ -1525,18 +1651,28 @@ function DateInput({
   value,
   onChange,
   required,
+  disabled,
 }: {
   value: string;
   onChange: (value: string) => void;
   required?: boolean;
+  disabled?: boolean;
 }) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState(formatFormDate(value));
+  // Remember what we last pushed upward so an external value change (a different
+  // record, a reset) reformats the field, but our own in-progress edits do not
+  // — otherwise typing "1/5/2024" instantly rewrites to "01/05/2024" and jumps
+  // the caret to the end.
+  const lastEmitted = useRef(value);
   const invalid = text.trim() !== '' && parseFormDate(text) === null;
 
   useEffect(() => {
-    setText(formatFormDate(value));
+    if (value !== lastEmitted.current) {
+      lastEmitted.current = value;
+      setText(formatFormDate(value));
+    }
   }, [value]);
 
   useEffect(() => {
@@ -1546,17 +1682,21 @@ function DateInput({
   const commit = (next: string) => {
     setText(next);
     const parsed = parseFormDate(next);
-    if (parsed !== null) onChange(parsed);
+    if (parsed !== null) {
+      lastEmitted.current = parsed;
+      onChange(parsed);
+    }
   };
 
   return (
     <input
       ref={inputRef}
       required={required}
+      disabled={disabled}
       type="text"
       inputMode="numeric"
       placeholder={t('fields.datePlaceholder')}
-      pattern="\\d{1,2}/\\d{1,2}/\\d{4}"
+      pattern="\d{1,2}/\d{1,2}/\d{4}"
       aria-invalid={invalid}
       value={text}
       onChange={(event) => commit(event.target.value)}

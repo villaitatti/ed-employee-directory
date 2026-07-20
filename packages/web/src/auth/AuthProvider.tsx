@@ -1,5 +1,5 @@
 import { Auth0Provider, useAuth0 } from '@auth0/auth0-react';
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useMemo, type ReactNode } from 'react';
 
 type EdUser = {
   name: string | undefined;
@@ -50,23 +50,40 @@ function envValue(key: string): string {
   return import.meta.env[key] ?? '';
 }
 
+function currentReturnTo(): string {
+  return window.location.pathname + window.location.search;
+}
+
 function AuthBridge({ children }: { children: ReactNode }) {
-  const auth0 = useAuth0();
-  const value: EdAuthContextValue = {
-    isLoading: auth0.isLoading,
-    isAuthenticated: auth0.isAuthenticated,
-    user: auth0.user ? { name: auth0.user.name, email: auth0.user.email } : undefined,
-    error: auth0.error,
-    getAccessToken: async () => auth0.getAccessTokenSilently(),
-    login: async () => {
-      clearSignedOut();
-      await auth0.loginWithRedirect();
-    },
-    logout: () => {
-      markSignedOut();
-      auth0.logout({ logoutParams: { returnTo: window.location.origin } });
-    },
-  };
+  const { isLoading, isAuthenticated, user, error, getAccessTokenSilently, loginWithRedirect, logout } = useAuth0();
+
+  const getAccessToken = useCallback(() => getAccessTokenSilently(), [getAccessTokenSilently]);
+  const login = useCallback(async () => {
+    clearSignedOut();
+    // Preserve the deep link so a visitor sent to Auth0 from e.g. /audit lands
+    // back on /audit rather than the default landing route.
+    await loginWithRedirect({ appState: { returnTo: currentReturnTo() } });
+  }, [loginWithRedirect]);
+  const doLogout = useCallback(() => {
+    markSignedOut();
+    logout({ logoutParams: { returnTo: window.location.origin } });
+  }, [logout]);
+
+  // Memoize so consumers (and useApi's memoized client) don't rebuild on every
+  // parent render.
+  const value = useMemo<EdAuthContextValue>(
+    () => ({
+      isLoading,
+      isAuthenticated,
+      user: user ? { name: user.name, email: user.email } : undefined,
+      error,
+      getAccessToken,
+      login,
+      logout: doLogout,
+    }),
+    [isLoading, isAuthenticated, user, error, getAccessToken, login, doLogout]
+  );
+
   return <EdAuthContext.Provider value={value}>{children}</EdAuthContext.Provider>;
 }
 
@@ -93,6 +110,15 @@ export function EdAuthProvider({ children }: { children: ReactNode }) {
         audience: envValue('VITE_AUTH0_AUDIENCE'),
       }}
       cacheLocation="localstorage"
+      onRedirectCallback={(appState) => {
+        // Restore the pre-login deep link captured in login()'s appState.
+        const returnTo = appState?.returnTo;
+        window.history.replaceState(
+          {},
+          '',
+          typeof returnTo === 'string' && returnTo.startsWith('/') ? returnTo : window.location.pathname
+        );
+      }}
     >
       <AuthBridge>{children}</AuthBridge>
     </Auth0Provider>
