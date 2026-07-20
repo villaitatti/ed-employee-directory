@@ -5,8 +5,10 @@ services:
       POSTGRES_DB: ed_employee_directory
       POSTGRES_USER: ed
       POSTGRES_HOST_AUTH_METHOD: trust
+    # Bind to loopback only so the passwordless (trust-auth) dev database is not
+    # reachable from the LAN/VPN.
     ports:
-      - "55433:5432"
+      - "127.0.0.1:55433:5432"
     volumes:
       - ed_dev_pgdata:/var/lib/postgresql/data
     healthcheck:
