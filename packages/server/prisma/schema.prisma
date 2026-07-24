@@ -99,6 +99,7 @@ model Employee {
   contractType                  ContractType
   tfr                           TfrOption                    @default(I_TATTI)
   status                        EmployeeStatus
+  canBeResponsible              Boolean                      @default(false)
   canBeSubstituteResponsible    Boolean                      @default(false)
   mondayMinutes                 Int                          @default(450)
   tuesdayMinutes                Int                          @default(450)
@@ -113,6 +114,7 @@ model Employee {
   @@index([lastName, firstName])
   @@index([departmentId])
   @@index([status])
+  @@index([canBeResponsible, status])
   @@index([canBeSubstituteResponsible, status])
   @@index([updatedAt])
 }

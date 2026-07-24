@@ -56,6 +56,7 @@ async function seedApprovers(departmentId?: string) {
       usaCategory: 'EXEMPT',
       contractType: 'INDETERMINATO',
       status: 'ATTIVO',
+      canBeResponsible: true,
     },
   });
   const substitute = await testPrisma.employee.create({
@@ -255,6 +256,9 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
     const department = await testPrisma.department.create({
       data: { name: 'Biblioteca', normalizedName: 'biblioteca' },
     });
+    // Eligible approvers must exist for the requirement to apply — otherwise the
+    // company-bootstrap exception makes the Responsabile optional.
+    await seedApprovers(department.id);
 
     const res = await request(app)
       .post('/api/admin/employees')
@@ -646,10 +650,10 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
       data: { name: 'Biblioteca', normalizedName: 'biblioteca' },
     });
     const csv = [
-      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,TFR,Status,Sostituto Abilitato,Responsabile,Sostituto-Responsabile',
-      `4001,Ada,Uno,${department.name},1985-04-12,2020-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,true,4002,4003`,
-      `4002,Bruno,Due,${department.name},1986-04-12,2020-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,true,4001,4003`,
-      `4003,Carla,Tre,${department.name},1987-04-12,2020-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,true,4001,4002`,
+      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,TFR,Status,Responsabile Abilitato,Sostituto Abilitato,Responsabile,Sostituto-Responsabile',
+      `4001,Ada,Uno,${department.name},1985-04-12,2020-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,true,true,4002,4003`,
+      `4002,Bruno,Due,${department.name},1986-04-12,2020-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,true,true,4001,4003`,
+      `4003,Carla,Tre,${department.name},1987-04-12,2020-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,true,true,4001,4002`,
     ].join('\n');
 
     const preview = await request(app)
@@ -675,10 +679,14 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
     const department = await testPrisma.department.create({
       data: { name: 'Biblioteca', normalizedName: 'biblioteca' },
     });
+    // Existing eligible approvers so the "must have a Responsabile" rule applies
+    // (past the company-bootstrap exception): this is what makes row 4102 — which
+    // references no one — an invalid, non-importable row that 4101 then depends on.
+    await seedApprovers(department.id);
     const csv = [
-      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,TFR,Status,Sostituto Abilitato,Responsabile,Sostituto-Responsabile',
-      `4101,Ada,Uno,${department.name},1985-04-12,2020-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,true,4102,4102`,
-      `4102,Bruno,Due,${department.name},1986-04-12,2020-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,true,,`,
+      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,TFR,Status,Responsabile Abilitato,Sostituto Abilitato,Responsabile,Sostituto-Responsabile',
+      `4101,Ada,Uno,${department.name},1985-04-12,2020-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,true,true,4102,4102`,
+      `4102,Bruno,Due,${department.name},1986-04-12,2020-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,true,true,,`,
     ].join('\n');
 
     const preview = await request(app)

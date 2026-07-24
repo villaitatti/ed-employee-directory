@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DepartmentForm, emptyDepartmentDraft } from './App.js';
 import { renderWithProviders } from './test/render.js';
@@ -143,16 +143,15 @@ describe('DepartmentForm modal', () => {
       />
     );
 
-    // Confirm dialog returns false → close is cancelled.
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    // Cancelling the Mantine confirmation keeps the form open.
     await user.keyboard('{Escape}');
-    expect(confirmSpy).toHaveBeenCalled();
+    const confirmation = await screen.findByRole('dialog', { name: 'Conferma richiesta' });
+    await user.click(within(confirmation).getByRole('button', { name: 'Annulla' }));
     expect(onCancel).not.toHaveBeenCalled();
 
-    // Confirm returns true → close proceeds.
-    confirmSpy.mockReturnValue(true);
+    // Confirming the discard closes the form.
     await user.keyboard('{Escape}');
+    await user.click(await screen.findByRole('button', { name: 'Scarta modifiche' }));
     expect(onCancel).toHaveBeenCalledTimes(1);
-    confirmSpy.mockRestore();
   });
 });

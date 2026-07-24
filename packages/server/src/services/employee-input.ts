@@ -17,6 +17,7 @@ export type ExistingRetirement = {
   retirementDate: string | null;
   retirementDateOverridden: boolean;
   tfr?: TfrOption | null;
+  canBeResponsible?: boolean | null;
   canBeSubstituteResponsible?: boolean | null;
   weeklySchedule?: WeeklyScheduleInput | null;
 };
@@ -56,6 +57,7 @@ export function toEmployeeData(
     contractType: input.contractType,
     tfr: input.tfr ?? existing?.tfr ?? 'I_TATTI',
     status: input.status,
+    canBeResponsible: input.canBeResponsible ?? existing?.canBeResponsible ?? false,
     canBeSubstituteResponsible: input.canBeSubstituteResponsible ?? existing?.canBeSubstituteResponsible ?? false,
     mondayMinutes: weeklySchedule.monday,
     tuesdayMinutes: weeklySchedule.tuesday,

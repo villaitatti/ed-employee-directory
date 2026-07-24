@@ -78,12 +78,24 @@ export const REQUIRED_APPROVER_MESSAGES: Record<RequiredApproverError, string> =
 
 export function missingRequiredApprovers(
   status: EmployeeStatus,
-  counts: { hasResponsabile: boolean; hasSubstitute: boolean }
+  counts: {
+    hasResponsabile: boolean;
+    hasSubstitute: boolean;
+    /**
+     * Whether at least one *other* employee is eligible to be assigned in the
+     * role (active + carrying the matching capability flag). The requirement is
+     * only enforced once such a candidate exists: this is the company-bootstrap
+     * exception — the very first Responsabile / Sostituto-Responsabile can't be
+     * required to have one assigned because there is nobody eligible to pick yet.
+     */
+    responsabileEligibleExists: boolean;
+    substituteEligibleExists: boolean;
+  }
 ): RequiredApproverError[] {
   if (status !== 'ATTIVO') return [];
   const missing: RequiredApproverError[] = [];
-  if (!counts.hasResponsabile) missing.push('RESPONSABILE_REQUIRED');
-  if (!counts.hasSubstitute) missing.push('SOSTITUTO_RESPONSABILE_REQUIRED');
+  if (counts.responsabileEligibleExists && !counts.hasResponsabile) missing.push('RESPONSABILE_REQUIRED');
+  if (counts.substituteEligibleExists && !counts.hasSubstitute) missing.push('SOSTITUTO_RESPONSABILE_REQUIRED');
   return missing;
 }
 
@@ -126,9 +138,19 @@ export async function validateApprovalRoleIds(
     grandfatheredApprovers?: ReadonlySet<string> | undefined;
   }
 ): Promise<void> {
+  const [responsabileEligibleCount, substituteEligibleCount] = await Promise.all([
+    tx.employee.count({
+      where: { status: 'ATTIVO', canBeResponsible: true, employeeNumber: { not: input.employeeNumber } },
+    }),
+    tx.employee.count({
+      where: { status: 'ATTIVO', canBeSubstituteResponsible: true, employeeNumber: { not: input.employeeNumber } },
+    }),
+  ]);
   const missing = missingRequiredApprovers(input.status, {
     hasResponsabile: input.roleIds.responsabileIds.length > 0,
     hasSubstitute: input.roleIds.substituteResponsabileIds.length > 0,
+    responsabileEligibleExists: responsabileEligibleCount > 0,
+    substituteEligibleExists: substituteEligibleCount > 0,
   });
   for (const code of missing) {
     throw new HttpError(400, code, REQUIRED_APPROVER_MESSAGES[code]);
@@ -146,6 +168,7 @@ export async function validateApprovalRoleIds(
       firstName: true,
       lastName: true,
       status: true,
+      canBeResponsible: true,
       canBeSubstituteResponsible: true,
     },
   });
@@ -169,6 +192,13 @@ export async function validateApprovalRoleIds(
         400,
         'APPROVER_MUST_BE_ACTIVE',
         `${approver.firstName} ${approver.lastName} is not an active employee.`
+      );
+    }
+    if (role === 'RESPONSABILE' && !approver.canBeResponsible) {
+      throw new HttpError(
+        400,
+        'APPROVER_NOT_RESPONSABILE_ELIGIBLE',
+        `${approver.firstName} ${approver.lastName} is not marked as Responsabile eligible.`
       );
     }
     if (role === 'SUBSTITUTE_RESPONSABILE' && !approver.canBeSubstituteResponsible) {
@@ -255,6 +285,8 @@ export async function validateEmployeeCanLoseApprovalEligibility(
     employeeId: string;
     currentStatus: EmployeeStatus;
     nextStatus: EmployeeStatus;
+    currentCanBeResponsible: boolean;
+    nextCanBeResponsible: boolean;
     currentCanBeSubstituteResponsible: boolean;
     nextCanBeSubstituteResponsible: boolean;
     /**
@@ -276,6 +308,21 @@ export async function validateEmployeeCanLoseApprovalEligibility(
         409,
         'APPROVER_IN_USE',
         `This employee is used in approval workflows by Employee Numbers ${numbers.join(', ')}. Remove those approval assignments before making the employee inactive.`
+      );
+    }
+  }
+
+  if (input.currentCanBeResponsible && !input.nextCanBeResponsible) {
+    const numbers = await findApprovalReferenceEmployeeNumbers(tx, {
+      approverId: input.employeeId,
+      roles: ['RESPONSABILE'],
+      ignoreSubjectEmployeeNumbers: input.ignoreSubjectEmployeeNumbers,
+    });
+    if (numbers.length > 0) {
+      throw new HttpError(
+        409,
+        'RESPONSABILE_APPROVER_IN_USE',
+        `This employee is used as Responsabile by Employee Numbers ${numbers.join(', ')}. Remove those assignments before disabling Responsabile eligibility.`
       );
     }
   }

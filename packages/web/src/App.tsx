@@ -1,8 +1,15 @@
 import {
+  BadgeCheck,
   Building2,
+  BriefcaseBusiness,
+  CalendarDays,
   ClipboardList,
+  Clock3,
+  ContactRound,
   Download,
   FileCheck2,
+  Gauge,
+  Hash,
   History,
   Languages,
   LogOut,
@@ -10,11 +17,18 @@ import {
   Save,
   Search,
   Settings,
+  ShieldCheck,
   Trash2,
   Upload,
+  UserRound,
+  UserRoundPlus,
   UsersRound,
   X,
 } from 'lucide-react';
+import { ActionIcon, Button, Checkbox, MultiSelect, Pill, Select, Switch, Text, TextInput } from '@mantine/core';
+import { DateInput as MantineDateInput } from '@mantine/dates';
+import { modals } from '@mantine/modals';
+import dayjs from 'dayjs';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
@@ -22,11 +36,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast, Toaster } from 'sonner';
 import {
   CONTRACT_TYPES,
+  DEFAULT_RETIREMENT_POLICY,
   DEFAULT_WEEKLY_SCHEDULE_MINUTES,
   EMPLOYEE_STATUSES,
   WEEKDAY_KEYS,
+  calculateRetirementDate,
   expectedWeeklyMinutesForFte,
   formatSessantesimiMinutes,
+  isValidDateString,
   parseFteInput,
   parseSessantesimiInput,
   RETIREMENT_MONTHS_MAX,
@@ -68,6 +85,7 @@ export type EmployeeDraft = {
   contractType: ContractType;
   tfr: TfrOption;
   status: EmployeeStatus;
+  canBeResponsible: boolean;
   canBeSubstituteResponsible: boolean;
   weeklySchedule: Record<WeekdayKey, string>;
   approvalRoleIds: {
@@ -109,6 +127,7 @@ const auditFieldTranslationKeys: Record<string, string> = {
   contractType: 'fields.contractType',
   tfr: 'fields.tfr',
   status: 'fields.status',
+  canBeResponsible: 'fields.canBeResponsible',
   canBeSubstituteResponsible: 'fields.canBeSubstituteResponsible',
   weeklySchedule: 'sections.weeklySchedule',
   approvalRoles: 'sections.approvalWorkflow',
@@ -146,25 +165,6 @@ function formatTableDateTime(value: string | null | undefined): string {
   if (!value) return '';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : tableDateTimeFormatter.format(date);
-}
-
-function formatFormDate(value: string): string {
-  if (!value) return '';
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return value;
-  return `${match[3]}/${match[2]}/${match[1]}`;
-}
-
-function parseFormDate(value: string): string | null {
-  const trimmed = value.trim();
-  if (!trimmed) return '';
-  const match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed);
-  if (!match) return null;
-  const dayRaw = match[1] ?? '';
-  const monthRaw = match[2] ?? '';
-  const yearRaw = match[3] ?? '';
-  const iso = `${yearRaw}-${monthRaw.padStart(2, '0')}-${dayRaw.padStart(2, '0')}`;
-  return parseDateOnlyToUtc(iso) ? iso : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -251,6 +251,7 @@ export const emptyEmployeeDraft: EmployeeDraft = {
   contractType: 'INDETERMINATO',
   tfr: 'I_TATTI',
   status: 'ATTIVO',
+  canBeResponsible: false,
   canBeSubstituteResponsible: false,
   weeklySchedule: {
     monday: formatSessantesimiMinutes(DEFAULT_WEEKLY_SCHEDULE_MINUTES.monday),
@@ -283,6 +284,7 @@ function toEmployeeDraft(employee: Employee): EmployeeDraft {
     contractType: employee.contractType,
     tfr: employee.tfr,
     status: employee.status,
+    canBeResponsible: employee.canBeResponsible,
     canBeSubstituteResponsible: employee.canBeSubstituteResponsible,
     weeklySchedule: {
       monday: employee.weeklySchedule.monday.display,
@@ -341,8 +343,36 @@ function QueryError({ error, onRetry }: { error: unknown; onRetry: () => void })
   );
 }
 
+function openConfirmation({
+  title,
+  message,
+  confirmLabel,
+  cancelLabel,
+  onConfirm,
+  destructive = false,
+}: {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  cancelLabel: string;
+  onConfirm: () => void;
+  destructive?: boolean;
+}) {
+  modals.openConfirmModal({
+    title,
+    centered: true,
+    radius: 'lg',
+    overlayProps: { backgroundOpacity: 0.55, blur: 4 },
+    transitionProps: { transition: 'pop', duration: 160 },
+    children: <Text size="sm">{message}</Text>,
+    labels: { confirm: confirmLabel, cancel: cancelLabel },
+    ...(destructive ? { confirmProps: { color: 'red' } } : {}),
+    onConfirm,
+  });
+}
+
 const FOCUSABLE_SELECTOR =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  'a[href]:not([tabindex="-1"]), button:not([disabled]):not([tabindex="-1"]), input:not([disabled]):not([type="hidden"]):not([tabindex="-1"]), select:not([disabled]):not([tabindex="-1"]), textarea:not([disabled]):not([tabindex="-1"]), [tabindex]:not([tabindex="-1"])';
 
 /**
  * Modal-dialog behavior for an overlay form: locks body scroll, closes on
@@ -353,6 +383,9 @@ const FOCUSABLE_SELECTOR =
  */
 function useModalDialog(requestClose: () => void) {
   const dialogRef = useRef<HTMLFormElement>(null);
+  const requestCloseRef = useRef(requestClose);
+  requestCloseRef.current = requestClose;
+
   useEffect(() => {
     const dialog = dialogRef.current;
     const previouslyFocused = document.activeElement as HTMLElement | null;
@@ -364,7 +397,7 @@ function useModalDialog(requestClose: () => void) {
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        requestClose();
+        requestCloseRef.current();
         return;
       }
       if (event.key !== 'Tab' || !dialog) return;
@@ -392,7 +425,7 @@ function useModalDialog(requestClose: () => void) {
       document.body.style.overflow = '';
       previouslyFocused?.focus?.();
     };
-  }, [requestClose]);
+  }, []);
   return dialogRef;
 }
 
@@ -581,6 +614,7 @@ function EmployeesPage() {
         contractType: input.contractType,
         tfr: input.tfr,
         status: input.status,
+        canBeResponsible: input.canBeResponsible,
         canBeSubstituteResponsible: input.canBeSubstituteResponsible,
         weeklySchedule,
         approvalRoleIds: input.approvalRoleIds,
@@ -610,7 +644,14 @@ function EmployeesPage() {
 
   const confirmDeleteEmployee = (employee: Employee) => {
     if (deleteEmployee.isPending) return;
-    if (window.confirm(t('copy.confirmDeleteEmployee'))) deleteEmployee.mutate(employee.id);
+    openConfirmation({
+      title: t('copy.confirmationTitle'),
+      message: t('copy.confirmDeleteEmployee'),
+      confirmLabel: t('actions.delete'),
+      cancelLabel: t('actions.cancel'),
+      destructive: true,
+      onConfirm: () => deleteEmployee.mutate(employee.id),
+    });
   };
 
   const exportEmployees = async () => {
@@ -661,30 +702,32 @@ function EmployeesPage() {
             placeholder={t('fields.search')}
           />
         </label>
-        <select
-          value={filters.status}
-          onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value }))}
+        <Select
+          className="toolbar-select"
+          value={filters.status || null}
+          onChange={(value) => setFilters((current) => ({ ...current, status: value ?? '' }))}
           aria-label={t('fields.status')}
-        >
-          <option value="">{t('fields.status')}</option>
-          {EMPLOYEE_STATUSES.map((status) => (
-            <option key={status} value={status}>
-              {t(`status.${status}`)}
-            </option>
-          ))}
-        </select>
-        <select
-          value={filters.departmentId}
-          onChange={(event) => setFilters((current) => ({ ...current, departmentId: event.target.value }))}
+          placeholder={t('fields.status')}
+          data={EMPLOYEE_STATUSES.map((status) => ({ value: status, label: t(`status.${status}`) }))}
+          searchable
+          clearable
+          openOnFocus
+          nothingFoundMessage={t('copy.noOptionsFound')}
+          comboboxProps={{ withinPortal: true, zIndex: 1200, transitionProps: { transition: 'pop', duration: 120 } }}
+        />
+        <Select
+          className="toolbar-select"
+          value={filters.departmentId || null}
+          onChange={(value) => setFilters((current) => ({ ...current, departmentId: value ?? '' }))}
           aria-label={t('fields.department')}
-        >
-          <option value="">{t('fields.department')}</option>
-          {departments.data?.map((department) => (
-            <option key={department.id} value={department.id}>
-              {department.name}
-            </option>
-          ))}
-        </select>
+          placeholder={t('fields.department')}
+          data={(departments.data ?? []).map((department) => ({ value: department.id, label: department.name }))}
+          searchable
+          clearable
+          openOnFocus
+          nothingFoundMessage={t('copy.noOptionsFound')}
+          comboboxProps={{ withinPortal: true, zIndex: 1200, transitionProps: { transition: 'pop', duration: 120 } }}
+        />
       </div>
 
       <div className="data-surface">
@@ -777,6 +820,19 @@ export function EmployeeForm({
   isSaving: boolean;
 }) {
   const { t } = useTranslation();
+  const api = useApi();
+  const settings = useQuery({ queryKey: ['settings'], queryFn: api.settings });
+  const retirementPolicy = settings.data?.retirementPolicy ?? DEFAULT_RETIREMENT_POLICY;
+  const isCreate = !draft.id;
+  const showTerminationDate = !isCreate || draft.status !== 'ATTIVO';
+  const projectedRetirementDate =
+    draft.birthDate && isValidDateString(draft.birthDate)
+      ? calculateRetirementDate(draft.birthDate, retirementPolicy)
+      : '';
+  const retirementDateValue = draft.retirementDateOverridden
+    ? draft.retirementDate
+    : projectedRetirementDate;
+
   const set = <K extends keyof EmployeeDraft>(key: K, value: EmployeeDraft[K]) => {
     onChange({ ...draft, [key]: value });
   };
@@ -786,17 +842,53 @@ export function EmployeeForm({
   const setApprovalRoleIds = (key: keyof EmployeeDraft['approvalRoleIds'], value: string[]) => {
     onChange({ ...draft, approvalRoleIds: { ...draft.approvalRoleIds, [key]: value } });
   };
+  const setStatus = (status: EmployeeStatus) => {
+    // New active employees have no cessation date yet — clear any leftover value
+    // from briefly selecting Cessato during create.
+    if (isCreate && status === 'ATTIVO') {
+      onChange({ ...draft, status, terminationDate: '' });
+      return;
+    }
+    set('status', status);
+  };
   const toggleRetirementOverride = (checked: boolean) => {
     // Unchecking recalculates the date from the birth date on save — warn before
     // discarding a date that was previously confirmed.
     if (!checked && draft.retirementDateOverridden && draft.retirementDate) {
-      if (!window.confirm(t('copy.confirmUnconfirmRetirement'))) return;
+      openConfirmation({
+        title: t('copy.confirmationTitle'),
+        message: t('copy.confirmUnconfirmRetirement'),
+        confirmLabel: t('actions.confirm'),
+        cancelLabel: t('actions.cancel'),
+        onConfirm: () =>
+          onChange({
+            ...draft,
+            retirementDateOverridden: false,
+            retirementDate: projectedRetirementDate,
+          }),
+      });
+      return;
+    }
+    if (checked) {
+      onChange({
+        ...draft,
+        retirementDateOverridden: true,
+        retirementDate: retirementDateValue || projectedRetirementDate,
+      });
+      return;
     }
     set('retirementDateOverridden', checked);
   };
 
   const approverOptions = employeeOptions.filter((option) => option.id !== draft.id);
+  // The line-manager dropdowns only offer people flagged with the matching role
+  // capability (set in the Role capabilities section on each person's own card).
+  const responsabileOptions = approverOptions.filter((option) => option.canBeResponsible);
   const substituteOptions = approverOptions.filter((option) => option.canBeSubstituteResponsible);
+  // Active employees must have a Responsabile — except while bootstrapping, when
+  // nobody is flagged as Responsabile-eligible yet and there is no one to pick.
+  const responsabileRequired = draft.status === 'ATTIVO' && responsabileOptions.length > 0;
+  const missingResponsabile = responsabileRequired && draft.approvalRoleIds.responsabileIds.length === 0;
   const weeklyScheduleMinutes = parseDraftWeeklySchedule(draft.weeklySchedule);
   const weeklyTotal = weeklyScheduleMinutes
     ? WEEKDAY_KEYS.reduce((total, key) => total + weeklyScheduleMinutes[key], 0)
@@ -810,11 +902,26 @@ export function EmployeeForm({
   const isDirty = JSON.stringify(draft) !== JSON.stringify(initialDraft.current);
 
   const requestClose = useCallback(() => {
-    if (isDirty && !window.confirm(t('copy.discardChanges'))) return;
-    onCancel();
+    if (!isDirty) {
+      onCancel();
+      return;
+    }
+    openConfirmation({
+      title: t('copy.confirmationTitle'),
+      message: t('copy.discardChanges'),
+      confirmLabel: t('actions.discard'),
+      cancelLabel: t('actions.cancel'),
+      destructive: true,
+      onConfirm: onCancel,
+    });
   }, [isDirty, onCancel, t]);
 
   const dialogRef = useModalDialog(requestClose);
+  const comboboxProps = {
+    withinPortal: true,
+    zIndex: 1200,
+    transitionProps: { transition: 'pop' as const, duration: 120 },
+  };
 
   return (
     <div
@@ -827,143 +934,253 @@ export function EmployeeForm({
       <form
         ref={dialogRef}
         tabIndex={-1}
-        className="modal-dialog"
+        className="modal-dialog employee-form-dialog"
         role="dialog"
         aria-modal="true"
         aria-label={draft.id ? `${draft.lastName} ${draft.firstName}` : t('actions.createEmployee')}
         onSubmit={(event) => {
           event.preventDefault();
+          // The Responsabile field renders its own inline requirement hint; block
+          // the save so the server's RESPONSABILE_REQUIRED rule can't reject it.
+          if (missingResponsabile) {
+            toast.error(t('copy.responsabileRequired'));
+            return;
+          }
           onSave();
         }}
       >
-        <header className="modal-header">
-          <div>
-            <p className="eyebrow">{t('nav.employees')}</p>
-            <h3>{draft.id ? `${draft.lastName} ${draft.firstName}` : t('actions.createEmployee')}</h3>
+        <header className="modal-header employee-form-header">
+          <div className="modal-title-group">
+            <span className="modal-title-icon" aria-hidden="true">
+              <UserRoundPlus size={23} />
+            </span>
+            <div className="modal-title-copy">
+              <p className="modal-eyebrow">{t('copy.employeeRecord')}</p>
+              <h3>{draft.id ? `${draft.lastName} ${draft.firstName}` : t('actions.createEmployee')}</h3>
+              <p className="modal-description">{t('copy.employeeFormSubtitle')}</p>
+            </div>
           </div>
-          <button className="modal-close" type="button" onClick={requestClose} aria-label={t('actions.close')}>
+          <ActionIcon
+            className="employee-modal-close"
+            variant="subtle"
+            color="gray"
+            size="lg"
+            radius="md"
+            onClick={requestClose}
+            aria-label={t('actions.close')}
+          >
             <X size={18} />
-          </button>
+          </ActionIcon>
         </header>
 
-        <div className="modal-body">
-          <fieldset className="form-section">
-            <legend>{t('sections.identity')}</legend>
-            <div className="form-grid">
-              <Field label={t('fields.employeeNumber')}>
-                <input required autoFocus inputMode="numeric" value={draft.employeeNumber} onChange={(e) => set('employeeNumber', e.target.value)} />
+        <div className="modal-body employee-form-body">
+          <EmployeeFormSection
+            number="01"
+            icon={<ContactRound />}
+            title={t('sections.identity')}
+            description={t('copy.identitySectionHint')}
+          >
+            <div className="form-grid employee-identity-grid">
+              <Field
+                className="employee-field-compact"
+                icon={<Hash />}
+                label={t('fields.employeeNumber')}
+                required
+              >
+                <TextInput
+                  required
+                  autoFocus
+                  data-autofocus
+                  inputMode="numeric"
+                  aria-label={t('fields.employeeNumber')}
+                  value={draft.employeeNumber}
+                  onChange={(event) => set('employeeNumber', event.currentTarget.value)}
+                />
               </Field>
-              <Field label={t('fields.department')}>
-                <select required value={draft.departmentId} onChange={(e) => set('departmentId', e.target.value)}>
-                  <option value="" />
-                  {departments.map((department) => (
-                    <option key={department.id} value={department.id}>
-                      {department.name}
-                    </option>
-                  ))}
-                </select>
+              <Field icon={<Building2 />} label={t('fields.department')} required>
+                <Select
+                  required
+                  aria-label={t('fields.department')}
+                  placeholder={t('fields.select')}
+                  value={draft.departmentId || null}
+                  onChange={(value) => set('departmentId', value ?? '')}
+                  data={departments.map((department) => ({ value: department.id, label: department.name }))}
+                  searchable
+                  clearable
+                  openOnFocus
+                  nothingFoundMessage={t('copy.noOptionsFound')}
+                  comboboxProps={comboboxProps}
+                />
               </Field>
-              <Field label={t('fields.firstName')}>
-                <input required value={draft.firstName} onChange={(e) => set('firstName', e.target.value)} />
+              <Field icon={<UserRound />} label={t('fields.firstName')} required>
+                <TextInput
+                  required
+                  aria-label={t('fields.firstName')}
+                  value={draft.firstName}
+                  onChange={(event) => set('firstName', event.currentTarget.value)}
+                />
               </Field>
-              <Field label={t('fields.lastName')}>
-                <input required value={draft.lastName} onChange={(e) => set('lastName', e.target.value)} />
+              <Field icon={<UserRound />} label={t('fields.lastName')} required>
+                <TextInput
+                  required
+                  aria-label={t('fields.lastName')}
+                  value={draft.lastName}
+                  onChange={(event) => set('lastName', event.currentTarget.value)}
+                />
               </Field>
-              <Field label={t('fields.birthDate')}>
-                <DateInput required value={draft.birthDate} onChange={(value) => set('birthDate', value)} />
+              <Field icon={<CalendarDays />} label={t('fields.birthDate')} required>
+                <DateInput
+                  required
+                  ariaLabel={t('fields.birthDate')}
+                  value={draft.birthDate}
+                  onChange={(value) => set('birthDate', value)}
+                />
               </Field>
             </div>
-          </fieldset>
+          </EmployeeFormSection>
 
-          <fieldset className="form-section">
-            <legend>{t('sections.employment')}</legend>
-            <div className="form-grid">
-              <Field label={t('fields.hireDate')}>
-                <DateInput value={draft.hireDate} onChange={(value) => set('hireDate', value)} />
-              </Field>
-              <Field label={t('fields.terminationDate')}>
-                <DateInput value={draft.terminationDate} onChange={(value) => set('terminationDate', value)} />
-              </Field>
-              <Field label={t('fields.fte')}>
-                <input required inputMode="decimal" value={draft.fte} onChange={(e) => set('fte', e.target.value)} />
-              </Field>
+          <EmployeeFormSection
+            number="02"
+            icon={<BriefcaseBusiness />}
+            title={t('sections.employment')}
+            description={t('copy.employmentSectionHint')}
+          >
+            <div className="form-grid employee-employment-grid">
               <Field label={t('fields.status')}>
-                <select value={draft.status} onChange={(e) => set('status', e.target.value as EmployeeStatus)}>
-                  {EMPLOYEE_STATUSES.map((option) => (
-                    <option key={option} value={option}>
-                      {t(`status.${option}`)}
-                    </option>
-                  ))}
-                </select>
+                <Select
+                  aria-label={t('fields.status')}
+                  value={draft.status}
+                  onChange={(value) => value && setStatus(value as EmployeeStatus)}
+                  data={EMPLOYEE_STATUSES.map((option) => ({ value: option, label: t(`status.${option}`) }))}
+                  searchable
+                  openOnFocus
+                  allowDeselect={false}
+                  nothingFoundMessage={t('copy.noOptionsFound')}
+                  comboboxProps={comboboxProps}
+                />
               </Field>
-              <Field label={t('fields.retirementDate')} full>
-                <div className="inline-field">
+              <Field icon={<CalendarDays />} label={t('fields.hireDate')}>
+                <DateInput
+                  ariaLabel={t('fields.hireDate')}
+                  value={draft.hireDate}
+                  onChange={(value) => set('hireDate', value)}
+                />
+              </Field>
+              {showTerminationDate ? (
+                <Field icon={<CalendarDays />} label={t('fields.terminationDate')}>
                   <DateInput
+                    ariaLabel={t('fields.terminationDate')}
+                    value={draft.terminationDate}
+                    onChange={(value) => set('terminationDate', value)}
+                  />
+                </Field>
+              ) : null}
+              <Field
+                className="employee-field-compact"
+                icon={<Gauge />}
+                label={t('fields.fte')}
+                hint={t('copy.fteHint')}
+                required
+              >
+                <TextInput
+                  required
+                  inputMode="decimal"
+                  aria-label={t('fields.fte')}
+                  value={draft.fte}
+                  onChange={(event) => set('fte', event.currentTarget.value)}
+                />
+              </Field>
+              <Field
+                className="employee-retirement-field"
+                icon={<CalendarDays />}
+                label={t('fields.retirementDate')}
+                hint={t('copy.retirementDateHint', {
+                  years: retirementPolicy.years,
+                  months: retirementPolicy.months,
+                })}
+                required={draft.retirementDateOverridden}
+                full
+              >
+                <div className="retirement-control">
+                  <DateInput
+                    ariaLabel={t('fields.retirementDate')}
                     required={draft.retirementDateOverridden}
                     disabled={!draft.retirementDateOverridden}
-                    value={draft.retirementDate}
+                    value={retirementDateValue}
                     onChange={(value) => set('retirementDate', value)}
                   />
-                  <label className="checkbox-row">
-                    <input
-                      type="checkbox"
-                      checked={draft.retirementDateOverridden}
-                      onChange={(e) => toggleRetirementOverride(e.target.checked)}
-                    />
-                    {t('actions.confirmRetirementDate')}
-                  </label>
+                  <Switch
+                    checked={draft.retirementDateOverridden}
+                    onChange={(event) => toggleRetirementOverride(event.currentTarget.checked)}
+                    label={t('actions.confirmRetirementDate')}
+                    color="indigo"
+                  />
                 </div>
               </Field>
             </div>
-          </fieldset>
+          </EmployeeFormSection>
 
-          <fieldset className="form-section">
-            <legend>{t('sections.classification')}</legend>
-            <div className="form-grid">
+          <EmployeeFormSection
+            number="03"
+            icon={<BadgeCheck />}
+            title={t('sections.classification')}
+            description={t('copy.classificationSectionHint')}
+          >
+            <div className="form-grid employee-classification-grid">
               <Field label={t('fields.contractType')}>
-                <select value={draft.contractType} onChange={(e) => set('contractType', e.target.value as ContractType)}>
-                  {CONTRACT_TYPES.map((option) => (
-                    <option key={option} value={option}>
-                      {t(`contractType.${option}`)}
-                    </option>
-                  ))}
-                </select>
+                <Select
+                  aria-label={t('fields.contractType')}
+                  value={draft.contractType}
+                  onChange={(value) => value && set('contractType', value as ContractType)}
+                  data={CONTRACT_TYPES.map((option) => ({ value: option, label: t(`contractType.${option}`) }))}
+                  searchable
+                  openOnFocus
+                  allowDeselect={false}
+                  nothingFoundMessage={t('copy.noOptionsFound')}
+                  comboboxProps={comboboxProps}
+                />
               </Field>
-              <Field label={t('fields.usaCategory')}>
-                <select value={draft.usaCategory} onChange={(e) => set('usaCategory', e.target.value as UsaCategory)}>
-                  {USA_CATEGORIES.map((option) => (
-                    <option key={option} value={option}>
-                      {t(`usaCategory.${option}`)}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label={t('fields.tfr')}>
-                <select value={draft.tfr} onChange={(e) => set('tfr', e.target.value as TfrOption)}>
-                  {TFR_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {t(`tfr.${option}`)}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            </div>
-          </fieldset>
-
-          <fieldset className="form-section">
-            <legend>{t('sections.approvalWorkflow')}</legend>
-            <div className="form-grid">
-              <Field label={t('fields.canBeSubstituteResponsible')} full>
-                <label className="checkbox-row">
-                  <input
-                    type="checkbox"
-                    checked={draft.canBeSubstituteResponsible}
-                    onChange={(e) => set('canBeSubstituteResponsible', e.target.checked)}
+              {draft.contractType === 'CONTRATTO_USA' && (
+                <Field label={t('fields.usaCategory')}>
+                  <Select
+                    aria-label={t('fields.usaCategory')}
+                    value={draft.usaCategory}
+                    onChange={(value) => value && set('usaCategory', value as UsaCategory)}
+                    data={USA_CATEGORIES.map((option) => ({ value: option, label: t(`usaCategory.${option}`) }))}
+                    searchable
+                    openOnFocus
+                    allowDeselect={false}
+                    nothingFoundMessage={t('copy.noOptionsFound')}
+                    comboboxProps={comboboxProps}
                   />
-                  {t('fields.canBeSubstituteResponsible')}
-                </label>
-              </Field>
-              <Field label={t('fields.preApprovers')} full>
+                </Field>
+              )}
+              {draft.contractType !== 'CONTRATTO_USA' && (
+                <Field label={t('fields.tfr')}>
+                  <Select
+                    aria-label={t('fields.tfr')}
+                    value={draft.tfr}
+                    onChange={(value) => value && set('tfr', value as TfrOption)}
+                    data={TFR_OPTIONS.map((option) => ({ value: option, label: t(`tfr.${option}`) }))}
+                    searchable
+                    openOnFocus
+                    allowDeselect={false}
+                    nothingFoundMessage={t('copy.noOptionsFound')}
+                    comboboxProps={comboboxProps}
+                  />
+                </Field>
+              )}
+            </div>
+          </EmployeeFormSection>
+
+          <EmployeeFormSection
+            number="04"
+            icon={<ClipboardList />}
+            title={t('sections.approvalWorkflow')}
+            description={t('copy.approvalSectionHint')}
+          >
+            <div className="form-grid employee-approval-grid">
+              <Field label={t('fields.preApprovers')}>
                 <EmployeeMultiSelect
                   label={t('fields.preApprovers')}
                   options={approverOptions}
@@ -972,16 +1189,20 @@ export function EmployeeForm({
                   onChange={(value) => setApprovalRoleIds('preApproverIds', value)}
                 />
               </Field>
-              <Field label={t('fields.responsabili')} full>
+              <Field
+                label={t('fields.responsabili')}
+                required={responsabileRequired}
+                {...(missingResponsabile ? { hint: t('copy.responsabileRequired') } : {})}
+              >
                 <EmployeeMultiSelect
                   label={t('fields.responsabili')}
-                  options={approverOptions}
+                  options={responsabileOptions}
                   labelOptions={employeeOptions}
                   value={draft.approvalRoleIds.responsabileIds}
                   onChange={(value) => setApprovalRoleIds('responsabileIds', value)}
                 />
               </Field>
-              <Field label={t('fields.substituteResponsabili')} full>
+              <Field label={t('fields.substituteResponsabili')}>
                 <EmployeeMultiSelect
                   label={t('fields.substituteResponsabili')}
                   options={substituteOptions}
@@ -991,18 +1212,45 @@ export function EmployeeForm({
                 />
               </Field>
             </div>
-          </fieldset>
+          </EmployeeFormSection>
 
-          <fieldset className="form-section">
-            <legend>{t('sections.weeklySchedule')}</legend>
+          <EmployeeFormSection
+            number="05"
+            icon={<ShieldCheck />}
+            title={t('sections.roleCapabilities')}
+            description={t('copy.roleCapabilitiesSectionHint')}
+          >
+            <div className="approval-switch approval-capabilities">
+              <Switch
+                checked={draft.canBeResponsible}
+                onChange={(event) => set('canBeResponsible', event.currentTarget.checked)}
+                label={t('fields.canBeResponsible')}
+                color="indigo"
+              />
+              <Switch
+                checked={draft.canBeSubstituteResponsible}
+                onChange={(event) => set('canBeSubstituteResponsible', event.currentTarget.checked)}
+                label={t('fields.canBeSubstituteResponsible')}
+                color="indigo"
+              />
+            </div>
+          </EmployeeFormSection>
+
+          <EmployeeFormSection
+            number="06"
+            icon={<Clock3 />}
+            title={t('sections.weeklySchedule')}
+            description={t('copy.weeklySectionHint')}
+          >
             <div className="weekday-grid">
               {WEEKDAY_KEYS.map((key) => (
-                <Field key={key} label={t(`weekday.${key}`)}>
-                  <input
+                <Field key={key} label={t(`weekday.${key}`)} required>
+                  <TextInput
                     required
                     inputMode="decimal"
+                    aria-label={t(`weekday.${key}`)}
                     value={draft.weeklySchedule[key]}
-                    onChange={(event) => setWeeklySchedule(key, event.target.value)}
+                    onChange={(event) => setWeeklySchedule(key, event.currentTarget.value)}
                   />
                 </Field>
               ))}
@@ -1017,17 +1265,21 @@ export function EmployeeForm({
                     })
                   : t('copy.weeklyScheduleTotal', { total: formatSessantesimiMinutes(weeklyTotal) })}
             </p>
-          </fieldset>
+          </EmployeeFormSection>
         </div>
 
-        <footer className="modal-footer">
-          <button className="button ghost" type="button" onClick={requestClose}>
+        <footer className="modal-footer employee-form-footer">
+          <p className="modal-footer-note">
+            <span aria-hidden="true">*</span> {t('copy.requiredFields')}
+          </p>
+          <div className="modal-actions">
+            <Button variant="default" type="button" onClick={requestClose}>
             {t('actions.cancel')}
-          </button>
-          <button className="button primary" type="submit" disabled={isSaving}>
-            <Save size={16} />
-            {t('actions.save')}
-          </button>
+            </Button>
+            <Button type="submit" loading={isSaving} leftSection={<Save size={17} />}>
+              {t('actions.save')}
+            </Button>
+          </div>
         </footer>
       </form>
     </div>
@@ -1070,7 +1322,14 @@ function DepartmentsPage() {
 
   const confirmDeleteDepartment = (department: Department) => {
     if (deleteDepartment.isPending) return;
-    if (window.confirm(t('copy.confirmDeleteDepartment'))) deleteDepartment.mutate(department.id);
+    openConfirmation({
+      title: t('copy.confirmationTitle'),
+      message: t('copy.confirmDeleteDepartment'),
+      confirmLabel: t('actions.delete'),
+      cancelLabel: t('actions.cancel'),
+      destructive: true,
+      onConfirm: () => deleteDepartment.mutate(department.id),
+    });
   };
 
   return (
@@ -1164,8 +1423,18 @@ export function DepartmentForm({
   const isDirty = JSON.stringify(draft) !== JSON.stringify(initialDraft.current);
 
   const requestClose = useCallback(() => {
-    if (isDirty && !window.confirm(t('copy.discardChanges'))) return;
-    onCancel();
+    if (!isDirty) {
+      onCancel();
+      return;
+    }
+    openConfirmation({
+      title: t('copy.confirmationTitle'),
+      message: t('copy.discardChanges'),
+      confirmLabel: t('actions.discard'),
+      cancelLabel: t('actions.cancel'),
+      destructive: true,
+      onConfirm: onCancel,
+    });
   }, [isDirty, onCancel, t]);
 
   const dialogRef = useModalDialog(requestClose);
@@ -1334,13 +1603,13 @@ function ImportPage() {
               {preview.rows.map((row) => (
                 <tr key={row.rowNumber} className={row.errors.length ? 'row-error' : undefined}>
                   <td>
-                    <input
-                      type="checkbox"
+                    <Checkbox
+                      aria-label={`${t('fields.select')} ${row.rowNumber}`}
                       disabled={row.errors.length > 0}
                       checked={selectedRows.includes(row.rowNumber)}
                       onChange={(event) => {
                         setSelectedRows((current) =>
-                          event.target.checked
+                          event.currentTarget.checked
                             ? [...current, row.rowNumber]
                             : current.filter((rowNumber) => rowNumber !== row.rowNumber)
                         );
@@ -1509,7 +1778,13 @@ export function SettingsPage() {
           event.preventDefault();
           // Table-wide write: confirm before recalculating every non-confirmed
           // employee's projected retirement date.
-          if (window.confirm(t('settings.confirmRecalc'))) savePolicy.mutate();
+          openConfirmation({
+            title: t('copy.confirmationTitle'),
+            message: t('settings.confirmRecalc'),
+            confirmLabel: t('actions.confirm'),
+            cancelLabel: t('actions.cancel'),
+            onConfirm: () => savePolicy.mutate(),
+          });
         }}
       >
         <p className="settings-description">{t('settings.description')}</p>
@@ -1589,6 +1864,39 @@ function employeeOptionLabel(option: EmployeeOption): string {
   return `${option.lastName} ${option.firstName} (${option.employeeNumber})`;
 }
 
+function EmployeeFormSection({
+  number,
+  icon,
+  title,
+  description,
+  children,
+}: {
+  number: string;
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <fieldset className="form-section employee-form-section">
+      <legend className="visually-hidden">{title}</legend>
+      <div className="employee-section-heading">
+        <span className="employee-section-number" aria-hidden="true">
+          {number}
+        </span>
+        <span className="employee-section-icon" aria-hidden="true">
+          {icon}
+        </span>
+        <div>
+          <h4>{title}</h4>
+          <p>{description}</p>
+        </div>
+      </div>
+      {children}
+    </fieldset>
+  );
+}
+
 function EmployeeMultiSelect({
   label,
   options,
@@ -1606,120 +1914,152 @@ function EmployeeMultiSelect({
   onChange: (value: string[]) => void;
 }) {
   const { t } = useTranslation();
-  // Render a chip for EVERY selected id, even ones missing from the option list
-  // (an approver who became inactive or lost substitute eligibility after being
-  // assigned). They must stay visible and removable rather than silently
-  // lingering in the payload where the server would reject the save.
   const labelById = new Map(labelOptions.map((option) => [option.id, option]));
-  const available = options.filter((option) => !value.includes(option.id));
+  const data = options.map((option) => ({ value: option.id, label: employeeOptionLabel(option) }));
+
+  // Preserve selected values that are no longer eligible so they remain visible
+  // and removable. Once removed, they disappear from the available data and
+  // cannot be selected again.
+  value.forEach((id) => {
+    if (data.some((option) => option.value === id)) return;
+    const option = labelById.get(id);
+    data.push({
+      value: id,
+      label: option ? employeeOptionLabel(option) : t('copy.ineligibleApprover'),
+    });
+  });
 
   return (
-    <div className="employee-multi-select">
-      {value.length > 0 ? (
-        <div className="selected-employees">
-          {value.map((id) => {
-            const option = labelById.get(id);
-            const text = option ? employeeOptionLabel(option) : t('copy.ineligibleApprover');
-            return (
-              <span className={option ? 'employee-chip' : 'employee-chip employee-chip-invalid'} key={id}>
-                {text}
-                <button
-                  type="button"
-                  onClick={() => onChange(value.filter((selectedId) => selectedId !== id))}
-                  aria-label={`${t('actions.remove')} ${text}`}
-                >
-                  <X size={14} />
-                </button>
-              </span>
-            );
-          })}
-        </div>
-      ) : null}
-      <select
-        aria-label={label}
-        value=""
-        onChange={(event) => {
-          if (!event.target.value) return;
-          onChange([...value, event.target.value]);
-        }}
-      >
-        <option value="">{t('actions.addApprover')}</option>
-        {available.map((option) => (
-          <option key={option.id} value={option.id}>
-            {employeeOptionLabel(option)}
-          </option>
-        ))}
-      </select>
-    </div>
+    <MultiSelect
+      className="employee-multi-select"
+      aria-label={label}
+      placeholder={t('actions.addApprover')}
+      value={value}
+      onChange={onChange}
+      data={data}
+      searchable
+      clearable
+      openOnFocus
+      hidePickedOptions
+      nothingFoundMessage={t('copy.noOptionsFound')}
+      comboboxProps={{ withinPortal: true, zIndex: 1200, transitionProps: { transition: 'pop', duration: 120 } }}
+      renderPill={({ option, onRemove }) => (
+        <Pill
+          withRemoveButton
+          onRemove={() => onRemove?.()}
+          removeButtonProps={{
+            'aria-label': `${t('actions.remove')} ${option.label}`,
+            'aria-hidden': false,
+          }}
+        >
+          {option.label}
+        </Pill>
+      )}
+    />
   );
 }
 
+const DATE_INPUT_DISPLAY_FORMAT = 'DD MMMM YYYY';
+
+/** Day-first formats only — never fall back to browser Date (US month-first). */
+const DATE_INPUT_PARSE_FORMATS = [
+  DATE_INPUT_DISPLAY_FORMAT,
+  'D MMMM YYYY',
+  'DD/MM/YYYY',
+  'D/M/YYYY',
+  'DD-MM-YYYY',
+  'D-M-YYYY',
+  'DD.MM.YYYY',
+  'D.M.YYYY',
+  'YYYY-MM-DD',
+] as const;
+
+function parseEmployeeDateInput(input: string, locale: string): string | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+
+  for (const format of DATE_INPUT_PARSE_FORMATS) {
+    const parsed = dayjs(trimmed, format, locale, true);
+    if (parsed.isValid()) return parsed.format('YYYY-MM-DD');
+  }
+
+  return null;
+}
+
 function DateInput({
+  ariaLabel,
   value,
   onChange,
   required,
   disabled,
 }: {
+  ariaLabel: string;
   value: string;
   onChange: (value: string) => void;
   required?: boolean;
   disabled?: boolean;
 }) {
-  const { t } = useTranslation();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [text, setText] = useState(formatFormDate(value));
-  // Remember what we last pushed upward so an external value change (a different
-  // record, a reset) reformats the field, but our own in-progress edits do not
-  // — otherwise typing "1/5/2024" instantly rewrites to "01/05/2024" and jumps
-  // the caret to the end.
-  const lastEmitted = useRef(value);
-  const invalid = text.trim() !== '' && parseFormDate(text) === null;
-
-  useEffect(() => {
-    if (value !== lastEmitted.current) {
-      lastEmitted.current = value;
-      setText(formatFormDate(value));
-    }
-  }, [value]);
-
-  useEffect(() => {
-    inputRef.current?.setCustomValidity(invalid ? t('fields.dateInvalid') : '');
-  }, [invalid, t]);
-
-  const commit = (next: string) => {
-    setText(next);
-    const parsed = parseFormDate(next);
-    if (parsed !== null) {
-      lastEmitted.current = parsed;
-      onChange(parsed);
-    }
-  };
+  const { t, i18n } = useTranslation();
+  const locale = i18n.resolvedLanguage === 'en' ? 'en' : 'it';
 
   return (
-    <input
-      ref={inputRef}
-      required={required}
-      disabled={disabled}
-      type="text"
-      inputMode="numeric"
+    <MantineDateInput
+      aria-label={ariaLabel}
+      required={required ?? false}
+      disabled={disabled ?? false}
+      value={value || null}
+      onChange={(nextValue) => onChange(nextValue ?? '')}
+      valueFormat={DATE_INPUT_DISPLAY_FORMAT}
+      dateParser={(input) => parseEmployeeDateInput(input, locale)}
       placeholder={t('fields.datePlaceholder')}
-      pattern="\d{1,2}/\d{1,2}/\d{4}"
-      aria-invalid={invalid}
-      value={text}
-      onChange={(event) => commit(event.target.value)}
-      onBlur={() => {
-        const parsed = parseFormDate(text);
-        if (parsed) setText(formatFormDate(parsed));
+      leftSection={<CalendarDays size={16} />}
+      clearable={!disabled}
+      // Keep clear via the X button, but don't clear when clicking the
+      // already-selected day (e.g. after typing 01/12/2000 and confirming it).
+      allowDeselect={false}
+      popoverProps={{
+        withinPortal: true,
+        zIndex: 1200,
+        transitionProps: { transition: 'pop', duration: 120 },
       }}
     />
   );
 }
 
-function Field({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
+function Field({
+  label,
+  icon,
+  children,
+  full,
+  className,
+  required,
+  hint,
+}: {
+  label: string;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+  full?: boolean;
+  className?: string;
+  required?: boolean;
+  hint?: string;
+}) {
   return (
-    <label className={full ? 'field field-full' : 'field'}>
-      <span>{label}</span>
+    <label className={['field', full && 'field-full', className].filter(Boolean).join(' ')}>
+      <span className="field-label">
+        {icon ? (
+          <span className="field-label-icon" aria-hidden="true">
+            {icon}
+          </span>
+        ) : null}
+        {label}
+        {required ? (
+          <span className="field-required" aria-hidden="true">
+            *
+          </span>
+        ) : null}
+      </span>
       {children}
+      {hint ? <span className="field-hint">{hint}</span> : null}
     </label>
   );
 }

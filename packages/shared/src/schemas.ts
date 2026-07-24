@@ -148,6 +148,7 @@ export const employeeApprovalReferenceSchema = z.object({
 export type EmployeeApprovalReference = z.infer<typeof employeeApprovalReferenceSchema>;
 
 export const employeeOptionSchema = employeeApprovalReferenceSchema.extend({
+  canBeResponsible: z.boolean(),
   canBeSubstituteResponsible: z.boolean(),
 });
 export type EmployeeOption = z.infer<typeof employeeOptionSchema>;
@@ -176,6 +177,7 @@ export const employeeSchema = z.object({
   contractType: contractTypeSchema,
   tfr: tfrSchema,
   status: employeeStatusSchema,
+  canBeResponsible: z.boolean(),
   canBeSubstituteResponsible: z.boolean(),
   weeklySchedule: weeklyScheduleSchema,
   approvalRoles: employeeApprovalRolesSchema,
@@ -210,6 +212,7 @@ export const employeeWriteBaseSchema = z.object({
     contractType: contractTypeSchema,
     tfr: tfrSchema.optional(),
     status: employeeStatusSchema,
+    canBeResponsible: z.boolean().optional(),
     canBeSubstituteResponsible: z.boolean().optional(),
     weeklySchedule: weeklyScheduleInputSchema.optional(),
     approvalRoleIds: employeeApprovalRoleIdsSchema.optional(),

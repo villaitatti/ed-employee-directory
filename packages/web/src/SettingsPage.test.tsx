@@ -52,9 +52,8 @@ describe('SettingsPage', () => {
       // react-query refetch of GET /settings after invalidation
       .mockResolvedValue(
         jsonResponse({ data: { retirementPolicy: { years: 68, months: 0 }, updatedAt: '2026-06-05T00:00:00.000Z' } })
-      );
+    );
     vi.stubGlobal('fetch', fetchMock);
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     const user = userEvent.setup();
     renderWithProviders(<SettingsPage />);
@@ -69,6 +68,7 @@ describe('SettingsPage', () => {
     await user.type(months, '0');
 
     await user.click(screen.getByRole('button', { name: /Salva/i }));
+    await user.click(await screen.findByRole('button', { name: 'Conferma' }));
 
     // The PUT fired with the edited values.
     await waitFor(() => {
@@ -90,9 +90,8 @@ describe('SettingsPage', () => {
       // PUT fails with a validation error from the server.
       .mockResolvedValueOnce(
         jsonResponse({ error: { code: 'VALIDATION_ERROR', message: 'The request did not pass validation.' } }, 400)
-      );
+    );
     vi.stubGlobal('fetch', fetchMock);
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     const user = userEvent.setup();
     renderWithProviders(<SettingsPage />);
@@ -100,6 +99,7 @@ describe('SettingsPage', () => {
     const years = await screen.findByLabelText('Anni');
     await waitFor(() => expect(years).toHaveValue(67));
     await user.click(screen.getByRole('button', { name: /Salva/i }));
+    await user.click(await screen.findByRole('button', { name: 'Conferma' }));
 
     await waitFor(() => expect(errorSpy).toHaveBeenCalledWith('The request did not pass validation.'));
   });

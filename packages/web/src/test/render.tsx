@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { I18nextProvider } from 'react-i18next';
 import { EdAuthProvider } from '../auth/AuthProvider.js';
 import i18n from '../i18n/config.js';
+import { AppUiProvider } from '../ui/AppUiProvider.js';
 
 /**
  * Renders a component inside the same provider stack as the real app:
@@ -21,7 +22,9 @@ export function renderWithProviders(ui: ReactElement) {
       <EdAuthProvider>
         <QueryClientProvider client={queryClient}>
           <I18nextProvider i18n={i18n}>
-            <MemoryRouter>{children}</MemoryRouter>
+            <AppUiProvider>
+              <MemoryRouter>{children}</MemoryRouter>
+            </AppUiProvider>
           </I18nextProvider>
         </QueryClientProvider>
       </EdAuthProvider>
