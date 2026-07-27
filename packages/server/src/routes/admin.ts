@@ -277,27 +277,53 @@ function candidateName(candidate: ApprovalCandidate): string {
   return `${candidate.firstName} ${candidate.lastName}`.trim() || `Employee Number ${candidate.employeeNumber}`;
 }
 
+/**
+ * Employee Numbers that may be assigned in each approval role, indexed once per
+ * fixpoint iteration of the import preview. The required-approver rule asks "is
+ * anyone *other than this subject* eligible?", which scanned the whole candidate
+ * map per row — O(rows x employees) for every iteration. A set makes it O(1).
+ */
+type EligibleApproverNumbers = {
+  responsabile: ReadonlySet<number>;
+  substitute: ReadonlySet<number>;
+};
+
+function indexEligibleApprovers(candidates: Iterable<ApprovalCandidate>): EligibleApproverNumbers {
+  const responsabile = new Set<number>();
+  const substitute = new Set<number>();
+  for (const candidate of candidates) {
+    if (candidate.status !== 'ATTIVO') continue;
+    if (candidate.canBeResponsible) responsabile.add(candidate.employeeNumber);
+    if (candidate.canBeSubstituteResponsible) substitute.add(candidate.employeeNumber);
+  }
+  return { responsabile, substitute };
+}
+
+/** Whether anyone besides `employeeNumber` is eligible — the bootstrap check. */
+function hasEligibleApproverOtherThan(eligible: ReadonlySet<number>, employeeNumber: number): boolean {
+  return eligible.size > (eligible.has(employeeNumber) ? 1 : 0);
+}
+
 function validateRoleNumberCandidates(input: {
   employeeNumber: number;
   status: EmployeeWriteInput['status'];
   roleNumbers: EmployeeApprovalRoleNumbers;
   candidateByNumber: Map<number, ApprovalCandidate>;
+  eligibleApprovers: EligibleApproverNumbers;
   /** Employee Numbers that appear as a subject row anywhere in this import. */
   inFileEmployeeNumbers: ReadonlySet<number>;
   /** Subject rows currently considered valid+selected in this iteration. */
   selectedImportNumbers: ReadonlySet<number>;
   errors: string[];
 }): void {
-  const candidates = [...input.candidateByNumber.values()];
-  const eligibleExists = (predicate: (candidate: ApprovalCandidate) => boolean): boolean =>
-    candidates.some(
-      (candidate) => candidate.status === 'ATTIVO' && candidate.employeeNumber !== input.employeeNumber && predicate(candidate)
-    );
   for (const code of missingRequiredApprovers(input.status, {
     hasResponsabile: input.roleNumbers.responsabileNumbers.length > 0,
     hasSubstitute: input.roleNumbers.substituteResponsabileNumbers.length > 0,
-    responsabileEligibleExists: eligibleExists((candidate) => candidate.canBeResponsible),
-    substituteEligibleExists: eligibleExists((candidate) => candidate.canBeSubstituteResponsible),
+    responsabileEligibleExists: hasEligibleApproverOtherThan(
+      input.eligibleApprovers.responsabile,
+      input.employeeNumber
+    ),
+    substituteEligibleExists: hasEligibleApproverOtherThan(input.eligibleApprovers.substitute, input.employeeNumber),
   })) {
     input.errors.push(REQUIRED_APPROVER_MESSAGES[code]);
   }
@@ -1214,6 +1240,10 @@ adminRouter.post(
         overlaid.push(row.parsed.employeeNumber);
       }
 
+      // The candidate map is stable for the rest of this iteration (overlays are
+      // restored below), so the eligibility sets can be built once for all rows.
+      const eligibleApprovers = indexEligibleApprovers(candidateByNumber.values());
+
       previewRows = parsedRows.map((row) => {
         const errors = [...row.baseErrors];
         if (row.parsed && row.roleNumbers) {
@@ -1222,6 +1252,7 @@ adminRouter.post(
             status: row.parsed.status,
             roleNumbers: row.roleNumbers,
             candidateByNumber,
+            eligibleApprovers,
             inFileEmployeeNumbers,
             selectedImportNumbers,
             errors,
@@ -1233,15 +1264,11 @@ adminRouter.post(
           const existingId = row.existingEmployeeId;
           const existingRoles = existingId ? existingRolesByEmployeeId.get(existingId) : undefined;
           const subjectNumber = row.parsed.employeeNumber;
-          const anyEligible = (predicate: (candidate: ApprovalCandidate) => boolean): boolean =>
-            [...candidateByNumber.values()].some(
-              (candidate) => candidate.status === 'ATTIVO' && candidate.employeeNumber !== subjectNumber && predicate(candidate)
-            );
           for (const code of missingRequiredApprovers(row.parsed.status, {
             hasResponsabile: existingRoles?.has('RESPONSABILE') ?? false,
             hasSubstitute: existingRoles?.has('SUBSTITUTE_RESPONSABILE') ?? false,
-            responsabileEligibleExists: anyEligible((candidate) => candidate.canBeResponsible),
-            substituteEligibleExists: anyEligible((candidate) => candidate.canBeSubstituteResponsible),
+            responsabileEligibleExists: hasEligibleApproverOtherThan(eligibleApprovers.responsabile, subjectNumber),
+            substituteEligibleExists: hasEligibleApproverOtherThan(eligibleApprovers.substitute, subjectNumber),
           })) {
             errors.push(REQUIRED_APPROVER_MESSAGES[code]);
           }
@@ -1339,7 +1366,7 @@ adminRouter.post(
         const reaffirmed = (reaffirmedRoles.get(employeeNumber)?.size ?? 0) > 0;
         if (dbRefs.length > 0 || reaffirmed) {
           row.errors.push(
-            `This employee is still used in approval workflows and cannot be made inactive in this import. Remove those approval assignments first.`
+            'This employee is still used in approval workflows and cannot be made inactive in this import. Remove those approval assignments first.'
           );
         }
       }
@@ -1353,7 +1380,7 @@ adminRouter.post(
         const reaffirmed = reaffirmedRoles.get(employeeNumber)?.has('RESPONSABILE') ?? false;
         if (dbRefs.length > 0 || reaffirmed) {
           row.errors.push(
-            `This employee is still used as Responsabile and cannot have Responsabile eligibility disabled in this import.`
+            'This employee is still used as Responsabile and cannot have Responsabile eligibility disabled in this import.'
           );
         }
       }
@@ -1367,7 +1394,7 @@ adminRouter.post(
         const reaffirmed = reaffirmedRoles.get(employeeNumber)?.has('SUBSTITUTE_RESPONSABILE') ?? false;
         if (dbRefs.length > 0 || reaffirmed) {
           row.errors.push(
-            `This employee is still used as Sostituto-Responsabile and cannot have substitute eligibility disabled in this import.`
+            'This employee is still used as Sostituto-Responsabile and cannot have substitute eligibility disabled in this import.'
           );
         }
       }

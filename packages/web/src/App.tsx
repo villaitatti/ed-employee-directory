@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { ActionIcon, Button, Checkbox, MultiSelect, Pill, Select, Switch, Text, TextInput } from '@mantine/core';
 import { DateInput as MantineDateInput } from '@mantine/dates';
-import { modals } from '@mantine/modals';
+import { modals, useModals } from '@mantine/modals';
 import dayjs from 'dayjs';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -301,6 +301,16 @@ function toEmployeeDraft(employee: Employee): EmployeeDraft {
   };
 }
 
+/**
+ * Serialized form of a draft for unsaved-changes detection. `retirementDate` is
+ * only submitted while the override is on — otherwise the server recalculates it
+ * — so a date parked there with the switch off cannot change what gets saved and
+ * must not trigger the discard prompt.
+ */
+function employeeDirtyFingerprint(draft: EmployeeDraft): string {
+  return JSON.stringify(draft.retirementDateOverridden ? draft : { ...draft, retirementDate: '' });
+}
+
 function approvalSummary(employee: Employee, t: Translate): string {
   if (employee.status !== 'ATTIVO') return '-';
   const responsabili = employee.approvalRoles.responsabili.length;
@@ -380,11 +390,24 @@ const FOCUSABLE_SELECTOR =
  * element on close. Returns a ref to attach to the dialog element. Initial focus
  * is left to an `autoFocus` field when present; otherwise the first focusable is
  * focused.
+ *
+ * While a Mantine confirmation is layered on top (discard changes, un-confirming a
+ * retirement date) that confirmation owns the keyboard and this hook stands down.
+ * Without the guard the two fight: Mantine closes the confirmation on Escape from a
+ * window capture-phase listener and this hook — bubbling afterwards — immediately
+ * re-opens it, so Escape can never dismiss it; and on Tab this hook pulls focus out
+ * of the confirmation's focus trap and back into the form behind it. Reading the
+ * stack depth off Mantine's context is what makes the guard reliable: the reducer
+ * dispatch has not been committed yet while the closing event is still bubbling, so
+ * the last rendered value still reports the confirmation as open.
  */
 function useModalDialog(requestClose: () => void) {
   const dialogRef = useRef<HTMLFormElement>(null);
   const requestCloseRef = useRef(requestClose);
   requestCloseRef.current = requestClose;
+  const layeredModalCount = useModals().modals.length;
+  const layeredModalCountRef = useRef(layeredModalCount);
+  layeredModalCountRef.current = layeredModalCount;
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -396,6 +419,7 @@ function useModalDialog(requestClose: () => void) {
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
+      if (layeredModalCountRef.current > 0) return;
       if (event.key === 'Escape') {
         requestCloseRef.current();
         return;
@@ -852,32 +876,33 @@ export function EmployeeForm({
     set('status', status);
   };
   const toggleRetirementOverride = (checked: boolean) => {
+    // Switching the override on has to seed the field, because from here on the
+    // input edits `draft.retirementDate` directly instead of showing the
+    // projection. Switching it off leaves the stored date untouched: it is no
+    // longer submitted (see the save payload) and the input falls back to the
+    // projection, so keeping it means flipping the switch back on restores the
+    // date the user had confirmed rather than silently replacing it.
+    if (checked) {
+      onChange({
+        ...draft,
+        retirementDateOverridden: true,
+        retirementDate: draft.retirementDate || projectedRetirementDate,
+      });
+      return;
+    }
     // Unchecking recalculates the date from the birth date on save — warn before
     // discarding a date that was previously confirmed.
-    if (!checked && draft.retirementDateOverridden && draft.retirementDate) {
+    if (draft.retirementDateOverridden && draft.retirementDate) {
       openConfirmation({
         title: t('copy.confirmationTitle'),
         message: t('copy.confirmUnconfirmRetirement'),
         confirmLabel: t('actions.confirm'),
         cancelLabel: t('actions.cancel'),
-        onConfirm: () =>
-          onChange({
-            ...draft,
-            retirementDateOverridden: false,
-            retirementDate: projectedRetirementDate,
-          }),
+        onConfirm: () => set('retirementDateOverridden', false),
       });
       return;
     }
-    if (checked) {
-      onChange({
-        ...draft,
-        retirementDateOverridden: true,
-        retirementDate: retirementDateValue || projectedRetirementDate,
-      });
-      return;
-    }
-    set('retirementDateOverridden', checked);
+    set('retirementDateOverridden', false);
   };
 
   const approverOptions = employeeOptions.filter((option) => option.id !== draft.id);
@@ -899,7 +924,7 @@ export function EmployeeForm({
     weeklyTotal !== null && expectedWeeklyMinutes !== null && weeklyTotal !== expectedWeeklyMinutes;
 
   const initialDraft = useRef(draft);
-  const isDirty = JSON.stringify(draft) !== JSON.stringify(initialDraft.current);
+  const isDirty = employeeDirtyFingerprint(draft) !== employeeDirtyFingerprint(initialDraft.current);
 
   const requestClose = useCallback(() => {
     if (!isDirty) {
@@ -1920,9 +1945,11 @@ function EmployeeMultiSelect({
   // Preserve selected values that are no longer eligible so they remain visible
   // and removable. Once removed, they disappear from the available data and
   // cannot be selected again.
+  const ineligibleIds = new Set<string>();
   value.forEach((id) => {
     if (data.some((option) => option.value === id)) return;
     const option = labelById.get(id);
+    ineligibleIds.add(id);
     data.push({
       value: id,
       label: option ? employeeOptionLabel(option) : t('copy.ineligibleApprover'),
@@ -1945,6 +1972,9 @@ function EmployeeMultiSelect({
       comboboxProps={{ withinPortal: true, zIndex: 1200, transitionProps: { transition: 'pop', duration: 120 } }}
       renderPill={({ option, onRemove }) => (
         <Pill
+          // Approvers kept only because they are already assigned read as a
+          // problem to fix, not as a normal selection.
+          className={ineligibleIds.has(String(option.value)) ? 'employee-pill-invalid' : undefined}
           withRemoveButton
           onRemove={() => onRemove?.()}
           removeButtonProps={{

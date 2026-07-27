@@ -4,10 +4,15 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 
 // This package runs from packages/server (pnpm sets the cwd there), so the
-// default dotenv lookup misses the monorepo root .env. Resolve it explicitly
-// relative to this file so `pnpm dev` picks up local config. In production the
-// path won't exist and dotenv is a no-op — env comes from the container.
-config({ path: resolve(dirname(fileURLToPath(import.meta.url)), '../../../.env') });
+// default dotenv lookup misses the monorepo root .env that the README tells you
+// to create. Resolve both explicitly relative to this file — which sits one level
+// down in either src/ or dist/ — so `pnpm dev` and the built server behave alike.
+// A package-local .env is listed first because dotenv never overwrites a value
+// that is already set, which keeps the pre-existing per-package override working.
+// In production neither path exists and dotenv is a no-op: env comes from the
+// container.
+const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+config({ path: [resolve(packageRoot, '.env'), resolve(packageRoot, '../../.env')] });
 
 const optionalUrl = z.string().url().or(z.literal('')).optional();
 const booleanFlag = z

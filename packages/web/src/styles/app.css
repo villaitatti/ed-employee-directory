@@ -457,52 +457,9 @@ button:focus-visible {
   color: var(--warning-ink);
 }
 
-.employee-multi-select,
-.selected-employees {
+.employee-multi-select {
   display: grid;
   gap: var(--space-xs);
-}
-
-.selected-employees {
-  grid-template-columns: repeat(auto-fit, minmax(12rem, max-content));
-}
-
-.employee-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-xs);
-  max-width: 100%;
-  min-height: 2rem;
-  padding: 0.25rem 0.35rem 0.25rem 0.65rem;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface-raised);
-  color: var(--ink-soft);
-  font-size: 0.8rem;
-  font-weight: 800;
-}
-
-.employee-chip-invalid {
-  border-color: var(--warning-ink);
-  color: var(--warning-ink);
-}
-
-.employee-chip button {
-  display: inline-grid;
-  place-items: center;
-  width: 1.45rem;
-  height: 1.45rem;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--muted);
-  padding: 0;
-}
-
-.employee-chip button:hover {
-  color: var(--ink);
-  background: var(--surface-strong);
 }
 
 .field {
@@ -782,7 +739,7 @@ button:focus-visible {
   transform: translateY(-1px);
 }
 
-.employee-form-dialog .mantine-Input-input {
+.employee-form-dialog .app-input {
   min-height: 2.75rem;
   border-color: var(--line);
   border-radius: 9px;
@@ -794,28 +751,36 @@ button:focus-visible {
     background 150ms ease;
 }
 
-.employee-form-dialog .mantine-Input-input:hover:not(:disabled) {
+.employee-form-dialog .app-input:hover:not(:disabled) {
   border-color: color-mix(in oklch, var(--line), var(--brand) 28%);
 }
 
-.employee-form-dialog .mantine-Input-input:focus,
-.employee-form-dialog .mantine-Input-input:focus-within {
+.employee-form-dialog .app-input:focus,
+.employee-form-dialog .app-input:focus-within {
   border-color: color-mix(in oklch, var(--brand), var(--line) 25%);
   box-shadow: 0 0 0 3px color-mix(in oklch, var(--brand), transparent 90%);
 }
 
-.employee-form-dialog .mantine-Input-section {
+.employee-form-dialog .app-input-section {
   color: var(--muted);
 }
 
-.employee-form-dialog .mantine-Pill-root {
+.employee-form-dialog .app-pill {
   border: 1px solid color-mix(in oklch, var(--brand), var(--line) 65%);
   color: var(--brand);
   background: color-mix(in oklch, var(--brand), var(--surface) 92%);
   font-weight: 750;
 }
 
-.employee-field-compact .mantine-Input-wrapper {
+/* An approver kept only because they are already assigned — they no longer meet
+   the eligibility rules and the save will be rejected until they are removed. */
+.employee-form-dialog .app-pill.employee-pill-invalid {
+  border-color: var(--warning-ink);
+  color: var(--warning-ink);
+  background: color-mix(in oklch, var(--warning-ink), var(--surface) 92%);
+}
+
+.employee-field-compact .app-input-wrapper {
   max-width: 10rem;
 }
 
@@ -842,7 +807,7 @@ button:focus-visible {
   background: var(--surface-raised);
 }
 
-.employee-form-dialog .mantine-Switch-label {
+.employee-form-dialog .app-switch-label {
   color: var(--ink-soft);
   font-size: 0.8rem;
   font-weight: 700;
@@ -870,7 +835,7 @@ button:focus-visible {
   gap: var(--space-sm);
 }
 
-.employee-form-footer .mantine-Button-root {
+.employee-form-footer .app-button {
   min-height: 2.75rem;
   padding-inline: var(--space-md);
   transition:
@@ -878,15 +843,15 @@ button:focus-visible {
     box-shadow 150ms ease;
 }
 
-.employee-form-footer .mantine-Button-root:hover:not(:disabled) {
+.employee-form-footer .app-button:hover:not(:disabled) {
   transform: translateY(-1px);
 }
 
-.employee-form-footer .mantine-Button-root:active:not(:disabled) {
+.employee-form-footer .app-button:active:not(:disabled) {
   transform: translateY(0) scale(0.98);
 }
 
-.employee-form-footer .mantine-Button-root[data-variant="filled"] {
+.employee-form-footer .app-button[data-variant="filled"] {
   box-shadow: 0 5px 14px color-mix(in oklch, var(--brand), transparent 80%);
 }
 
@@ -1167,7 +1132,7 @@ button:focus-visible {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .employee-field-compact .mantine-Input-wrapper {
+  .employee-field-compact .app-input-wrapper {
     max-width: none;
   }
 
@@ -1241,7 +1206,7 @@ button:focus-visible {
   }
 
   .modal-actions,
-  .modal-actions .mantine-Button-root {
+  .modal-actions .app-button {
     width: 100%;
   }
 

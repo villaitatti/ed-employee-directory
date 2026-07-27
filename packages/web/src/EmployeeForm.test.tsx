@@ -308,6 +308,83 @@ describe('EmployeeForm modal', () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
+  it('stays pristine when the retirement override is switched on and back off', async () => {
+    // Switching the override on seeds `retirementDate` with the projection so the
+    // input has something to edit. That value is never submitted while the switch
+    // is off, so a round trip must not count as an unsaved change.
+    const onCancel = vi.fn();
+    const user = userEvent.setup();
+
+    function ControlledEmployeeForm() {
+      const [draft, setDraft] = useState({ ...emptyEmployeeDraft, birthDate: '1980-01-15' });
+      return (
+        <EmployeeForm
+          draft={draft}
+          departments={departments}
+          employeeOptions={employeeOptions}
+          onCancel={onCancel}
+          onChange={setDraft}
+          onSave={vi.fn()}
+          isSaving={false}
+        />
+      );
+    }
+
+    renderWithProviders(<ControlledEmployeeForm />);
+    const override = screen.getByRole('switch', { name: 'Data pensionamento confermata' });
+
+    await user.click(override);
+    expect(screen.getByLabelText('Data pensionamento')).toHaveValue('15 aprile 2047');
+    await user.click(override);
+    await user.click(await screen.findByRole('button', { name: 'Conferma' }));
+
+    // No discard prompt: Escape closes straight away.
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Conferma richiesta' })).not.toBeInTheDocument();
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('restores a confirmed retirement date when the override is switched back on', async () => {
+    const user = userEvent.setup();
+    let latestDraft = { ...emptyEmployeeDraft };
+
+    function ControlledEmployeeForm() {
+      const [draft, setDraft] = useState({
+        ...emptyEmployeeDraft,
+        birthDate: '1980-01-15',
+        retirementDate: '2050-06-30',
+        retirementDateOverridden: true,
+      });
+      return (
+        <EmployeeForm
+          draft={draft}
+          departments={departments}
+          employeeOptions={employeeOptions}
+          onCancel={vi.fn()}
+          onChange={(next) => {
+            latestDraft = next;
+            setDraft(next);
+          }}
+          onSave={vi.fn()}
+          isSaving={false}
+        />
+      );
+    }
+
+    renderWithProviders(<ControlledEmployeeForm />);
+    const override = screen.getByRole('switch', { name: 'Data pensionamento confermata' });
+
+    await user.click(override);
+    await user.click(await screen.findByRole('button', { name: 'Conferma' }));
+    // Unconfirmed: the input falls back to the projection, but the confirmed date
+    // is kept so switching back on does not silently replace it.
+    expect(screen.getByLabelText('Data pensionamento')).toHaveValue('15 aprile 2047');
+
+    await user.click(override);
+    expect(latestDraft.retirementDate).toBe('2050-06-30');
+    expect(screen.getByLabelText('Data pensionamento')).toHaveValue('30 giugno 2050');
+  });
+
   it('prompts before discarding when there are unsaved changes', async () => {
     const onCancel = vi.fn();
     const user = userEvent.setup();
@@ -355,6 +432,47 @@ describe('EmployeeForm modal', () => {
     await user.keyboard('{Escape}');
     await user.click(await screen.findByRole('button', { name: 'Scarta modifiche' }));
     expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets the discard confirmation own the keyboard while it is open', async () => {
+    // Regression: the form's Escape/Tab handler used to be bound to `document`,
+    // so it fought the layered Mantine confirmation — Escape re-opened the
+    // confirmation the instant Mantine closed it, and Tab pulled focus back out
+    // into the form behind it.
+    const onCancel = vi.fn();
+    const user = userEvent.setup();
+
+    function ControlledEmployeeForm() {
+      const [draft, setDraft] = useState({ ...emptyEmployeeDraft });
+      return (
+        <EmployeeForm
+          draft={draft}
+          departments={departments}
+          employeeOptions={employeeOptions}
+          onCancel={onCancel}
+          onChange={setDraft}
+          onSave={vi.fn()}
+          isSaving={false}
+        />
+      );
+    }
+
+    renderWithProviders(<ControlledEmployeeForm />);
+    await user.type(screen.getByLabelText('Nome'), 'Ada');
+
+    await user.keyboard('{Escape}');
+    const confirmation = await screen.findByRole('dialog', { name: 'Conferma richiesta' });
+
+    // Tab stays inside the confirmation instead of escaping into the form behind it.
+    await user.tab();
+    expect(confirmation.contains(document.activeElement)).toBe(true);
+
+    // Escape dismisses the confirmation instead of re-opening it, and leaves the
+    // form itself open.
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Conferma richiesta' })).not.toBeInTheDocument();
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog', { name: 'Nuovo dipendente' })).toBeInTheDocument();
   });
 
   it('shows full-time weekday defaults and weekly total', () => {
@@ -422,7 +540,7 @@ describe('EmployeeForm modal', () => {
       <EmployeeForm
         draft={{
           ...emptyEmployeeDraft,
-          approvalRoleIds: { ...emptyEmployeeDraft.approvalRoleIds, responsabileIds: ['emp_3'] },
+          approvalRoleIds: { ...emptyEmployeeDraft.approvalRoleIds, responsabileIds: ['emp_3', 'emp_1'] },
         }}
         departments={departments}
         employeeOptions={employeeOptions}
@@ -435,10 +553,15 @@ describe('EmployeeForm modal', () => {
 
     const removeButton = screen.getByRole('button', { name: /Rimuovi Approvatore non più idoneo/i });
     expect(removeButton).toBeInTheDocument();
+    // Flagged visually too, so it reads as something to fix rather than a normal
+    // selection sitting next to the eligible ones.
+    expect(removeButton.closest('.employee-pill-invalid')).not.toBeNull();
+    // An eligible selection carries no such flag.
+    expect(screen.getByRole('button', { name: /Rimuovi Rossi Ada/i }).closest('.employee-pill-invalid')).toBeNull();
     removeButton.click();
     expect(onChange).toHaveBeenCalledWith(
       expect.objectContaining({
-        approvalRoleIds: expect.objectContaining({ responsabileIds: [] }),
+        approvalRoleIds: expect.objectContaining({ responsabileIds: ['emp_1'] }),
       })
     );
   });

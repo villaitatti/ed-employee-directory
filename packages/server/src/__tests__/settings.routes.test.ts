@@ -311,6 +311,130 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
     expect(res.body.error.code).toBe('APPROVER_NOT_SUBSTITUTE_ELIGIBLE');
   });
 
+  it('rejects a Responsabile approver without the Responsabile eligibility flag', async () => {
+    const department = await testPrisma.department.create({
+      data: { name: 'Biblioteca', normalizedName: 'biblioteca' },
+    });
+    const approvers = await seedApprovers(department.id);
+
+    const res = await request(app)
+      .post('/api/admin/employees')
+      .send({
+        employeeNumber: 2002,
+        firstName: 'Marco',
+        lastName: 'Bianchi',
+        departmentId: department.id,
+        birthDate: '1985-04-12',
+        hireDate: '2020-01-01',
+        fte: 1,
+        usaCategory: 'EXEMPT',
+        contractType: 'INDETERMINATO',
+        tfr: 'I_TATTI',
+        status: 'ATTIVO',
+        approvalRoleIds: {
+          preApproverIds: [],
+          // The substitute is only flagged for the substitute role.
+          responsabileIds: [approvers.substitute.id],
+          substituteResponsabileIds: [approvers.substitute.id],
+        },
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('APPROVER_NOT_RESPONSABILE_ELIGIBLE');
+  });
+
+  it('does not require approvers while bootstrapping the company', async () => {
+    // Nobody is flagged eligible for either role yet, so there is nobody to pick
+    // and the requirement cannot be satisfied — the very first active employee
+    // must still be creatable.
+    const department = await testPrisma.department.create({
+      data: { name: 'Biblioteca', normalizedName: 'biblioteca' },
+    });
+
+    const res = await request(app)
+      .post('/api/admin/employees')
+      .send({
+        employeeNumber: 2002,
+        firstName: 'Marco',
+        lastName: 'Bianchi',
+        departmentId: department.id,
+        birthDate: '1985-04-12',
+        hireDate: '2020-01-01',
+        fte: 1,
+        usaCategory: 'EXEMPT',
+        contractType: 'INDETERMINATO',
+        tfr: 'I_TATTI',
+        status: 'ATTIVO',
+        canBeResponsible: true,
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.approvalRoles.responsabili).toHaveLength(0);
+    expect(res.body.data.canBeResponsible).toBe(true);
+  });
+
+  it('ignores the employee being saved when deciding whether anyone is eligible', async () => {
+    // The bootstrap exception must look at *other* employees only: the first
+    // Responsabile cannot be required to be their own Responsabile.
+    const department = await testPrisma.department.create({
+      data: { name: 'Biblioteca', normalizedName: 'biblioteca' },
+    });
+    const soleResponsabile = await testPrisma.employee.create({
+      data: {
+        employeeNumber: 9010,
+        firstName: 'Prima',
+        lastName: 'Responsabile',
+        departmentId: department.id,
+        birthDate: new Date('1980-01-01T00:00:00.000Z'),
+        hireDate: new Date('2010-01-01T00:00:00.000Z'),
+        retirementDate: new Date('2047-04-01T00:00:00.000Z'),
+        fte: 1,
+        usaCategory: 'EXEMPT',
+        contractType: 'INDETERMINATO',
+        status: 'ATTIVO',
+        canBeResponsible: true,
+      },
+    });
+
+    const selfEdit = await request(app)
+      .put(`/api/admin/employees/${soleResponsabile.id}`)
+      .send({
+        employeeNumber: soleResponsabile.employeeNumber,
+        firstName: 'Prima',
+        lastName: 'Responsabile',
+        departmentId: department.id,
+        birthDate: '1980-01-01',
+        hireDate: '2010-01-02',
+        terminationDate: null,
+        retirementDate: null,
+        fte: 1,
+        usaCategory: 'EXEMPT',
+        contractType: 'INDETERMINATO',
+        status: 'ATTIVO',
+        canBeResponsible: true,
+      });
+    expect(selfEdit.status).toBe(200);
+
+    // Everyone else, though, now has someone to pick and must do so.
+    const other = await request(app)
+      .post('/api/admin/employees')
+      .send({
+        employeeNumber: 2002,
+        firstName: 'Marco',
+        lastName: 'Bianchi',
+        departmentId: department.id,
+        birthDate: '1985-04-12',
+        hireDate: '2020-01-01',
+        fte: 1,
+        usaCategory: 'EXEMPT',
+        contractType: 'INDETERMINATO',
+        tfr: 'I_TATTI',
+        status: 'ATTIVO',
+      });
+    expect(other.status).toBe(400);
+    expect(other.body.error.code).toBe('RESPONSABILE_REQUIRED');
+  });
+
   it('creates a valid employee with approval roles and weekly hours', async () => {
     const department = await testPrisma.department.create({
       data: { name: 'Biblioteca', normalizedName: 'biblioteca' },
@@ -417,6 +541,60 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
 
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('SUBSTITUTE_APPROVER_IN_USE');
+  });
+
+  it('rejects disabling Responsabile eligibility while the employee is assigned as Responsabile', async () => {
+    const department = await testPrisma.department.create({
+      data: { name: 'Biblioteca', normalizedName: 'biblioteca' },
+    });
+    const approvers = await seedApprovers(department.id);
+    // Employee 2002 uses 9001 as its Responsabile.
+    await seedEmployeeUsingApprovers(department.id, approvers);
+    // A second eligible Responsabile so 9001's own record can satisfy the
+    // required-approver rule while we try to strip its eligibility.
+    const backupResponsabile = await testPrisma.employee.create({
+      data: {
+        employeeNumber: 9004,
+        firstName: 'Responsabile',
+        lastName: 'Quattro',
+        departmentId: department.id,
+        birthDate: new Date('1982-01-01T00:00:00.000Z'),
+        hireDate: new Date('2012-01-01T00:00:00.000Z'),
+        retirementDate: new Date('2049-04-01T00:00:00.000Z'),
+        fte: 1,
+        usaCategory: 'EXEMPT',
+        contractType: 'INDETERMINATO',
+        status: 'ATTIVO',
+        canBeResponsible: true,
+      },
+    });
+
+    const res = await request(app)
+      .put(`/api/admin/employees/${approvers.responsabile.id}`)
+      .send({
+        employeeNumber: approvers.responsabile.employeeNumber,
+        firstName: approvers.responsabile.firstName,
+        lastName: approvers.responsabile.lastName,
+        departmentId: department.id,
+        birthDate: '1980-01-01',
+        hireDate: '2010-01-01',
+        terminationDate: null,
+        retirementDate: null,
+        fte: 1,
+        usaCategory: 'EXEMPT',
+        contractType: 'INDETERMINATO',
+        status: 'ATTIVO',
+        canBeResponsible: false,
+        approvalRoleIds: {
+          preApproverIds: [],
+          responsabileIds: [backupResponsabile.id],
+          substituteResponsabileIds: [approvers.substitute.id],
+        },
+      });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('RESPONSABILE_APPROVER_IN_USE');
+    expect(res.body.error.message).toContain(String(2002));
   });
 
   it('rejects deleting an employee who is still assigned as an approver', async () => {
@@ -754,6 +932,108 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
     );
     expect(row?.selected).toBe(false);
     expect(row?.errors.join(' ')).toContain('cannot be made inactive');
+  });
+
+  it('flags at preview a row that revokes Responsabile eligibility from an approver still in use', async () => {
+    const department = await testPrisma.department.create({
+      data: { name: 'Biblioteca', normalizedName: 'biblioteca' },
+    });
+    const approvers = await seedApprovers(department.id);
+    // Out-of-file employee 2002 references 9001 as Responsabile, so the import
+    // cannot quietly make 9001 ineligible and leave that assignment dangling.
+    await seedEmployeeUsingApprovers(department.id, approvers);
+    // 9001 needs its own line managers, otherwise the row fails the
+    // required-approver rule first and never reaches the eligibility guard.
+    const backupResponsabile = await testPrisma.employee.create({
+      data: {
+        employeeNumber: 9004,
+        firstName: 'Responsabile',
+        lastName: 'Quattro',
+        departmentId: department.id,
+        birthDate: new Date('1982-01-01T00:00:00.000Z'),
+        hireDate: new Date('2012-01-01T00:00:00.000Z'),
+        retirementDate: new Date('2049-04-01T00:00:00.000Z'),
+        fte: 1,
+        usaCategory: 'EXEMPT',
+        contractType: 'INDETERMINATO',
+        status: 'ATTIVO',
+        canBeResponsible: true,
+      },
+    });
+    await testPrisma.employeeApprovalAssignment.createMany({
+      data: [
+        { employeeId: approvers.responsabile.id, approverId: backupResponsabile.id, role: 'RESPONSABILE' },
+        { employeeId: approvers.responsabile.id, approverId: approvers.substitute.id, role: 'SUBSTITUTE_RESPONSABILE' },
+      ],
+    });
+
+    const csv = [
+      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,TFR,Status,Responsabile Abilitato',
+      `${approvers.responsabile.employeeNumber},Responsabile,Uno,${department.name},1980-01-01,2010-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,false`,
+    ].join('\n');
+
+    const preview = await request(app)
+      .post('/api/admin/imports/preview')
+      .attach('file', Buffer.from(csv), { filename: 'employees.csv', contentType: 'text/csv' });
+
+    expect(preview.status).toBe(201);
+    const row = (preview.body.data.rows as Array<{ rowNumber: number; errors: string[]; selected: boolean }>).find(
+      (r) => r.rowNumber === 2
+    );
+    expect(row?.selected).toBe(false);
+    expect(row?.errors.join(' ')).toContain('still used as Responsabile');
+  });
+
+  it('rejects an import row whose Responsabile is not flagged Responsabile-eligible', async () => {
+    const department = await testPrisma.department.create({
+      data: { name: 'Biblioteca', normalizedName: 'biblioteca' },
+    });
+    // 9002 is only flagged for the substitute role, so it cannot be picked as a
+    // Responsabile even though it is an active, assignable employee.
+    const approvers = await seedApprovers(department.id);
+    const csv = [
+      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,TFR,Status,Responsabile,Sostituto-Responsabile',
+      `5001,Ada,Uno,${department.name},1985-04-12,2020-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,${approvers.substitute.employeeNumber},${approvers.substitute.employeeNumber}`,
+    ].join('\n');
+
+    const preview = await request(app)
+      .post('/api/admin/imports/preview')
+      .attach('file', Buffer.from(csv), { filename: 'employees.csv', contentType: 'text/csv' });
+
+    expect(preview.status).toBe(201);
+    const row = (preview.body.data.rows as Array<{ rowNumber: number; errors: string[]; selected: boolean }>).find(
+      (r) => r.rowNumber === 2
+    );
+    expect(row?.selected).toBe(false);
+    expect(row?.errors.join(' ')).toContain('not marked as Responsabile eligible');
+  });
+
+  it('imports the Responsabile Abilitato column', async () => {
+    const department = await testPrisma.department.create({
+      data: { name: 'Biblioteca', normalizedName: 'biblioteca' },
+    });
+    const approvers = await seedApprovers(department.id);
+    const csv = [
+      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,TFR,Status,Responsabile Abilitato,Sostituto Abilitato,Responsabile,Sostituto-Responsabile',
+      `5001,Ada,Uno,${department.name},1985-04-12,2020-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,true,false,${approvers.responsabile.employeeNumber},${approvers.substitute.employeeNumber}`,
+    ].join('\n');
+
+    const preview = await request(app)
+      .post('/api/admin/imports/preview')
+      .attach('file', Buffer.from(csv), { filename: 'employees.csv', contentType: 'text/csv' });
+    expect(preview.status).toBe(201);
+    const row = (preview.body.data.rows as Array<{ rowNumber: number; errors: string[]; selected: boolean }>).find(
+      (r) => r.rowNumber === 2
+    );
+    expect(row?.errors).toEqual([]);
+
+    const commit = await request(app)
+      .post(`/api/admin/imports/${preview.body.data.batchId}/commit`)
+      .send({ selectedRows: [2] });
+    expect(commit.status).toBe(200);
+    const imported = await testPrisma.employee.findUniqueOrThrow({ where: { employeeNumber: 5001 } });
+    expect(imported.canBeResponsible).toBe(true);
+    expect(imported.canBeSubstituteResponsible).toBe(false);
   });
 
   it('allows a field-only re-import of an employee whose assigned approver later went inactive', async () => {
