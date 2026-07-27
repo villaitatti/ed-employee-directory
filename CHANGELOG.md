@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.7.0 - 2026-07-27
+
+### Added
+
+- Employees can now be marked as eligible to serve as a Responsabile, alongside the existing Sostituto-Responsabile eligibility. A new "Ruoli e abilitazioni" section on the employee card groups both role capabilities and explains what they control.
+- Imports and exports carry the new "Responsabile Abilitato" column.
+
+### Changed
+
+- The employee, department, and settings screens were rebuilt on Mantine, with searchable pickers, date inputs, and a restyled employee card.
+- The approval section is now "Responsabili del dipendente" and covers only who approves this employee; its Responsabile and Sostituto-Responsabile pickers list only people enabled for that role.
+- Active employees must now have a Responsabile. The rule is skipped while setting up the company, when nobody is eligible to be picked yet, so the first Responsabile can still be created.
+- Categoria USA appears only for a Contratto USA, and TFR is hidden for it.
+
+### Fixed
+
+- Local development now reads the repository-root `.env` from both the API and the web dev server, and the web dev server port follows `CORS_ORIGIN` so the two stay in sync.
+
 ## 0.6.0 - 2026-07-20
 
 ### Fixed
