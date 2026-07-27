@@ -80,6 +80,7 @@ export function serializeEmployee(employee: EmployeeWithDepartment): EmployeeDto
     contractType: employee.contractType,
     tfr: employee.tfr,
     status: employee.status,
+    canBeResponsible: employee.canBeResponsible,
     canBeSubstituteResponsible: employee.canBeSubstituteResponsible,
     weeklySchedule: serializeWeeklySchedule({
       monday: employee.mondayMinutes,

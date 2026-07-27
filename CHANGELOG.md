@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.7.0 - 2026-07-27
+
+### Added
+
+- Employees can now be marked as eligible to serve as a Responsabile, alongside the existing Sostituto-Responsabile eligibility. A new "Ruoli e abilitazioni" section on the employee card groups both role capabilities and explains what they control.
+- Imports and exports carry the new "Responsabile Abilitato" column.
+
+### Changed
+
+- The employee, department, and settings screens were rebuilt on Mantine, with searchable pickers, date inputs, and a restyled employee card.
+- The approval section is now "Responsabili del dipendente" and covers only who approves this employee; its Responsabile and Sostituto-Responsabile pickers list only people enabled for that role.
+- Only someone marked "Può essere Responsabile" can be chosen as a Responsabile, the same rule that already applied to the Sostituto-Responsabile. Everyone currently assigned as a Responsabile is marked eligible automatically, so existing assignments keep working.
+- The requirement that active employees have a Responsabile and a Sostituto-Responsabile is now skipped while setting up the company, when nobody is eligible for that role yet and there is therefore nobody to pick. It applies again as soon as the first eligible person exists.
+- Categoria USA appears only for a Contratto USA, and TFR is hidden for it.
+
+### Fixed
+
+- Local development now reads the repository-root `.env` from both the API and the web dev server, and the web dev server port follows `CORS_ORIGIN` so the two stay in sync. A `packages/server/.env` still takes precedence when present.
+
+### Upgrade notes
+
+- Spreadsheets exported before 0.7.0 have no "Responsabile Abilitato" column. Re-importing one keeps the flag as it stands for employees who already exist, but any *new* employee it creates starts out not eligible — export a fresh file first if the import is meant to establish Responsabili.
+
 ## 0.6.0 - 2026-07-20
 
 ### Fixed

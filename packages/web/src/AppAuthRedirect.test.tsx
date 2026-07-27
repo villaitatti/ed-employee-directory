@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { I18nextProvider } from 'react-i18next';
 import { MemoryRouter } from 'react-router-dom';
 import i18n from './i18n/config.js';
+import { AppUiProvider } from './ui/AppUiProvider.js';
 
 // The vitest harness forces VITE_DEV_SKIP_AUTH=true, so the real EdAuthProvider
 // always yields an authenticated demo user and the unauthenticated branches in
@@ -54,9 +55,11 @@ function renderApp() {
   return render(
     <QueryClientProvider client={queryClient}>
       <I18nextProvider i18n={i18n}>
-        <MemoryRouter>
-          <App />
-        </MemoryRouter>
+        <AppUiProvider>
+          <MemoryRouter>
+            <App />
+          </MemoryRouter>
+        </AppUiProvider>
       </I18nextProvider>
     </QueryClientProvider>
   );
@@ -169,9 +172,11 @@ describe('Shell auth redirect', () => {
       rerender(
         <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
           <I18nextProvider i18n={i18n}>
-            <MemoryRouter>
-              <App />
-            </MemoryRouter>
+            <AppUiProvider>
+              <MemoryRouter>
+                <App />
+              </MemoryRouter>
+            </AppUiProvider>
           </I18nextProvider>
         </QueryClientProvider>
       );

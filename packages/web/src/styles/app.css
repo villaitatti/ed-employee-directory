@@ -45,7 +45,7 @@ body {
 }
 
 button,
-input,
+input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
 select {
   font: inherit;
 }
@@ -59,28 +59,28 @@ button:disabled {
   opacity: 0.64;
 }
 
-table {
+.data-surface table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.875rem;
 }
 
-th,
-td {
+.data-surface th,
+.data-surface td {
   padding: 0.75rem 0.85rem;
   text-align: left;
   border-bottom: 1px solid var(--line);
   vertical-align: middle;
 }
 
-th {
+.data-surface th {
   color: var(--ink-soft);
   font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
 }
 
-td {
+.data-surface td {
   color: var(--ink);
 }
 
@@ -95,7 +95,7 @@ select {
   padding: 0.55rem 0.7rem;
 }
 
-input:focus,
+input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):focus,
 select:focus,
 button:focus-visible {
   outline: 2px solid color-mix(in oklch, var(--brand), white 35%);
@@ -457,52 +457,9 @@ button:focus-visible {
   color: var(--warning-ink);
 }
 
-.employee-multi-select,
-.selected-employees {
+.employee-multi-select {
   display: grid;
   gap: var(--space-xs);
-}
-
-.selected-employees {
-  grid-template-columns: repeat(auto-fit, minmax(12rem, max-content));
-}
-
-.employee-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-xs);
-  max-width: 100%;
-  min-height: 2rem;
-  padding: 0.25rem 0.35rem 0.25rem 0.65rem;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface-raised);
-  color: var(--ink-soft);
-  font-size: 0.8rem;
-  font-weight: 800;
-}
-
-.employee-chip-invalid {
-  border-color: var(--warning-ink);
-  color: var(--warning-ink);
-}
-
-.employee-chip button {
-  display: inline-grid;
-  place-items: center;
-  width: 1.45rem;
-  height: 1.45rem;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--muted);
-  padding: 0;
-}
-
-.employee-chip button:hover {
-  color: var(--ink);
-  background: var(--surface-strong);
 }
 
 .field {
@@ -513,6 +470,401 @@ button:focus-visible {
 
 .field-full {
   grid-column: 1 / -1;
+}
+
+/* Employee form */
+.employee-form-dialog {
+  width: min(96vw, 92rem);
+  max-width: 92rem;
+  max-height: calc(100vh - 2 * var(--space-md));
+  border-radius: 20px;
+  border-color: color-mix(in oklch, var(--line), var(--brand) 10%);
+  box-shadow:
+    0 1px 2px oklch(0.2 0.02 250 / 0.08),
+    0 34px 90px -28px oklch(0.2 0.05 250 / 0.5);
+}
+
+.employee-form-header {
+  align-items: center;
+  padding: var(--space-lg) calc(var(--space-xl) + var(--space-xs));
+  background:
+    radial-gradient(circle at 12% 0%, color-mix(in oklch, var(--brand), transparent 91%), transparent 45%),
+    color-mix(in oklch, var(--surface-raised), var(--surface) 38%);
+}
+
+.modal-title-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.modal-title-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  color: var(--brand-ink);
+  background: linear-gradient(145deg, color-mix(in oklch, var(--brand), white 8%), var(--brand));
+  box-shadow: 0 8px 20px color-mix(in oklch, var(--brand), transparent 76%);
+}
+
+.modal-title-copy {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.modal-eyebrow,
+.modal-description,
+.modal-footer-note {
+  margin: 0;
+}
+
+.modal-eyebrow {
+  color: var(--brand);
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.07em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.modal-description {
+  max-width: 58ch;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.employee-modal-close {
+  flex: 0 0 auto;
+  transition:
+    color 120ms ease,
+    background 120ms ease,
+    transform 120ms ease;
+}
+
+.employee-modal-close:hover {
+  transform: rotate(3deg) scale(1.04);
+}
+
+.employee-modal-close:active {
+  transform: scale(0.93);
+}
+
+.employee-form-body {
+  gap: var(--space-lg);
+  padding: calc(var(--space-lg) + var(--space-xs)) calc(var(--space-xl) + var(--space-xs));
+  background: color-mix(in oklch, var(--surface-raised), var(--surface) 48%);
+  scrollbar-gutter: stable;
+}
+
+.employee-form-section {
+  padding: var(--space-lg);
+  border: 1px solid color-mix(in oklch, var(--line), var(--brand) 7%);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 1px 3px oklch(0.2 0.02 250 / 0.045);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+  animation: section-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.employee-form-section:nth-child(2) {
+  animation-delay: 35ms;
+}
+
+.employee-form-section:nth-child(3) {
+  animation-delay: 70ms;
+}
+
+.employee-form-section:nth-child(4) {
+  animation-delay: 105ms;
+}
+
+.employee-form-section:nth-child(5) {
+  animation-delay: 140ms;
+}
+
+.employee-form-section:focus-within {
+  border-color: color-mix(in oklch, var(--brand), var(--line) 58%);
+  box-shadow:
+    0 1px 3px oklch(0.2 0.02 250 / 0.04),
+    0 8px 28px color-mix(in oklch, var(--brand), transparent 92%);
+}
+
+.employee-section-heading {
+  display: grid;
+  grid-template-columns: 2rem 2rem minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-lg);
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid color-mix(in oklch, var(--line), transparent 24%);
+}
+
+.employee-section-number,
+.employee-section-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+}
+
+.employee-section-number {
+  color: var(--brand);
+  background: color-mix(in oklch, var(--brand), var(--surface) 90%);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 850;
+  letter-spacing: 0.03em;
+}
+
+.employee-section-icon {
+  color: color-mix(in oklch, var(--brand), var(--ink-soft) 18%);
+  background: var(--surface-raised);
+  transition:
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.employee-section-icon svg {
+  width: 1.1rem;
+  height: 1.1rem;
+  stroke-width: 2.15;
+}
+
+.employee-form-section:focus-within .employee-section-icon {
+  color: var(--brand);
+  transform: translateY(-1px);
+}
+
+.employee-section-heading h4,
+.employee-section-heading p {
+  margin: 0;
+}
+
+.employee-section-heading h4 {
+  color: var(--ink);
+  font-size: 0.96rem;
+  line-height: 1.25;
+}
+
+.employee-section-heading p {
+  margin-top: 0.15rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.employee-form-dialog .form-grid {
+  column-gap: var(--space-lg);
+  row-gap: var(--space-lg);
+}
+
+.employee-identity-grid {
+  grid-template-columns:
+    minmax(8rem, 0.75fr)
+    minmax(12rem, 1.2fr)
+    repeat(2, minmax(10rem, 1fr))
+    minmax(11rem, 1fr);
+}
+
+.employee-employment-grid {
+  grid-template-columns: repeat(4, minmax(10rem, 1fr));
+}
+
+.employee-classification-grid,
+.employee-approval-grid {
+  grid-template-columns: repeat(3, minmax(11rem, 1fr));
+}
+
+.employee-form-dialog .weekday-grid {
+  gap: var(--space-md);
+}
+
+.employee-form-dialog .field {
+  min-width: 0;
+  gap: var(--space-xs);
+}
+
+.employee-form-dialog .field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: 1.25rem;
+  color: var(--ink-soft);
+  font-size: 0.79rem;
+  font-weight: 750;
+  letter-spacing: 0.005em;
+}
+
+.employee-form-dialog .field-required {
+  color: var(--danger);
+  font-size: 0.9rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.field-label-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: color-mix(in oklch, var(--brand), var(--ink-soft) 22%);
+  transition:
+    color 150ms ease,
+    transform 150ms ease;
+}
+
+.field-label-icon svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  stroke-width: 2.15;
+}
+
+.employee-form-dialog .field:focus-within > .field-label,
+.employee-form-dialog .field:focus-within .field-label-icon {
+  color: var(--brand);
+}
+
+.employee-form-dialog .field:focus-within .field-label-icon {
+  transform: translateY(-1px);
+}
+
+.employee-form-dialog .app-input {
+  min-height: 2.75rem;
+  border-color: var(--line);
+  border-radius: 9px;
+  color: var(--ink);
+  background: var(--surface);
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    background 150ms ease;
+}
+
+.employee-form-dialog .app-input:hover:not(:disabled) {
+  border-color: color-mix(in oklch, var(--line), var(--brand) 28%);
+}
+
+.employee-form-dialog .app-input:focus,
+.employee-form-dialog .app-input:focus-within {
+  border-color: color-mix(in oklch, var(--brand), var(--line) 25%);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--brand), transparent 90%);
+}
+
+.employee-form-dialog .app-input-section {
+  color: var(--muted);
+}
+
+.employee-form-dialog .app-pill {
+  border: 1px solid color-mix(in oklch, var(--brand), var(--line) 65%);
+  color: var(--brand);
+  background: color-mix(in oklch, var(--brand), var(--surface) 92%);
+  font-weight: 750;
+}
+
+/* An approver kept only because they are already assigned — they no longer meet
+   the eligibility rules and the save will be rejected until they are removed. */
+.employee-form-dialog .app-pill.employee-pill-invalid {
+  border-color: var(--warning-ink);
+  color: var(--warning-ink);
+  background: color-mix(in oklch, var(--warning-ink), var(--surface) 92%);
+}
+
+.employee-field-compact .app-input-wrapper {
+  max-width: 10rem;
+}
+
+.retirement-control {
+  display: grid;
+  grid-template-columns: minmax(14rem, 19rem) minmax(15rem, max-content);
+  align-items: center;
+  gap: var(--space-lg);
+}
+
+.field-hint {
+  display: block;
+  max-width: 42rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.approval-switch {
+  margin: 0 0 var(--space-lg);
+  padding: var(--space-md);
+  border-radius: 10px;
+  background: var(--surface-raised);
+}
+
+.employee-form-dialog .app-switch-label {
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.employee-form-footer {
+  justify-content: space-between;
+  gap: var(--space-lg);
+  padding: var(--space-md) calc(var(--space-xl) + var(--space-xs));
+}
+
+.modal-footer-note {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.modal-footer-note span {
+  color: var(--danger);
+  font-weight: 850;
+}
+
+.modal-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.employee-form-footer .app-button {
+  min-height: 2.75rem;
+  padding-inline: var(--space-md);
+  transition:
+    transform 120ms ease,
+    box-shadow 150ms ease;
+}
+
+.employee-form-footer .app-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.employee-form-footer .app-button:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
+.employee-form-footer .app-button[data-variant="filled"] {
+  box-shadow: 0 5px 14px color-mix(in oklch, var(--brand), transparent 80%);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* Settings page */
@@ -566,10 +918,17 @@ button:focus-visible {
   justify-content: flex-end;
 }
 
-.field span {
+.field > .field-label {
   color: var(--ink-soft);
   font-size: 0.78rem;
   font-weight: 800;
+}
+
+@keyframes section-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
 }
 
 @keyframes overlay-in {
@@ -587,7 +946,8 @@ button:focus-visible {
 
 @media (prefers-reduced-motion: reduce) {
   .modal-overlay,
-  .modal-dialog {
+  .modal-dialog,
+  .employee-form-section {
     animation: none;
   }
 }
@@ -759,6 +1119,27 @@ button:focus-visible {
 }
 
 @media (max-width: 900px) {
+  .modal-overlay {
+    padding: var(--space-sm);
+  }
+
+  .employee-form-dialog {
+    max-height: calc(100vh - 2 * var(--space-sm));
+    border-radius: 14px;
+  }
+
+  .retirement-control {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .employee-field-compact .app-input-wrapper {
+    max-width: none;
+  }
+
+  .employee-form-footer .modal-footer-note {
+    display: none;
+  }
+
   .topbar,
   .section-heading {
     align-items: stretch;
@@ -799,6 +1180,36 @@ button:focus-visible {
 }
 
 @media (max-width: 720px) {
+  .modal-title-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+
+  .modal-description {
+    display: none;
+  }
+
+  .employee-form-body {
+    padding: var(--space-md);
+  }
+
+  .employee-form-section {
+    padding: var(--space-md);
+  }
+
+  .employee-section-heading {
+    grid-template-columns: 1.8rem minmax(0, 1fr);
+  }
+
+  .employee-section-icon {
+    display: none;
+  }
+
+  .modal-actions,
+  .modal-actions .app-button {
+    width: 100%;
+  }
+
   .app-shell {
     grid-template-rows: auto minmax(0, 1fr);
   }

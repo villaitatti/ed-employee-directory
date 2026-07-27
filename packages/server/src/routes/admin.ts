@@ -269,6 +269,7 @@ type ApprovalCandidate = {
   firstName: string;
   lastName: string;
   status: EmployeeWriteInput['status'];
+  canBeResponsible: boolean;
   canBeSubstituteResponsible: boolean;
 };
 
@@ -276,11 +277,39 @@ function candidateName(candidate: ApprovalCandidate): string {
   return `${candidate.firstName} ${candidate.lastName}`.trim() || `Employee Number ${candidate.employeeNumber}`;
 }
 
+/**
+ * Employee Numbers that may be assigned in each approval role, indexed once per
+ * fixpoint iteration of the import preview. The required-approver rule asks "is
+ * anyone *other than this subject* eligible?", which scanned the whole candidate
+ * map per row — O(rows x employees) for every iteration. A set makes it O(1).
+ */
+type EligibleApproverNumbers = {
+  responsabile: ReadonlySet<number>;
+  substitute: ReadonlySet<number>;
+};
+
+function indexEligibleApprovers(candidates: Iterable<ApprovalCandidate>): EligibleApproverNumbers {
+  const responsabile = new Set<number>();
+  const substitute = new Set<number>();
+  for (const candidate of candidates) {
+    if (candidate.status !== 'ATTIVO') continue;
+    if (candidate.canBeResponsible) responsabile.add(candidate.employeeNumber);
+    if (candidate.canBeSubstituteResponsible) substitute.add(candidate.employeeNumber);
+  }
+  return { responsabile, substitute };
+}
+
+/** Whether anyone besides `employeeNumber` is eligible — the bootstrap check. */
+function hasEligibleApproverOtherThan(eligible: ReadonlySet<number>, employeeNumber: number): boolean {
+  return eligible.size > (eligible.has(employeeNumber) ? 1 : 0);
+}
+
 function validateRoleNumberCandidates(input: {
   employeeNumber: number;
   status: EmployeeWriteInput['status'];
   roleNumbers: EmployeeApprovalRoleNumbers;
   candidateByNumber: Map<number, ApprovalCandidate>;
+  eligibleApprovers: EligibleApproverNumbers;
   /** Employee Numbers that appear as a subject row anywhere in this import. */
   inFileEmployeeNumbers: ReadonlySet<number>;
   /** Subject rows currently considered valid+selected in this iteration. */
@@ -290,6 +319,11 @@ function validateRoleNumberCandidates(input: {
   for (const code of missingRequiredApprovers(input.status, {
     hasResponsabile: input.roleNumbers.responsabileNumbers.length > 0,
     hasSubstitute: input.roleNumbers.substituteResponsabileNumbers.length > 0,
+    responsabileEligibleExists: hasEligibleApproverOtherThan(
+      input.eligibleApprovers.responsabile,
+      input.employeeNumber
+    ),
+    substituteEligibleExists: hasEligibleApproverOtherThan(input.eligibleApprovers.substitute, input.employeeNumber),
   })) {
     input.errors.push(REQUIRED_APPROVER_MESSAGES[code]);
   }
@@ -316,6 +350,9 @@ function validateRoleNumberCandidates(input: {
     }
     if (candidate.status !== 'ATTIVO') {
       input.errors.push(`${candidateName(candidate)} is not an active employee.`);
+    }
+    if (role === 'RESPONSABILE' && !candidate.canBeResponsible) {
+      input.errors.push(`${candidateName(candidate)} is not marked as Responsabile eligible.`);
     }
     if (role === 'SUBSTITUTE_RESPONSABILE' && !candidate.canBeSubstituteResponsible) {
       input.errors.push(`${candidateName(candidate)} is not marked as Sostituto-Responsabile eligible.`);
@@ -652,6 +689,7 @@ adminRouter.get(
         lastName: employee.lastName,
         status: employee.status,
         department: serializeDepartment(employee.department),
+        canBeResponsible: employee.canBeResponsible,
         canBeSubstituteResponsible: employee.canBeSubstituteResponsible,
       })),
     });
@@ -751,6 +789,8 @@ adminRouter.put(
         employeeId,
         currentStatus: before.status,
         nextStatus: input.status,
+        currentCanBeResponsible: before.canBeResponsible,
+        nextCanBeResponsible: input.canBeResponsible ?? before.canBeResponsible,
         currentCanBeSubstituteResponsible: before.canBeSubstituteResponsible,
         nextCanBeSubstituteResponsible: input.canBeSubstituteResponsible ?? before.canBeSubstituteResponsible,
       });
@@ -762,6 +802,7 @@ adminRouter.put(
             retirementDate: before.retirementDate.toISOString().slice(0, 10),
             retirementDateOverridden: before.retirementDateOverridden,
             tfr: before.tfr,
+            canBeResponsible: before.canBeResponsible,
             canBeSubstituteResponsible: before.canBeSubstituteResponsible,
             weeklySchedule: weeklyScheduleFromEmployee(before),
           },
@@ -851,6 +892,7 @@ adminRouter.get(
         'Contract Type',
         'TFR',
         'Status',
+        'Responsabile Abilitato',
         'Sostituto Abilitato',
         'Responsabile Pre-approvatore',
         'Responsabile',
@@ -878,6 +920,7 @@ adminRouter.get(
           serialized.contractType,
           serialized.tfr,
           serialized.status,
+          serialized.canBeResponsible,
           serialized.canBeSubstituteResponsible,
           roleNumbersForExport(employee, 'PRE_APPROVER'),
           roleNumbersForExport(employee, 'RESPONSABILE'),
@@ -927,6 +970,7 @@ adminRouter.get(
       { header: 'Contract Type', key: 'contractType', width: 18 },
       { header: 'TFR', key: 'tfr', width: 18 },
       { header: 'Status', key: 'status', width: 16 },
+      { header: 'Responsabile Abilitato', key: 'canBeResponsible', width: 20 },
       { header: 'Sostituto Abilitato', key: 'canBeSubstituteResponsible', width: 20 },
       { header: 'Responsabile Pre-approvatore', key: 'preApprovers', width: 30 },
       { header: 'Responsabile', key: 'responsabili', width: 24 },
@@ -962,6 +1006,7 @@ adminRouter.get(
         contractType: displayContractType(serialized.contractType),
         tfr: displayTfr(serialized.tfr),
         status: displayStatus(serialized.status),
+        canBeResponsible: serialized.canBeResponsible,
         canBeSubstituteResponsible: serialized.canBeSubstituteResponsible,
         preApprovers: roleNumbersForExport(employee, 'PRE_APPROVER'),
         responsabili: roleNumbersForExport(employee, 'RESPONSABILE'),
@@ -1038,6 +1083,7 @@ adminRouter.post(
           firstName: true,
           lastName: true,
           status: true,
+          canBeResponsible: true,
           canBeSubstituteResponsible: true,
         },
       }),
@@ -1092,6 +1138,9 @@ adminRouter.post(
       const retirementOverridden = parseBoolean(readFirst(row, retirementConfirmedAliases));
       const importedRetirementDate = parseNullableDate(readFirst(row, retirementDateAliases));
       const parsedTfr = parseTfr(readFirst(row, ['tfr']));
+      const canBeResponsible = parseOptionalBoolean(
+        readFirst(row, ['responsabile abilitato', 'puo essere responsabile', 'can be responsible'])
+      );
       const canBeSubstituteResponsible = parseOptionalBoolean(
         readFirst(row, ['sostituto abilitato', 'puo essere sostituto responsabile', 'can be substitute responsible'])
       );
@@ -1116,6 +1165,7 @@ adminRouter.post(
         contractType: parseContractType(readFirst(row, ['tipo contratto', 'contract type'])),
         ...(parsedTfr !== undefined ? { tfr: parsedTfr } : {}),
         status: parseStatus(readFirst(row, ['stato', 'status'])),
+        ...(canBeResponsible !== undefined ? { canBeResponsible } : {}),
         ...(canBeSubstituteResponsible !== undefined ? { canBeSubstituteResponsible } : {}),
         ...(weeklySchedule ? { weeklySchedule } : {}),
       };
@@ -1160,6 +1210,7 @@ adminRouter.post(
         firstName: employee.firstName,
         lastName: employee.lastName,
         status: employee.status,
+        canBeResponsible: employee.canBeResponsible,
         canBeSubstituteResponsible: employee.canBeSubstituteResponsible,
       });
     }
@@ -1182,11 +1233,16 @@ adminRouter.post(
           firstName: row.parsed.firstName,
           lastName: row.parsed.lastName,
           status: row.parsed.status,
+          canBeResponsible: row.parsed.canBeResponsible ?? existingEmployee?.canBeResponsible ?? false,
           canBeSubstituteResponsible:
             row.parsed.canBeSubstituteResponsible ?? existingEmployee?.canBeSubstituteResponsible ?? false,
         });
         overlaid.push(row.parsed.employeeNumber);
       }
+
+      // The candidate map is stable for the rest of this iteration (overlays are
+      // restored below), so the eligibility sets can be built once for all rows.
+      const eligibleApprovers = indexEligibleApprovers(candidateByNumber.values());
 
       previewRows = parsedRows.map((row) => {
         const errors = [...row.baseErrors];
@@ -1196,6 +1252,7 @@ adminRouter.post(
             status: row.parsed.status,
             roleNumbers: row.roleNumbers,
             candidateByNumber,
+            eligibleApprovers,
             inFileEmployeeNumbers,
             selectedImportNumbers,
             errors,
@@ -1206,9 +1263,12 @@ adminRouter.post(
           // can be missing required approvers here.
           const existingId = row.existingEmployeeId;
           const existingRoles = existingId ? existingRolesByEmployeeId.get(existingId) : undefined;
+          const subjectNumber = row.parsed.employeeNumber;
           for (const code of missingRequiredApprovers(row.parsed.status, {
             hasResponsabile: existingRoles?.has('RESPONSABILE') ?? false,
             hasSubstitute: existingRoles?.has('SUBSTITUTE_RESPONSABILE') ?? false,
+            responsabileEligibleExists: hasEligibleApproverOtherThan(eligibleApprovers.responsabile, subjectNumber),
+            substituteEligibleExists: hasEligibleApproverOtherThan(eligibleApprovers.substitute, subjectNumber),
           })) {
             errors.push(REQUIRED_APPROVER_MESSAGES[code]);
           }
@@ -1241,6 +1301,7 @@ adminRouter.post(
             firstName: existingEmployee.firstName,
             lastName: existingEmployee.lastName,
             status: existingEmployee.status,
+            canBeResponsible: existingEmployee.canBeResponsible,
             canBeSubstituteResponsible: existingEmployee.canBeSubstituteResponsible,
           });
         } else {
@@ -1293,6 +1354,7 @@ adminRouter.post(
       const existing = typeof parsed?.employeeNumber === 'number' ? employeeByNumber.get(parsed.employeeNumber) : undefined;
       if (!parsed || !existing) continue;
       const nextStatus = parsed.status ?? existing.status;
+      const nextCanBeResponsible = parsed.canBeResponsible ?? existing.canBeResponsible;
       const nextCanBeSubstitute = parsed.canBeSubstituteResponsible ?? existing.canBeSubstituteResponsible;
       const employeeNumber = existing.employeeNumber;
 
@@ -1304,7 +1366,21 @@ adminRouter.post(
         const reaffirmed = (reaffirmedRoles.get(employeeNumber)?.size ?? 0) > 0;
         if (dbRefs.length > 0 || reaffirmed) {
           row.errors.push(
-            `This employee is still used in approval workflows and cannot be made inactive in this import. Remove those approval assignments first.`
+            'This employee is still used in approval workflows and cannot be made inactive in this import. Remove those approval assignments first.'
+          );
+        }
+      }
+
+      if (existing.canBeResponsible && !nextCanBeResponsible) {
+        const dbRefs = await findApprovalReferenceEmployeeNumbers(prisma, {
+          approverId: existing.id,
+          roles: ['RESPONSABILE'],
+          ignoreSubjectEmployeeNumbers: rewrittenSubjectNumbers,
+        });
+        const reaffirmed = reaffirmedRoles.get(employeeNumber)?.has('RESPONSABILE') ?? false;
+        if (dbRefs.length > 0 || reaffirmed) {
+          row.errors.push(
+            'This employee is still used as Responsabile and cannot have Responsabile eligibility disabled in this import.'
           );
         }
       }
@@ -1318,7 +1394,7 @@ adminRouter.post(
         const reaffirmed = reaffirmedRoles.get(employeeNumber)?.has('SUBSTITUTE_RESPONSABILE') ?? false;
         if (dbRefs.length > 0 || reaffirmed) {
           row.errors.push(
-            `This employee is still used as Sostituto-Responsabile and cannot have substitute eligibility disabled in this import.`
+            'This employee is still used as Sostituto-Responsabile and cannot have substitute eligibility disabled in this import.'
           );
         }
       }
@@ -1505,6 +1581,8 @@ adminRouter.post(
           // a record that never had anything to lose.
           currentStatus: saved.before?.status ?? 'DA_ASSUMERE',
           nextStatus: saved.parsed.status,
+          currentCanBeResponsible: saved.before?.canBeResponsible ?? false,
+          nextCanBeResponsible: saved.parsed.canBeResponsible ?? saved.before?.canBeResponsible ?? false,
           currentCanBeSubstituteResponsible: saved.before?.canBeSubstituteResponsible ?? false,
           nextCanBeSubstituteResponsible:
             saved.parsed.canBeSubstituteResponsible ?? saved.before?.canBeSubstituteResponsible ?? false,
