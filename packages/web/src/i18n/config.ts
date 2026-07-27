@@ -153,7 +153,7 @@ export const resources = {
         roleCapabilitiesSectionHint:
           'Definisce se QUESTO dipendente può essere scelto come Responsabile o Sostituto-Responsabile di altri. Attiva un ruolo per farlo comparire nei relativi menu delle altre schede.',
         responsabileRequired: 'Seleziona almeno un Responsabile per questo dipendente.',
-        weeklySectionHint: 'Ore giornaliere in formato sessantesimi.',
+        weeklySectionHint: 'Ore giornaliere in formato sessantesimi, per esempio 7,30 per sette ore e trenta minuti.',
         requiredFields: 'Campi obbligatori',
         noOptionsFound: 'Nessun risultato',
         confirmationTitle: 'Conferma richiesta',
@@ -175,9 +175,13 @@ export const resources = {
         confirmDeleteDepartment: 'Eliminare definitivamente questo dipartimento? L’operazione non è reversibile.',
         confirmUnconfirmRetirement:
           'La data di pensionamento confermata verrà ricalcolata dai dati anagrafici al salvataggio. Continuare?',
+        hireDateHint: 'Obbligatoria quando lo stato è Attivo.',
+        terminationDateHint:
+          'Obbligatoria quando lo stato è Cessato; non può precedere la data assunzione.',
         retirementDateHint:
           'Calcolata automaticamente dalla data di nascita in base all’età pensionabile ({{years}} anni e {{months}} mesi). Conferma solo se la data deve essere diversa.',
-        fteHint: '1 = tempo pieno; un valore tra 0 e 1 (es. 0,5) = part-time.',
+        fteHint:
+          '1 = tempo pieno; un valore tra 0 e 1 (es. 0,5) = part-time. Sono accettati sia 0,5 sia 0.5; massimo 3 decimali.',
         excelFileRequired: 'Seleziona un file Excel.',
         previewRequired: 'Genera prima l’anteprima.',
         rowsCount: '{{count}} righe',
@@ -338,7 +342,7 @@ export const resources = {
         roleCapabilitiesSectionHint:
           'Controls whether THIS employee can be chosen as a Responsible or Substitute-Responsible for others. Enable a role to make this person appear in those menus on other cards.',
         responsabileRequired: 'Select at least one Responsible for this employee.',
-        weeklySectionHint: 'Daily hours in payroll sixtieths format.',
+        weeklySectionHint: 'Daily hours in payroll sixtieths format, for example 7,30 for seven hours and thirty minutes.',
         requiredFields: 'Required fields',
         noOptionsFound: 'No results found',
         confirmationTitle: 'Confirmation required',
@@ -360,9 +364,12 @@ export const resources = {
         confirmDeleteDepartment: 'Permanently delete this department? This cannot be undone.',
         confirmUnconfirmRetirement:
           'The confirmed retirement date will be recalculated from the birth date on save. Continue?',
+        hireDateHint: 'Required when status is Active.',
+        terminationDateHint: 'Required when status is Terminated; it cannot be before the hire date.',
         retirementDateHint:
           'Calculated automatically from the birth date using the retirement age ({{years}} years and {{months}} months). Confirm only if the date must differ.',
-        fteHint: '1 = full time; a value between 0 and 1 (e.g. 0.5) = part time.',
+        fteHint:
+          '1 = full time; a value between 0 and 1 (e.g. 0.5) = part time. Both 0,5 and 0.5 are accepted; up to 3 decimals.',
         excelFileRequired: 'Select an Excel file.',
         previewRequired: 'Generate the preview first.',
         rowsCount: '{{count}} rows',

@@ -1084,7 +1084,7 @@ export function EmployeeForm({
                   comboboxProps={comboboxProps}
                 />
               </Field>
-              <Field icon={<CalendarDays />} label={t('fields.hireDate')}>
+              <Field icon={<CalendarDays />} label={t('fields.hireDate')} hint={t('copy.hireDateHint')}>
                 <DateInput
                   ariaLabel={t('fields.hireDate')}
                   value={draft.hireDate}
@@ -1092,7 +1092,11 @@ export function EmployeeForm({
                 />
               </Field>
               {showTerminationDate ? (
-                <Field icon={<CalendarDays />} label={t('fields.terminationDate')}>
+                <Field
+                  icon={<CalendarDays />}
+                  label={t('fields.terminationDate')}
+                  hint={t('copy.terminationDateHint')}
+                >
                   <DateInput
                     ariaLabel={t('fields.terminationDate')}
                     value={draft.terminationDate}

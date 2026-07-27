@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.1 - 2026-07-27
+
+### Added
+
+- The hire date and termination date fields now carry hints explaining when each is required and that a termination date cannot precede the hire date.
+
+### Changed
+
+- The FTE hint now states the accepted input format: both `0,5` and `0.5` are read, with at most three decimals.
+- The weekly schedule hint now shows a worked example of the sessantesimi format, `7,30` for seven hours and thirty minutes, instead of only naming it.
+
 ## 0.7.0 - 2026-07-27
 
 ### Added
