@@ -1,8 +1,11 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { toast } from 'sonner';
 import { EmployeeForm, emptyEmployeeDraft, type EmployeeDraft } from './App.js';
+import { fieldErrorId } from './employee-validation.js';
+import i18n from './i18n/config.js';
 import { renderWithProviders } from './test/render.js';
 
 const department = { id: 'dept_1', name: 'Amministrazione', normalizedName: 'amministrazione', createdAt: '', updatedAt: '' };
@@ -44,10 +47,11 @@ describe('EmployeeForm modal', () => {
       />
     );
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    // 12 always-required fields (including Work Email) + the Responsabile field,
-    // which is required here because an eligible Responsabile (emp_1) exists to
-    // pick and the draft is ATTIVO.
-    expect(container.querySelectorAll('.field-required')).toHaveLength(13);
+    // 12 always-required fields (including Work Email), plus three that are
+    // conditionally required and all apply to this ATTIVO draft: the Hire Date,
+    // the Responsabile (emp_1 is eligible to pick), and the Substitute-Responsabile
+    // (emp_2 is) — both halves of the server's active-employee approver rule.
+    expect(container.querySelectorAll('.field-required')).toHaveLength(15);
   });
 
   it('renders stored dates with a localized, unambiguous display value', () => {
@@ -552,7 +556,7 @@ describe('EmployeeForm modal', () => {
       />
     );
 
-    const removeButton = screen.getByRole('button', { name: /Rimuovi Approvatore non più idoneo/i });
+    const removeButton = screen.getByRole('button', { name: /Rimuovi Non più idoneo a questo ruolo/i });
     expect(removeButton).toBeInTheDocument();
     // Flagged visually too, so it reads as something to fix rather than a normal
     // selection sitting next to the eligible ones.
@@ -606,7 +610,7 @@ describe('EmployeeForm modal', () => {
   });
 
   it('flags the Responsabile as required for an active employee when one is eligible', () => {
-    renderWithProviders(
+    const { container } = renderWithProviders(
       <EmployeeForm
         draft={emptyEmployeeDraft}
         departments={departments}
@@ -618,7 +622,14 @@ describe('EmployeeForm modal', () => {
       />
     );
 
-    expect(screen.getByText('Seleziona almeno un Responsabile per questo dipendente.')).toBeInTheDocument();
+    // Up front this is guidance, worded like every other field's hint — not the
+    // error sentence, which would read as an unhighlighted failure.
+    expect(
+      screen.getByText('Obbligatorio per un dipendente Attivo: indica chi approva le sue richieste di ferie.')
+    ).toBeInTheDocument();
+    expect(container.querySelector('[data-field="responsabileIds"] .field-hint')).not.toBeNull();
+    expect(container.querySelector('[data-field="responsabileIds"] .field-error')).toBeNull();
+    expect(container.querySelector('.field-required')).not.toBeNull();
   });
 
   it('does not require a Responsabile while bootstrapping (no eligible options)', () => {
@@ -742,5 +753,255 @@ describe('EmployeeForm modal', () => {
     await user.clear(screen.getByLabelText('Cognome'));
     await user.type(screen.getByLabelText('Cognome'), 'Caselli Rossi');
     expect(latestDraft.workEmail).toBe('legacy.address@itatti.harvard.edu');
+  });
+});
+
+describe('EmployeeForm validation feedback', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** A draft that only fails on the fields each test is about. */
+  const validDraft: EmployeeDraft = {
+    ...emptyEmployeeDraft,
+    employeeNumber: '2001',
+    firstName: 'Andrea',
+    lastName: 'Caselli',
+    workEmail: 'acaselli@itatti.harvard.edu',
+    departmentId: 'dept_1',
+    birthDate: '1980-05-04',
+    hireDate: '2020-01-02',
+    // Both approver roles filled: an ATTIVO employee needs each one as soon as
+    // somebody is eligible for it, which emp_1 and emp_2 respectively are.
+    approvalRoleIds: {
+      ...emptyEmployeeDraft.approvalRoleIds,
+      responsabileIds: ['emp_1'],
+      substituteResponsabileIds: ['emp_2'],
+    },
+  };
+
+  function renderForm(draft: EmployeeDraft, onSave = vi.fn()) {
+    const result = renderWithProviders(
+      <EmployeeForm
+        draft={draft}
+        departments={departments}
+        employeeOptions={employeeOptions}
+        onCancel={vi.fn()}
+        onChange={vi.fn()}
+        onSave={onSave}
+        isSaving={false}
+      />
+    );
+    return { ...result, onSave };
+  }
+
+  it('saves a complete draft without complaint', async () => {
+    const user = userEvent.setup();
+    const { onSave } = renderForm(validDraft);
+    await user.click(screen.getByRole('button', { name: /Salva/i }));
+    expect(onSave).toHaveBeenCalledOnce();
+  });
+
+  it('blocks an incomplete draft, highlights the fields, and names them in the toast', async () => {
+    const errorSpy = vi.spyOn(toast, 'error').mockImplementation(() => 'id');
+    const user = userEvent.setup();
+    const { container, onSave } = renderForm(emptyEmployeeDraft);
+
+    await user.click(screen.getByRole('button', { name: /Salva/i }));
+
+    expect(onSave).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Controlla i campi evidenziati',
+      expect.objectContaining({
+        // Listed in the order the form renders them, by their printed labels.
+        description: expect.stringContaining('Numero Matricola, Nome, Cognome, Data di nascita'),
+      })
+    );
+    // Not just a toast: the inputs themselves are marked.
+    expect(container.querySelector('[data-field="employeeNumber"].field-invalid')).not.toBeNull();
+    expect(container.querySelector('[data-field="firstName"].field-invalid')).not.toBeNull();
+    expect(screen.getAllByText('Campo obbligatorio.').length).toBeGreaterThan(0);
+  });
+
+  it('marks nothing before the first save attempt', () => {
+    const { container } = renderForm(emptyEmployeeDraft);
+    expect(container.querySelector('.field-invalid')).toBeNull();
+  });
+
+  it('explains the cross-field date rules on the field they blame', async () => {
+    const errorSpy = vi.spyOn(toast, 'error').mockImplementation(() => 'id');
+    const user = userEvent.setup();
+    const { container } = renderForm({
+      ...validDraft,
+      status: 'CESSATO',
+      hireDate: '2020-01-02',
+      terminationDate: '2019-12-31',
+    });
+
+    await user.click(screen.getByRole('button', { name: /Salva/i }));
+
+    expect(errorSpy).toHaveBeenCalled();
+    const terminationField = container.querySelector('[data-field="terminationDate"]');
+    expect(terminationField).toHaveClass('field-invalid');
+    expect(within(terminationField as HTMLElement).getByRole('alert')).toHaveTextContent(
+      'Non può precedere la data di assunzione.'
+    );
+  });
+
+  it('rejects an FTE outside the allowed range with the rule spelled out', async () => {
+    vi.spyOn(toast, 'error').mockImplementation(() => 'id');
+    const user = userEvent.setup();
+    const { container, onSave } = renderForm({ ...validDraft, fte: '2' });
+
+    await user.click(screen.getByRole('button', { name: /Salva/i }));
+
+    expect(onSave).not.toHaveBeenCalled();
+    expect(within(container.querySelector('[data-field="fte"]') as HTMLElement).getByRole('alert')).toHaveTextContent(
+      'Inserisci un valore tra 0 e 1, con al massimo 3 decimali — per esempio 0,5.'
+    );
+  });
+
+  it('highlights the Responsabile field itself, not just the message, once save is attempted', async () => {
+    vi.spyOn(toast, 'error').mockImplementation(() => 'id');
+    const user = userEvent.setup();
+    const { container } = renderForm({
+      ...validDraft,
+      approvalRoleIds: { ...emptyEmployeeDraft.approvalRoleIds, responsabileIds: [] },
+    });
+
+    // Before: a plain hint, no error styling.
+    expect(container.querySelector('[data-field="responsabileIds"].field-invalid')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: /Salva/i }));
+
+    const field = container.querySelector('[data-field="responsabileIds"]');
+    expect(field).toHaveClass('field-invalid');
+    // The input itself carries the invalid state, and the message is announced.
+    expect(screen.getByRole('combobox', { name: 'Responsabile' })).toHaveAttribute('aria-invalid', 'true');
+    expect(within(field as HTMLElement).getByRole('alert')).toHaveAttribute(
+      'id',
+      fieldErrorId('responsabileIds')
+    );
+    expect(within(field as HTMLElement).getByRole('alert')).toHaveTextContent(
+      'Seleziona almeno un Responsabile per questo dipendente.'
+    );
+    // And its section is badged, for when the field is scrolled out of view.
+    expect(field?.closest('.employee-form-section')).toHaveClass('section-has-errors');
+  });
+
+  it('lists every problem in a summary that jumps to the field it names', async () => {
+    vi.spyOn(toast, 'error').mockImplementation(() => 'id');
+    const user = userEvent.setup();
+    const { container } = renderForm({ ...validDraft, employeeNumber: '', fte: '9' });
+
+    // No summary until the operator asks to save.
+    expect(container.querySelector('.form-error-summary')).toBeNull();
+    await user.click(screen.getByRole('button', { name: /Salva/i }));
+
+    const summary = container.querySelector('.form-error-summary') as HTMLElement;
+    expect(summary).not.toBeNull();
+    expect(within(summary).getByText('Ci sono 2 campi da correggere prima di salvare:')).toBeInTheDocument();
+
+    // Each entry names a field and jumps to it — the toast is gone in ten
+    // seconds, this is what remains.
+    const jump = within(summary).getByRole('button', { name: 'Vai al campo FTE' });
+    await user.click(jump);
+    expect(screen.getByLabelText('FTE')).toHaveFocus();
+  });
+
+  it('clears the summary as the last problem is fixed', async () => {
+    vi.spyOn(toast, 'error').mockImplementation(() => 'id');
+    const user = userEvent.setup();
+
+    function Controlled() {
+      const [draft, setDraft] = useState<EmployeeDraft>({ ...validDraft, employeeNumber: '' });
+      return (
+        <EmployeeForm
+          draft={draft}
+          departments={departments}
+          employeeOptions={employeeOptions}
+          onCancel={vi.fn()}
+          onChange={setDraft}
+          onSave={vi.fn()}
+          isSaving={false}
+        />
+      );
+    }
+
+    const { container } = renderWithProviders(<Controlled />);
+    await user.click(screen.getByRole('button', { name: /Salva/i }));
+    expect(container.querySelector('.form-error-summary')).not.toBeNull();
+
+    await user.type(screen.getByLabelText('Numero Matricola'), '2001');
+
+    expect(container.querySelector('.form-error-summary')).toBeNull();
+    expect(container.querySelector('.field-invalid')).toBeNull();
+    expect(container.querySelector('.section-has-errors')).toBeNull();
+  });
+
+  it('shows the field errors a rejected save came back with', () => {
+    const { container } = renderWithProviders(
+      <EmployeeForm
+        draft={validDraft}
+        departments={departments}
+        employeeOptions={employeeOptions}
+        serverFieldErrors={{ workEmail: 'Già assegnata a un altro dipendente.' }}
+        onCancel={vi.fn()}
+        onChange={vi.fn()}
+        onSave={vi.fn()}
+        isSaving={false}
+      />
+    );
+
+    const emailField = container.querySelector('[data-field="workEmail"]');
+    expect(emailField).toHaveClass('field-invalid');
+    expect(within(emailField as HTMLElement).getByRole('alert')).toHaveTextContent(
+      'Già assegnata a un altro dipendente.'
+    );
+  });
+
+  it('clears a rejected-value error once that field is edited', async () => {
+    const user = userEvent.setup();
+
+    function Controlled() {
+      const [draft, setDraft] = useState<EmployeeDraft>(validDraft);
+      return (
+        <EmployeeForm
+          draft={draft}
+          departments={departments}
+          employeeOptions={employeeOptions}
+          serverFieldErrors={{ workEmail: 'Già assegnata a un altro dipendente.' }}
+          onCancel={vi.fn()}
+          onChange={setDraft}
+          onSave={vi.fn()}
+          isSaving={false}
+        />
+      );
+    }
+
+    const { container } = renderWithProviders(<Controlled />);
+    expect(container.querySelector('[data-field="workEmail"].field-invalid')).not.toBeNull();
+
+    // "Already taken" was a verdict on the submitted address; typing a new one
+    // makes it stale, so it must not stay red while the operator fixes it.
+    await user.type(screen.getByLabelText('Email di lavoro'), 'x');
+    expect(container.querySelector('[data-field="workEmail"].field-invalid')).toBeNull();
+  });
+
+  it('reports in English when the operator has switched language', async () => {
+    await i18n.changeLanguage('en');
+    const errorSpy = vi.spyOn(toast, 'error').mockImplementation(() => 'id');
+    const user = userEvent.setup();
+    try {
+      renderForm(emptyEmployeeDraft);
+      await user.click(screen.getByRole('button', { name: /Save/i }));
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Check the highlighted fields',
+        expect.objectContaining({ description: expect.stringContaining('Employee Number') })
+      );
+      expect(screen.getAllByText('This field is required.').length).toBeGreaterThan(0);
+    } finally {
+      await i18n.changeLanguage('it');
+    }
   });
 });

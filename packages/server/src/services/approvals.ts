@@ -187,25 +187,32 @@ export async function validateApprovalRoleIds(
     // by a later change to someone else's record. A new assignment of the same
     // person to a different role is not grandfathered and is validated below.
     if (input.grandfatheredApprovers?.has(roleApproverKey(role, id))) continue;
+    // `details.approverName` travels alongside the English message so the web app
+    // can render the same rule in the operator's language without re-fetching or
+    // parsing the sentence.
+    const approverName = `${approver.firstName} ${approver.lastName}`;
     if (approver.status !== 'ATTIVO') {
       throw new HttpError(
         400,
         'APPROVER_MUST_BE_ACTIVE',
-        `${approver.firstName} ${approver.lastName} is not an active employee.`
+        `${approverName} is not an active employee.`,
+        { approverName }
       );
     }
     if (role === 'RESPONSABILE' && !approver.canBeResponsible) {
       throw new HttpError(
         400,
         'APPROVER_NOT_RESPONSABILE_ELIGIBLE',
-        `${approver.firstName} ${approver.lastName} is not marked as Responsabile eligible.`
+        `${approverName} is not marked as Responsabile eligible.`,
+        { approverName }
       );
     }
     if (role === 'SUBSTITUTE_RESPONSABILE' && !approver.canBeSubstituteResponsible) {
       throw new HttpError(
         400,
         'APPROVER_NOT_SUBSTITUTE_ELIGIBLE',
-        `${approver.firstName} ${approver.lastName} is not marked as Sostituto-Responsabile eligible.`
+        `${approverName} is not marked as Sostituto-Responsabile eligible.`,
+        { approverName }
       );
     }
   }
@@ -276,7 +283,9 @@ export async function assertEmployeeHasNoApprovalReferences(
   });
   if (numbers.length === 0) return;
 
-  throw new HttpError(409, input.code, input.message(numbers.join(', ')));
+  throw new HttpError(409, input.code, input.message(numbers.join(', ')), {
+    employeeNumbers: numbers.join(', '),
+  });
 }
 
 export async function validateEmployeeCanLoseApprovalEligibility(
@@ -307,7 +316,8 @@ export async function validateEmployeeCanLoseApprovalEligibility(
       throw new HttpError(
         409,
         'APPROVER_IN_USE',
-        `This employee is used in approval workflows by Employee Numbers ${numbers.join(', ')}. Remove those approval assignments before making the employee inactive.`
+        `This employee is used in approval workflows by Employee Numbers ${numbers.join(', ')}. Remove those approval assignments before making the employee inactive.`,
+        { employeeNumbers: numbers.join(', ') }
       );
     }
   }
@@ -322,7 +332,8 @@ export async function validateEmployeeCanLoseApprovalEligibility(
       throw new HttpError(
         409,
         'RESPONSABILE_APPROVER_IN_USE',
-        `This employee is used as Responsabile by Employee Numbers ${numbers.join(', ')}. Remove those assignments before disabling Responsabile eligibility.`
+        `This employee is used as Responsabile by Employee Numbers ${numbers.join(', ')}. Remove those assignments before disabling Responsabile eligibility.`,
+        { employeeNumbers: numbers.join(', ') }
       );
     }
   }
@@ -337,7 +348,8 @@ export async function validateEmployeeCanLoseApprovalEligibility(
       throw new HttpError(
         409,
         'SUBSTITUTE_APPROVER_IN_USE',
-        `This employee is used as Sostituto-Responsabile by Employee Numbers ${numbers.join(', ')}. Remove those assignments before disabling substitute eligibility.`
+        `This employee is used as Sostituto-Responsabile by Employee Numbers ${numbers.join(', ')}. Remove those assignments before disabling substitute eligibility.`,
+        { employeeNumbers: numbers.join(', ') }
       );
     }
   }

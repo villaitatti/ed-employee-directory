@@ -32,8 +32,8 @@ describe('SettingsPage', () => {
     // Italian is the default language: "Anni" (years), "Mesi" (months).
     const years = await screen.findByLabelText('Anni');
     const months = screen.getByLabelText('Mesi');
-    await waitFor(() => expect(years).toHaveValue(67));
-    expect(months).toHaveValue(3);
+    await waitFor(() => expect(years).toHaveValue('67'));
+    expect(months).toHaveValue('3');
   });
 
   it('PUTs the edited policy and shows the recalculated count', async () => {
@@ -59,7 +59,7 @@ describe('SettingsPage', () => {
     renderWithProviders(<SettingsPage />);
 
     const years = await screen.findByLabelText('Anni');
-    await waitFor(() => expect(years).toHaveValue(67));
+    await waitFor(() => expect(years).toHaveValue('67'));
 
     await user.clear(years);
     await user.type(years, '68');
@@ -80,7 +80,7 @@ describe('SettingsPage', () => {
     });
   });
 
-  it('surfaces an error toast when the save fails', async () => {
+  it('translates a server rejection instead of echoing its English sentence', async () => {
     const errorSpy = vi.spyOn(toast, 'error').mockImplementation(() => 'id');
     const fetchMock = vi
       .fn()
@@ -97,10 +97,46 @@ describe('SettingsPage', () => {
     renderWithProviders(<SettingsPage />);
 
     const years = await screen.findByLabelText('Anni');
-    await waitFor(() => expect(years).toHaveValue(67));
+    await waitFor(() => expect(years).toHaveValue('67'));
     await user.click(screen.getByRole('button', { name: /Salva/i }));
     await user.click(await screen.findByRole('button', { name: 'Conferma' }));
 
-    await waitFor(() => expect(errorSpy).toHaveBeenCalledWith('The request did not pass validation.'));
+    // The operator sees the Italian title and a next step, not the raw
+    // "The request did not pass validation." the server sent.
+    await waitFor(() =>
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Alcuni campi non sono validi',
+        expect.objectContaining({
+          description: 'Controlla i campi evidenziati nel modulo e salva di nuovo.',
+        })
+      )
+    );
+  });
+
+  it('blocks an out-of-range policy before it reaches the server, marking the field', async () => {
+    const errorSpy = vi.spyOn(toast, 'error').mockImplementation(() => 'id');
+    const fetchMock = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse({ data: { retirementPolicy: { years: 67, months: 3 }, updatedAt: null } })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const user = userEvent.setup();
+    const { container } = renderWithProviders(<SettingsPage />);
+
+    const years = await screen.findByLabelText('Anni');
+    await waitFor(() => expect(years).toHaveValue('67'));
+    await user.clear(years);
+    await user.type(years, '120');
+    await user.click(screen.getByRole('button', { name: /Salva/i }));
+
+    // No confirmation modal, no PUT — the form stops it and says which field.
+    expect(screen.queryByRole('button', { name: 'Conferma' })).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(false);
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Controlla i campi evidenziati',
+      expect.objectContaining({ description: expect.stringContaining('Anni') })
+    );
+    expect(container.querySelector('.field-invalid')).not.toBeNull();
+    expect(years).toHaveAttribute('aria-invalid', 'true');
   });
 });

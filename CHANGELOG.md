@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.9.0 - 2026-07-28
+
+### Added
+
+- Forms now say **which** field is wrong, not just that something is. A rejected save marks each offending input — tinted, red label, a message with a warning icon — lists every problem in a panel above the form where each field name is a button that scrolls to and focuses that input, and badges each numbered section with a count so a problem six sections down is not invisible. The marks stay quiet until the first save attempt, then clear one by one as each field is fixed.
+- Every failure now explains **what to do next**, not only what happened. "Numero Matricola già in uso" is followed by "Un altro dipendente ha già questo Numero Matricola. Inseriscine uno diverso." Where the outcome is ambiguous — a dropped connection, a 500 — the message says outright that nothing was saved, which is the first thing anyone wants to know after a red toast.
+- The failed-data-load banner, which previously had no styling rule at all and rendered unstyled, is now a proper alert with a headline, a next step, and the retry button.
+
+### Changed
+
+- Error messages are now written in the language the operator chose. Previously every error toast showed the server's raw English sentence — an Italian user saw "A record with these values already exists." or "The request did not pass validation." — with `Errore` as the fallback. The server still speaks in codes; the web app now translates each one and interpolates the specifics (which approver, which employee numbers, which rows) so nothing is lost in the process.
+- Native browser form UI is gone. The constraint-validation bubble ("Please fill out this field.", in the *browser's* language, one field at a time, unable to express this domain's cross-field rules) is replaced by the app's own reporting; the Excel picker is no longer the browser's "Choose File / No file chosen" widget; the retirement-age fields are no longer `type="number"`, whose spinner arrows differ per browser and whose scroll-wheel could silently change a value that rewrites every employee's retirement date; and icon-button tooltips no longer use `title`.
+- Confirmations and success messages now name the record they concern. Deleting asks about "Rossi Ada (matricola 1001)" rather than "this employee", un-confirming a retirement date quotes the date being discarded, and saving the retirement age states the values being applied — so a misclick is catchable before it touches every row. Saving reports "Dipendente creato — Rossi Ada è stato aggiunto alla lista" in place of a bare "Salvato", and the Excel export, which previously gave no feedback at all, now confirms the download started.
+- Toasts are wider, dismissible, and errors stay up for ten seconds, because a two-line explanation cannot be read in four.
+
+### Fixed
+
+- An active employee needs a Sostituto-Responsabile as soon as one is eligible, but the form did not enforce it. A card that looked complete was still rejected on save with `SOSTITUTO_RESPONSABILE_REQUIRED` after a round trip. Both halves of the rule are now checked before saving, and the field is marked required and explained.
+- The Responsabile requirement showed the *error* sentence as a grey hint before any save was attempted, so it read as a failure with nothing highlighted. It now reads as guidance up front and becomes a red error, on a marked field, only once saving has been tried.
+- A termination date before the hire date came back from the API as an unattributable sentence with no field to blame, so it could not be highlighted. The rule now names the field it blames, and the same applies to the other cross-field date rules.
+- A duplicate value now identifies which field collided. The API previously answered "A record with these values already exists." without saying whether the Employee Number, the Work Email, or the department name was the problem; the field name (never the stored value) now travels with the error and the form marks it.
+- The sign-out button had no accessible name of its own, relying on the `title` attribute that has now been replaced.
+
 ## 0.8.0 - 2026-07-28
 
 ### Added

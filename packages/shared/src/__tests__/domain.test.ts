@@ -177,20 +177,28 @@ describe('employee domain rules', () => {
     ).toEqual({ retirementDate: '2047-04-15', retirementDateOverridden: false });
   });
 
-  it('validates status-specific dates', () => {
-    expect(validateStatusDates({ status: 'ATTIVO', hireDate: null })).toContain(
-      'Active employees require a hire date.'
-    );
-    expect(validateStatusDates({ status: 'CESSATO', terminationDate: null })).toContain(
-      'Terminated employees require a termination date.'
-    );
+  it('validates status-specific dates, tagging the field to fix', () => {
+    expect(validateStatusDates({ status: 'ATTIVO', hireDate: null })).toContainEqual({
+      field: 'hireDate',
+      code: 'HIRE_DATE_REQUIRED',
+      message: 'Active employees require a hire date.',
+    });
+    expect(validateStatusDates({ status: 'CESSATO', terminationDate: null })).toContainEqual({
+      field: 'terminationDate',
+      code: 'TERMINATION_DATE_REQUIRED',
+      message: 'Terminated employees require a termination date.',
+    });
     expect(
       validateStatusDates({
         status: 'CESSATO',
         hireDate: '2024-01-01',
         terminationDate: '2023-12-31',
       })
-    ).toContain('Termination date cannot be before hire date.');
+    ).toContainEqual({
+      field: 'terminationDate',
+      code: 'TERMINATION_BEFORE_HIRE',
+      message: 'Termination date cannot be before hire date.',
+    });
   });
 
   it('accepts valid status-date combinations without errors', () => {

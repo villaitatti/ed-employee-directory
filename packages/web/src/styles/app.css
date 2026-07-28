@@ -732,7 +732,9 @@ button:focus-visible {
   letter-spacing: 0.005em;
 }
 
-.employee-form-dialog .field-required {
+/* The required marker means the same thing in every form, so it is styled once
+   here rather than only inside the employee dialog. */
+.field-required {
   color: var(--danger);
   font-size: 0.9rem;
   font-weight: 800;
@@ -856,6 +858,178 @@ button:focus-visible {
   font-size: 0.78rem;
   font-weight: 500;
   line-height: 1.45;
+}
+
+/* Sits where the hint would, one weight heavier and in the danger colour, so a
+   field that has failed reads differently from one that is merely explained. */
+.field-error {
+  display: flex;
+  align-items: start;
+  gap: 0.3rem;
+  max-width: 42rem;
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.78rem;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.field-error svg {
+  flex: none;
+  margin-top: 0.12rem;
+}
+
+/* Colour alone can't carry the state (contrast, colour blindness): the icon
+   above and the label's weight change say it too. */
+.field-invalid > .field-label,
+.field-invalid > .field-label .field-label-icon {
+  color: var(--danger);
+}
+
+.field-invalid > .field-label {
+  font-weight: 850;
+}
+
+/* Plain <input> fields (department name, retirement policy) aren't Mantine
+   components, so they don't get the library's invalid styling for free. */
+.field-invalid input[aria-invalid='true'] {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--danger), transparent 88%);
+}
+
+/* The whole marked field lights up faintly. A background tint rather than a
+   border keeps the grid from reflowing when an error appears or clears. Applies
+   everywhere a Field can be invalid — the employee dialog, the department dialog,
+   and the retirement-policy card — so the state reads the same in all three. */
+.field-invalid {
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--danger), transparent 96%);
+  box-shadow: 0 0 0 var(--space-xs) color-mix(in oklch, var(--danger), transparent 96%);
+  transition:
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+/* Wider than sonner's default so a two-line "what to do next" doesn't wrap into
+   a wall, and the description gets enough contrast to actually be read. */
+.ed-toast {
+  width: 25rem;
+}
+
+.ed-toast [data-description] {
+  line-height: 1.45;
+  opacity: 0.92;
+}
+
+/* The durable list of what is still wrong, pinned above the first section. */
+.form-error-summary {
+  display: flex;
+  gap: var(--space-sm);
+  margin: 0 0 var(--space-lg);
+  padding: var(--space-md);
+  border: 1px solid color-mix(in oklch, var(--danger), transparent 60%);
+  border-radius: 12px;
+  background: color-mix(in oklch, var(--danger), var(--surface) 93%);
+}
+
+.form-error-summary-icon {
+  display: inline-flex;
+  color: var(--danger);
+}
+
+.form-error-summary strong {
+  display: block;
+  margin-bottom: var(--space-xs);
+  color: var(--danger);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.form-error-summary ul {
+  display: grid;
+  gap: var(--space-2xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.form-error-summary li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  font-size: 0.79rem;
+  line-height: 1.4;
+}
+
+/* The field name is the affordance: clicking it scrolls to and focuses the
+   input, so a six-section form never needs to be hunted through. */
+.form-error-summary button {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--danger);
+  font: inherit;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.form-error-summary button:hover {
+  text-decoration-thickness: 2px;
+}
+
+.form-error-summary li > span {
+  color: var(--ink-soft);
+}
+
+/* The badge is a fourth column, declared only when there is one to place —
+   an always-present empty track would leave its grid gap behind. */
+.section-has-errors .employee-section-heading {
+  grid-template-columns: 2rem 2rem minmax(0, 1fr) auto;
+}
+
+/* Count badge on a section heading, for when the summary is scrolled away. */
+.section-error-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-inline-start: auto;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--danger), var(--surface) 88%);
+  color: var(--danger);
+  font-size: 0.72rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+/* Failed data load: a banner inside the surface that would otherwise render as
+   an empty table, with the retry button on the trailing edge. */
+.data-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin: var(--space-md);
+  padding: var(--space-md);
+  border: 1px solid color-mix(in oklch, var(--danger), transparent 65%);
+  border-radius: 10px;
+  background: color-mix(in oklch, var(--danger), var(--surface) 92%);
+  color: var(--danger);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.data-error > span {
+  display: grid;
+  gap: var(--space-2xs);
+}
+
+.data-error-hint {
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  font-weight: 500;
 }
 
 .approval-switch {

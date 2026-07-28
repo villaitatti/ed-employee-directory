@@ -272,8 +272,11 @@ export const employeeWriteSchema = employeeWriteBaseSchema
         message: 'Confirmed retirement dates require a retirement date.',
       });
     }
+    // Path the cross-field date rules at the input that has to change, so a
+    // rejected save comes back as a field error the form can highlight rather
+    // than an unattributed sentence in `formErrors`.
     for (const error of validateStatusDates(value)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: error });
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [error.field], message: error.message });
     }
   });
 export type EmployeeWriteInput = z.infer<typeof employeeWriteSchema>;
