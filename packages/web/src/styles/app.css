@@ -678,6 +678,18 @@ button:focus-visible {
     minmax(11rem, 1fr);
 }
 
+/* Second row of the identity grid. The five columns above are sized for the five
+   name/department/date fields, so contact details get their own row: a work
+   address needs room to show in full, and the language picker only holds two
+   short options. Reset to one column each below 900px, where the grid collapses. */
+.employee-field-email {
+  grid-column: span 3;
+}
+
+.employee-field-language {
+  grid-column: span 2;
+}
+
 .employee-employment-grid {
   grid-template-columns: repeat(4, minmax(10rem, 1fr));
 }
@@ -1148,6 +1160,13 @@ button:focus-visible {
 
   .form-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* One column here, so a multi-column span would generate implicit columns and
+     push the field off the dialog. */
+  .employee-field-email,
+  .employee-field-language {
+    grid-column: auto;
   }
 
   .weekday-grid {

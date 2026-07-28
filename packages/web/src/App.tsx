@@ -1067,7 +1067,16 @@ export function EmployeeForm({
                   onChange={(event) => set('lastName', event.currentTarget.value)}
                 />
               </Field>
+              <Field icon={<CalendarDays />} label={t('fields.birthDate')} required>
+                <DateInput
+                  required
+                  ariaLabel={t('fields.birthDate')}
+                  value={draft.birthDate}
+                  onChange={(value) => set('birthDate', value)}
+                />
+              </Field>
               <Field
+                className="employee-field-email"
                 icon={<Mail />}
                 label={t('fields.workEmail')}
                 hint={t('copy.workEmailHint')}
@@ -1083,6 +1092,7 @@ export function EmployeeForm({
                 />
               </Field>
               <Field
+                className="employee-field-language"
                 icon={<Languages />}
                 label={t('fields.preferredLanguage')}
                 hint={t('copy.preferredLanguageHint')}
@@ -1094,14 +1104,6 @@ export function EmployeeForm({
                   data={LANGUAGES.map((option) => ({ value: option, label: t(`language.${option}`) }))}
                   allowDeselect={false}
                   comboboxProps={comboboxProps}
-                />
-              </Field>
-              <Field icon={<CalendarDays />} label={t('fields.birthDate')} required>
-                <DateInput
-                  required
-                  ariaLabel={t('fields.birthDate')}
-                  value={draft.birthDate}
-                  onChange={(value) => set('birthDate', value)}
                 />
               </Field>
             </div>
