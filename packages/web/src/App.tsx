@@ -13,6 +13,7 @@ import {
   History,
   Languages,
   LogOut,
+  Mail,
   Plus,
   Save,
   Search,
@@ -39,6 +40,7 @@ import {
   DEFAULT_RETIREMENT_POLICY,
   DEFAULT_WEEKLY_SCHEDULE_MINUTES,
   EMPLOYEE_STATUSES,
+  LANGUAGES,
   WEEKDAY_KEYS,
   calculateRetirementDate,
   expectedWeeklyMinutesForFte,
@@ -59,11 +61,13 @@ import {
   type EmployeeOption,
   type EmployeeStatus,
   type ImportPreview,
+  type Language,
   type TfrOption,
   type UsaCategory,
   type WeekdayKey,
 } from '@itatti/shared';
 import { createApiClient } from './api/client.js';
+import { deriveWorkEmail } from './work-email.js';
 import { useEdAuth, wasSignedOut } from './auth/AuthProvider.js';
 import './styles/app.css';
 
@@ -74,6 +78,8 @@ export type EmployeeDraft = {
   employeeNumber: string;
   firstName: string;
   lastName: string;
+  workEmail: string;
+  preferredLanguage: Language;
   departmentId: string;
   birthDate: string;
   hireDate: string;
@@ -115,6 +121,8 @@ const auditFieldTranslationKeys: Record<string, string> = {
   employeeNumber: 'fields.employeeNumber',
   firstName: 'fields.firstName',
   lastName: 'fields.lastName',
+  workEmail: 'fields.workEmail',
+  preferredLanguage: 'fields.preferredLanguage',
   departmentId: 'fields.department',
   name: 'fields.department',
   birthDate: 'fields.birthDate',
@@ -185,6 +193,7 @@ function formatAuditValue(key: string, value: unknown, t: Translate): string {
   if (key === 'contractType' && typeof value === 'string') return t(`contractType.${value}`);
   if (key === 'usaCategory' && typeof value === 'string') return t(`usaCategory.${value}`);
   if (key === 'tfr' && typeof value === 'string') return t(`tfr.${value}`);
+  if (key === 'preferredLanguage' && typeof value === 'string') return t(`language.${value}`);
   if (key === 'retirementPolicy' && isRecord(value)) {
     return `${value.years ?? '-'}y ${value.months ?? '-'}m`;
   }
@@ -240,6 +249,8 @@ export const emptyEmployeeDraft: EmployeeDraft = {
   employeeNumber: '',
   firstName: '',
   lastName: '',
+  workEmail: '',
+  preferredLanguage: 'IT',
   departmentId: '',
   birthDate: '',
   hireDate: '',
@@ -273,6 +284,8 @@ function toEmployeeDraft(employee: Employee): EmployeeDraft {
     employeeNumber: String(employee.employeeNumber),
     firstName: employee.firstName,
     lastName: employee.lastName,
+    workEmail: employee.workEmail,
+    preferredLanguage: employee.preferredLanguage,
     departmentId: employee.departmentId,
     birthDate: employee.birthDate,
     hireDate: employee.hireDate ?? '',
@@ -626,6 +639,8 @@ function EmployeesPage() {
         employeeNumber: Number(input.employeeNumber),
         firstName: input.firstName,
         lastName: input.lastName,
+        workEmail: input.workEmail,
+        preferredLanguage: input.preferredLanguage,
         departmentId: input.departmentId,
         birthDate: input.birthDate,
         hireDate: input.hireDate || null,
@@ -860,6 +875,35 @@ export function EmployeeForm({
   const set = <K extends keyof EmployeeDraft>(key: K, value: EmployeeDraft[K]) => {
     onChange({ ...draft, [key]: value });
   };
+
+  // The address is suggested from the name, never imposed: once the operator has
+  // typed in the field — or when editing someone who already has one — the
+  // suggestion stops, so a manual correction for a double-barrelled surname or an
+  // address that predates the convention is never overwritten.
+  const [workEmailAuthored, setWorkEmailAuthored] = useState(() => Boolean(draft.workEmail));
+  const [workEmailShimmer, setWorkEmailShimmer] = useState(false);
+  const workEmailShimmerTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(workEmailShimmerTimer.current), []);
+
+  /**
+   * Fills the address in as the name is typed. Done here rather than in an effect
+   * on the derived value: applying the suggestion immediately makes the condition
+   * that triggered it false again, so an effect would clear its own shimmer timer
+   * on the very next render.
+   */
+  const setName = (key: 'firstName' | 'lastName', value: string) => {
+    const next = { ...draft, [key]: value };
+    const suggestion = deriveWorkEmail(next.firstName, next.lastName);
+    if (!workEmailAuthored && suggestion && suggestion !== next.workEmail) {
+      next.workEmail = suggestion;
+      setWorkEmailShimmer(true);
+      // Deriving the address is instantaneous, so the shimmer is paced for the eye
+      // rather than for the work: long enough to notice the field filled itself.
+      window.clearTimeout(workEmailShimmerTimer.current);
+      workEmailShimmerTimer.current = window.setTimeout(() => setWorkEmailShimmer(false), 1_000);
+    }
+    onChange(next);
+  };
   const setWeeklySchedule = (key: WeekdayKey, value: string) => {
     onChange({ ...draft, weeklySchedule: { ...draft.weeklySchedule, [key]: value } });
   };
@@ -1007,7 +1051,7 @@ export function EmployeeForm({
           >
             <div className="form-grid employee-identity-grid">
               <Field
-                className="employee-field-compact"
+                className="employee-field-compact employee-identity-number"
                 icon={<Hash />}
                 label={t('fields.employeeNumber')}
                 required
@@ -1022,7 +1066,90 @@ export function EmployeeForm({
                   onChange={(event) => set('employeeNumber', event.currentTarget.value)}
                 />
               </Field>
-              <Field icon={<Building2 />} label={t('fields.department')} required>
+              <Field
+                className="employee-identity-name"
+                icon={<UserRound />}
+                label={t('fields.firstName')}
+                required
+              >
+                <TextInput
+                  required
+                  aria-label={t('fields.firstName')}
+                  value={draft.firstName}
+                  onChange={(event) => setName('firstName', event.currentTarget.value)}
+                />
+              </Field>
+              <Field
+                className="employee-identity-name"
+                icon={<UserRound />}
+                label={t('fields.lastName')}
+                required
+              >
+                <TextInput
+                  required
+                  aria-label={t('fields.lastName')}
+                  value={draft.lastName}
+                  onChange={(event) => setName('lastName', event.currentTarget.value)}
+                />
+              </Field>
+              <Field
+                className="employee-identity-birthdate"
+                icon={<CalendarDays />}
+                label={t('fields.birthDate')}
+                required
+              >
+                <DateInput
+                  required
+                  ariaLabel={t('fields.birthDate')}
+                  value={draft.birthDate}
+                  onChange={(value) => set('birthDate', value)}
+                />
+              </Field>
+              <Field
+                className={[
+                  'employee-identity-email',
+                  workEmailShimmer && 'field-shimmer',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                icon={<Mail />}
+                label={t('fields.workEmail')}
+                hint={t('copy.workEmailHint')}
+                required
+              >
+                <TextInput
+                  required
+                  type="email"
+                  inputMode="email"
+                  aria-label={t('fields.workEmail')}
+                  value={draft.workEmail}
+                  onChange={(event) => {
+                    setWorkEmailAuthored(true);
+                    set('workEmail', event.currentTarget.value);
+                  }}
+                />
+              </Field>
+              <Field
+                className="employee-identity-language"
+                icon={<Languages />}
+                label={t('fields.preferredLanguage')}
+                hint={t('copy.preferredLanguageHint')}
+              >
+                <Select
+                  aria-label={t('fields.preferredLanguage')}
+                  value={draft.preferredLanguage}
+                  onChange={(value) => value && set('preferredLanguage', value as Language)}
+                  data={LANGUAGES.map((option) => ({ value: option, label: t(`language.${option}`) }))}
+                  allowDeselect={false}
+                  comboboxProps={comboboxProps}
+                />
+              </Field>
+              <Field
+                className="employee-identity-department"
+                icon={<Building2 />}
+                label={t('fields.department')}
+                required
+              >
                 <Select
                   required
                   aria-label={t('fields.department')}
@@ -1035,30 +1162,6 @@ export function EmployeeForm({
                   openOnFocus
                   nothingFoundMessage={t('copy.noOptionsFound')}
                   comboboxProps={comboboxProps}
-                />
-              </Field>
-              <Field icon={<UserRound />} label={t('fields.firstName')} required>
-                <TextInput
-                  required
-                  aria-label={t('fields.firstName')}
-                  value={draft.firstName}
-                  onChange={(event) => set('firstName', event.currentTarget.value)}
-                />
-              </Field>
-              <Field icon={<UserRound />} label={t('fields.lastName')} required>
-                <TextInput
-                  required
-                  aria-label={t('fields.lastName')}
-                  value={draft.lastName}
-                  onChange={(event) => set('lastName', event.currentTarget.value)}
-                />
-              </Field>
-              <Field icon={<CalendarDays />} label={t('fields.birthDate')} required>
-                <DateInput
-                  required
-                  ariaLabel={t('fields.birthDate')}
-                  value={draft.birthDate}
-                  onChange={(value) => set('birthDate', value)}
                 />
               </Field>
             </div>
@@ -1305,7 +1408,10 @@ export function EmployeeForm({
             <Button variant="default" type="button" onClick={requestClose}>
             {t('actions.cancel')}
             </Button>
-            <Button type="submit" loading={isSaving} leftSection={<Save size={17} />}>
+            {/* `filled` is Mantine's default, but stating it makes the element carry
+                data-variant="filled" — which app.css needs to give this button the
+                brand blue and drop shadow the rest of the app's primary buttons use. */}
+            <Button variant="filled" type="submit" loading={isSaving} leftSection={<Save size={17} />}>
               {t('actions.save')}
             </Button>
           </div>

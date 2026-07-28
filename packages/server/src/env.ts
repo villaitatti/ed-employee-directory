@@ -2,6 +2,9 @@ import { config } from 'dotenv';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
+// Type-only import inside this module keeps it free of Prisma at runtime, so the
+// env loader stays a leaf and cannot form an import cycle.
+import { parseAppRoleAssignments } from './services/time-off-directory.js';
 
 // This package runs from packages/server (pnpm sets the cwd there), so the
 // default dotenv lookup misses the monorepo root .env that the README tells you
@@ -35,6 +38,14 @@ const envSchema = z.object({
   AUTH0_ROLES_CLAIM: z.string().min(1).default('https://itatti.harvard.edu/roles'),
   AUTH0_STAFF_ROLE: z.string().min(1).default('staff-IT'),
   AUTH0_READ_SCOPE: z.string().min(1).default('read:ed'),
+  // Distinct from AUTH0_READ_SCOPE: the time-off directory's preferred-language
+  // endpoint is the first write access granted to a machine-to-machine caller, so
+  // a read-only token must not be able to reach it.
+  AUTH0_WRITE_SCOPE: z.string().min(1).default('write:time-off-directory'),
+  // Employee-number-to-application-role grants for the Ferie projection, e.g.
+  // "201:STAFF_IT|FERIE_PORTAL_ADMIN,202:FERIE_FINAL_APPROVER". ED holds no
+  // application-role master data yet, so this is the only source of those roles.
+  TIME_OFF_DIRECTORY_ROLES: z.string().default(''),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -55,6 +66,15 @@ export function loadEnv(): Env {
   }
   if (!env.DEV_SKIP_AUTH && (!env.AUTH0_DOMAIN || !env.AUTH0_AUDIENCE)) {
     throw new Error('AUTH0_DOMAIN and AUTH0_AUDIENCE are required when DEV_SKIP_AUTH is false.');
+  }
+  // Fail at boot on a typo'd role grant rather than silently syncing employees
+  // with no application roles, which would lock administration out of the portal.
+  try {
+    parseAppRoleAssignments(env.TIME_OFF_DIRECTORY_ROLES);
+  } catch (error) {
+    throw new Error(
+      `Invalid TIME_OFF_DIRECTORY_ROLES: ${error instanceof Error ? error.message : 'unparseable value.'}`
+    );
   }
 
   return env;

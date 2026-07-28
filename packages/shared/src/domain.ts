@@ -151,6 +151,17 @@ export function normalizeDepartmentName(name: string): string {
   return name.trim().replace(/\s+/g, ' ').toLocaleLowerCase('it-IT');
 }
 
+/**
+ * Canonical form of a work email. The database enforces uniqueness on the stored
+ * value, so both the write schema and the import's duplicate check must fold case
+ * identically — hence one shared helper rather than two matching expressions.
+ * Uses the invariant locale: an Italian lowercase mapping would be wrong for an
+ * address, which is ASCII by the time it reaches here.
+ */
+export function normalizeWorkEmail(value: string): string {
+  return value.trim().toLocaleLowerCase('en-US');
+}
+
 export function validateStatusDates(input: StatusDateInput): string[] {
   const errors: string[] = [];
   if (input.status === 'ATTIVO' && !input.hireDate) {

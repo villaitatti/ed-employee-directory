@@ -1,4 +1,4 @@
-import type { EmployeeWriteInput, RetirementPolicy, TfrOption, WeeklyScheduleInput } from '@itatti/shared';
+import type { EmployeeWriteInput, Language, RetirementPolicy, TfrOption, WeeklyScheduleInput } from '@itatti/shared';
 import { DEFAULT_WEEKLY_SCHEDULE_MINUTES, resolveRetirementDate } from '@itatti/shared';
 
 function dateOnlyToUtc(value: string): Date {
@@ -19,6 +19,7 @@ export type ExistingRetirement = {
   tfr?: TfrOption | null;
   canBeResponsible?: boolean | null;
   canBeSubstituteResponsible?: boolean | null;
+  preferredLanguage?: Language | null;
   weeklySchedule?: WeeklyScheduleInput | null;
 };
 
@@ -46,6 +47,8 @@ export function toEmployeeData(
     employeeNumber: input.employeeNumber,
     firstName: input.firstName,
     lastName: input.lastName,
+    workEmail: input.workEmail,
+    preferredLanguage: input.preferredLanguage ?? existing?.preferredLanguage ?? 'IT',
     departmentId: input.departmentId,
     birthDate: dateOnlyToUtc(input.birthDate),
     hireDate: nullableDateToUtc(input.hireDate),

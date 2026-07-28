@@ -36,6 +36,8 @@ export const resources = {
       fields: {
         firstName: 'Nome',
         lastName: 'Cognome',
+        workEmail: 'Email di lavoro',
+        preferredLanguage: 'Lingua preferita',
         department: 'Dipartimento',
         employeeNumber: 'Numero Matricola',
         birthDate: 'Data di nascita',
@@ -140,6 +142,10 @@ export const resources = {
         I_TATTI: 'I Tatti',
         FONDO_PENSIONE: 'Fondo Pensione',
       },
+      language: {
+        IT: 'Italiano',
+        EN: 'Inglese',
+      },
       copy: {
         productEyebrow: 'Anagrafica',
         subtitle: 'Lista dei dipendenti.',
@@ -175,6 +181,10 @@ export const resources = {
         confirmDeleteDepartment: 'Eliminare definitivamente questo dipartimento? L’operazione non è reversibile.',
         confirmUnconfirmRetirement:
           'La data di pensionamento confermata verrà ricalcolata dai dati anagrafici al salvataggio. Continuare?',
+        workEmailHint:
+          'Indirizzo di lavoro ufficiale, univoco per dipendente. Usato dal portale Ferie per le notifiche.',
+        preferredLanguageHint:
+          'Lingua con cui il portale Ferie si presenta al dipendente. Il dipendente può cambiarla dal portale.',
         hireDateHint: 'Obbligatoria quando lo stato è Attivo.',
         terminationDateHint:
           'Obbligatoria quando lo stato è Cessato; non può precedere la data assunzione.',
@@ -225,6 +235,8 @@ export const resources = {
       fields: {
         firstName: 'First Name',
         lastName: 'Last Name',
+        workEmail: 'Work Email',
+        preferredLanguage: 'Preferred Language',
         department: 'Department',
         employeeNumber: 'Employee Number',
         birthDate: 'Birth Date',
@@ -329,6 +341,10 @@ export const resources = {
         I_TATTI: 'I Tatti',
         FONDO_PENSIONE: 'Fondo Pensione',
       },
+      language: {
+        IT: 'Italian',
+        EN: 'English',
+      },
       copy: {
         productEyebrow: '',
         subtitle: 'Employee list.',
@@ -364,6 +380,10 @@ export const resources = {
         confirmDeleteDepartment: 'Permanently delete this department? This cannot be undone.',
         confirmUnconfirmRetirement:
           'The confirmed retirement date will be recalculated from the birth date on save. Continue?',
+        workEmailHint:
+          'Official work address, unique per employee. The Ferie portal uses it for notifications.',
+        preferredLanguageHint:
+          'Language the Ferie portal greets this employee in. The employee can change it from the portal.',
         hireDateHint: 'Required when status is Active.',
         terminationDateHint: 'Required when status is Terminated; it cannot be before the hire date.',
         retirementDateHint:

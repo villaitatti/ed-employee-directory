@@ -112,6 +112,10 @@ components:
     EmployeeStatus:
       type: string
       enum: [ATTIVO, CESSATO, DA_ASSUMERE]
+    Language:
+      type: string
+      enum: [IT, EN]
+      description: Interface language the Ferie portal shows this employee.
     Employee:
       type: object
       required:
@@ -119,6 +123,8 @@ components:
         - employeeNumber
         - firstName
         - lastName
+        - workEmail
+        - preferredLanguage
         - departmentId
         - birthDate
         - hireDate
@@ -144,6 +150,12 @@ components:
           type: string
         lastName:
           type: string
+        workEmail:
+          type: string
+          format: email
+          description: HR-entered official work address. Unique across employees and never derived from names.
+        preferredLanguage:
+          $ref: "#/components/schemas/Language"
         departmentId:
           type: string
         department:

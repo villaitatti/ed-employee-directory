@@ -1,4 +1,4 @@
-import type { EmployeeWriteInput } from '@itatti/shared';
+import type { EmployeeWriteInput, Language } from '@itatti/shared';
 
 /**
  * Pure CSV parsing/formatting helpers for the employee import/export flow.
@@ -113,6 +113,19 @@ export function parseTfr(value: string): EmployeeWriteInput['tfr'] | string | un
   if (!normalized) return undefined;
   if (normalized === 'i tatti' || normalized === 'itatti') return 'I_TATTI';
   if (normalized === 'fondo pensione') return 'FONDO_PENSIONE';
+  return value;
+}
+
+/**
+ * Parses the preferred-language column. Returns undefined for a blank cell so a
+ * partial import leaves the stored preference alone, and echoes an unrecognized
+ * token back so the caller can reject the row instead of silently defaulting it.
+ */
+export function parseLanguage(value: string): Language | string | undefined {
+  const normalized = normalizeHeader(value);
+  if (!normalized) return undefined;
+  if (normalized === 'it' || normalized === 'italiano' || normalized === 'italian') return 'IT';
+  if (normalized === 'en' || normalized === 'inglese' || normalized === 'english') return 'EN';
   return value;
 }
 

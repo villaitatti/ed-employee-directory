@@ -8,6 +8,10 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: true,
+    // Every integration suite shares one Postgres database and truncates it
+    // between cases, so running suites in parallel makes them wipe each other's
+    // fixtures. Serialize the files; the whole suite still runs in a few seconds.
+    fileParallelism: false,
     env: {
       NODE_ENV: 'test',
       DEV_SKIP_AUTH: 'true',

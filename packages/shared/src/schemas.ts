@@ -7,6 +7,7 @@ import {
   FULL_TIME_DAILY_MINUTES,
   IMPORT_PROPOSED_ACTIONS,
   IMPORT_ROW_STATUSES,
+  LANGUAGES,
   RETIREMENT_MONTHS_MAX,
   RETIREMENT_MONTHS_MIN,
   RETIREMENT_YEARS_MAX,
@@ -20,6 +21,7 @@ import {
   DEFAULT_WEEKLY_SCHEDULE_MINUTES,
   formatSessantesimiMinutes,
   isValidDateString,
+  normalizeWorkEmail,
   parseFteInput,
   parseSessantesimiInput,
   validateStatusDates,
@@ -31,7 +33,27 @@ export const dateStringSchema = z.string().refine(isValidDateString, {
 });
 
 export const employeeStatusSchema = z.enum(EMPLOYEE_STATUSES);
+export const languageSchema = z.enum(LANGUAGES);
 export const contractTypeSchema = z.enum(CONTRACT_TYPES);
+
+// HR-entered authoritative address. Never derived from names and never given a
+// fallback, so a blank cell has to fail rather than silently invent an address.
+export const workEmailSchema = z
+  .string()
+  .trim()
+  .max(320)
+  // Checked in sequence rather than as chained refinements so a blank cell reports
+  // only "required" instead of also complaining that "" is not an address.
+  .superRefine((value, ctx) => {
+    if (!value) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Work Email is required.' });
+      return;
+    }
+    if (!z.string().email().safeParse(value).success) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Work Email must be a valid email address.' });
+    }
+  })
+  .transform(normalizeWorkEmail);
 export const tfrSchema = z.enum(TFR_OPTIONS);
 export const usaCategorySchema = z.enum(USA_CATEGORIES);
 export const auditActionSchema = z.enum(AUDIT_ACTIONS);
@@ -165,6 +187,8 @@ export const employeeSchema = z.object({
   employeeNumber: z.number().int().positive(),
   firstName: z.string(),
   lastName: z.string(),
+  workEmail: z.string(),
+  preferredLanguage: languageSchema,
   departmentId: z.string(),
   department: departmentSchema.optional(),
   birthDate: dateStringSchema,
@@ -190,6 +214,10 @@ export const employeeWriteBaseSchema = z.object({
     employeeNumber: z.coerce.number().int().positive(),
     firstName: z.string().trim().min(1).max(120),
     lastName: z.string().trim().min(1).max(120),
+    workEmail: workEmailSchema,
+    // Optional on the wire so a partial import that omits the column keeps the
+    // stored preference; toEmployeeData falls back to the existing row, then IT.
+    preferredLanguage: languageSchema.optional(),
     departmentId: z.string().min(1),
     birthDate: dateStringSchema,
     hireDate: dateStringSchema.nullable().optional(),

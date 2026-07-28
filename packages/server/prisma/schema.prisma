@@ -31,6 +31,13 @@ enum EmployeeStatus {
   DA_ASSUMERE
 }
 
+/// Interface language the Ferie portal shows an employee. ED stays authoritative;
+/// the portal writes changes back through the time-off directory endpoint.
+enum Language {
+  IT
+  EN
+}
+
 enum AuditAction {
   CREATE
   UPDATE
@@ -87,6 +94,8 @@ model Employee {
   employeeNumber                Int                          @unique
   firstName                     String
   lastName                      String
+  workEmail                     String                       @unique
+  preferredLanguage             Language                     @default(IT)
   departmentId                  String
   department                    Department                   @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   birthDate                     DateTime                     @db.Date

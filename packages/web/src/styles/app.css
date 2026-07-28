@@ -670,12 +670,37 @@ button:focus-visible {
   row-gap: var(--space-lg);
 }
 
+/* Seven fields over two rows: who the person is (number, name, birth date), then
+   how to reach them and where they sit (email, language, department). Twelve
+   columns because it divides evenly by both four and three, so the second row
+   lines up with the first — language under the surname, department under the
+   birth date. All spans collapse to one column below 900px. */
 .employee-identity-grid {
-  grid-template-columns:
-    minmax(8rem, 0.75fr)
-    minmax(12rem, 1.2fr)
-    repeat(2, minmax(10rem, 1fr))
-    minmax(11rem, 1fr);
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
+.employee-identity-number {
+  grid-column: span 2;
+}
+
+.employee-identity-name {
+  grid-column: span 3;
+}
+
+.employee-identity-birthdate {
+  grid-column: span 4;
+}
+
+.employee-identity-email {
+  grid-column: span 5;
+}
+
+.employee-identity-language {
+  grid-column: span 3;
+}
+
+.employee-identity-department {
+  grid-column: span 4;
 }
 
 .employee-employment-grid {
@@ -784,6 +809,39 @@ button:focus-visible {
   max-width: 10rem;
 }
 
+/* A light sweep across a field the form just filled in for you, so the value
+   does not appear out of nowhere. Purely decorative: the overlay never takes
+   pointer events, so the field stays editable while it plays. */
+.field-shimmer .app-input-wrapper {
+  position: relative;
+  overflow: hidden;
+  border-radius: 9px;
+}
+
+.field-shimmer .app-input-wrapper::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklch, var(--brand), transparent 86%) 50%,
+    transparent 100%
+  );
+  animation: field-shimmer 1s ease-in-out;
+}
+
+@keyframes field-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(100%);
+  }
+}
+
 .retirement-control {
   display: grid;
   grid-template-columns: minmax(14rem, 19rem) minmax(15rem, max-content);
@@ -851,6 +909,8 @@ button:focus-visible {
   transform: translateY(0) scale(0.98);
 }
 
+/* The fill colour itself comes from the theme's `brand` palette, not from here:
+   Mantine sets --button-bg inline, which a stylesheet rule cannot override. */
 .employee-form-footer .app-button[data-variant="filled"] {
   box-shadow: 0 5px 14px color-mix(in oklch, var(--brand), transparent 80%);
 }
@@ -949,6 +1009,12 @@ button:focus-visible {
   .modal-dialog,
   .employee-form-section {
     animation: none;
+  }
+
+  /* Hidden rather than merely un-animated: a static tint sitting over the field
+     for a second reads as a highlight nobody asked for. */
+  .field-shimmer .app-input-wrapper::after {
+    content: none;
   }
 }
 
@@ -1148,6 +1214,17 @@ button:focus-visible {
 
   .form-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* One column here, so a multi-column span would generate implicit columns and
+     push the field off the dialog. */
+  .employee-identity-number,
+  .employee-identity-name,
+  .employee-identity-birthdate,
+  .employee-identity-email,
+  .employee-identity-language,
+  .employee-identity-department {
+    grid-column: auto;
   }
 
   .weekday-grid {
