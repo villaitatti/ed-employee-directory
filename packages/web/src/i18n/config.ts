@@ -274,6 +274,18 @@ export const resources = {
         SERVER: {
           body: 'Riprova tra qualche istante. Se l’errore si ripete, segnalalo all’assistenza IT.',
         },
+        FORBIDDEN: {
+          title: 'Non hai i permessi per questa operazione',
+          body: 'Il tuo account non ha il ruolo richiesto da ED. Chiedi all’assistenza IT di abilitarlo: uscire e rientrare non risolve.',
+        },
+        INVALID_EMPLOYEE_NUMBER: {
+          title: 'Numero Matricola non valido',
+          body: 'Deve essere un numero intero maggiore di zero.',
+        },
+        MISSING_PATH_PARAM: {
+          title: 'Richiesta incompleta',
+          body: 'Ricarica la pagina e riprova. Se l’errore si ripete, segnalalo all’assistenza IT.',
+        },
         UNAUTHORIZED: {
           title: 'Sessione scaduta',
           body: 'Esci e accedi di nuovo per continuare. Le modifiche non salvate andranno perse.',
@@ -684,6 +696,18 @@ export const resources = {
         },
         SERVER: {
           body: 'Try again in a moment. If the error keeps happening, report it to IT support.',
+        },
+        FORBIDDEN: {
+          title: 'You do not have permission for this operation',
+          body: 'Your account lacks the role ED requires. Ask IT support to grant it — signing out and back in will not help.',
+        },
+        INVALID_EMPLOYEE_NUMBER: {
+          title: 'Invalid Employee Number',
+          body: 'It must be a whole number greater than zero.',
+        },
+        MISSING_PATH_PARAM: {
+          title: 'Incomplete request',
+          body: 'Reload the page and try again. If the error keeps happening, report it to IT support.',
         },
         UNAUTHORIZED: {
           title: 'Session expired',

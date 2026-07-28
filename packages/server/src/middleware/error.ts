@@ -27,12 +27,15 @@ export const MAX_UPLOAD_MB = 8;
  * constraint fired; this maps that to the form field the operator has to change,
  * so "already exists" can say *what* already exists. Anything not listed stays
  * anonymous — the client then falls back to the generic duplicate message.
+ *
+ * Only genuinely-unique columns belong here. `Department.name` is not unique
+ * (only its normalized form is), and listing it would have been dead weight that
+ * later mis-attributed some other table's `name` collision to a department.
  */
 const DUPLICATE_FIELD_BY_CONSTRAINT: Record<string, string> = {
   employeeNumber: 'employeeNumber',
   workEmail: 'workEmail',
   normalizedName: 'departmentName',
-  name: 'departmentName',
 };
 
 function duplicateField(target: unknown): string | undefined {

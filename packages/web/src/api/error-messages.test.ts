@@ -72,6 +72,15 @@ describe('describeError', () => {
     expect(described.description).toContain('Esci e accedi di nuovo');
   });
 
+  it('does not tell a user missing the staff role to sign in again', () => {
+    // 403 is the `requireStaff` rejection. Re-authenticating cannot grant a role,
+    // so advising it sends the operator round a loop instead of to IT.
+    const described = describeError(new ApiError('Role staff-IT is required.', 403, 'FORBIDDEN'), t);
+    expect(described.title).toBe('Non hai i permessi per questa operazione');
+    expect(described.description).toContain('assistenza IT');
+    expect(described.description).not.toContain('Esci e accedi di nuovo');
+  });
+
   it('reports a failed fetch as a connection problem rather than a server error', () => {
     const described = describeError(new TypeError('Failed to fetch'), t);
     expect(described.title).toBe('Nessuna connessione al server');

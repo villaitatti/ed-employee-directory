@@ -149,12 +149,23 @@ export function describeError(error: unknown, t: Translate): FriendlyError {
     };
   }
 
-  // 401/403 outrank the code: whatever the endpoint meant to say, the operator's
-  // only possible next step is to sign in again.
-  if (error.status === 401 || error.status === 403) {
+  // Authentication and authorization outrank the code, but they are *different
+  // problems with different remedies* and must not be collapsed. A 401 means the
+  // token expired, and signing in again fixes it. A 403 means the account lacks
+  // the staff role — signing in again changes nothing, and telling someone to try
+  // it sends them round a loop instead of to whoever can grant the role.
+  if (error.status === 401) {
     return {
       title: t('errors.UNAUTHORIZED.title'),
       description: t('errors.UNAUTHORIZED.body'),
+      fieldErrors: {},
+      reassure: true,
+    };
+  }
+  if (error.status === 403) {
+    return {
+      title: t('errors.FORBIDDEN.title'),
+      description: t('errors.FORBIDDEN.body'),
       fieldErrors: {},
       reassure: true,
     };

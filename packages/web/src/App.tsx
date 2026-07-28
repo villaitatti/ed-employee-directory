@@ -87,9 +87,11 @@ import {
   fieldErrorId,
   fieldLabels,
   firstErrorField,
+  noServerErrors,
   orderedErrorFields,
   validateEmployeeDraft,
   type FieldErrors,
+  type ServerErrors,
 } from './employee-validation.js';
 import { notifyError, notifySuccess, notifyValidation } from './ui/feedback.js';
 import type { Translate } from './i18n/types.js';
@@ -676,8 +678,9 @@ function EmployeesPage() {
   const [draft, setDraft] = useState<EmployeeDraft | null>(null);
   // Field errors the *server* raised on the last save. Kept here rather than in
   // the form because only the mutation sees them; the form merges them with its
-  // own client-side findings so both kinds highlight identically.
-  const [serverFieldErrors, setServerFieldErrors] = useState<FieldErrors>({});
+  // own client-side findings so both kinds highlight identically. `rejectionId`
+  // counts rejections rather than describing them — see ServerErrors.
+  const [serverErrors, setServerErrors] = useState<ServerErrors>(noServerErrors);
   const departments = useDepartments(api);
   const debouncedQ = useDebounced(filters.q);
   const employeeOptions = useQuery({
@@ -727,7 +730,7 @@ function EmployeesPage() {
     },
     onSuccess: (employee, input) => {
       setDraft(null);
-      setServerFieldErrors({});
+      setServerErrors(noServerErrors);
       const name = employeeFullName(employee);
       notifySuccess(
         t(input.id ? 'copy.employeeUpdated' : 'copy.employeeCreated'),
@@ -739,7 +742,10 @@ function EmployeesPage() {
     },
     onError: (error) => {
       // The toast says what went wrong; the field map makes the form show *where*.
-      setServerFieldErrors(notifyError(error, t, { unsaved: true }).fieldErrors);
+      // Notified outside the updater: it renders a toast, and React is free to
+      // invoke a state updater more than once.
+      const { fieldErrors } = notifyError(error, t, { unsaved: true });
+      setServerErrors((previous) => ({ fields: fieldErrors, rejectionId: previous.rejectionId + 1 }));
     },
   });
 
@@ -913,10 +919,10 @@ function EmployeesPage() {
           draft={draft}
           departments={departments.data ?? []}
           employeeOptions={employeeOptions.data ?? []}
-          serverFieldErrors={serverFieldErrors}
+          serverErrors={serverErrors}
           onCancel={() => {
             setDraft(null);
-            setServerFieldErrors({});
+            setServerErrors(noServerErrors);
           }}
           onChange={setDraft}
           onSave={() => saveEmployee.mutate(draft)}
@@ -931,7 +937,7 @@ export function EmployeeForm({
   draft,
   departments,
   employeeOptions,
-  serverFieldErrors,
+  serverErrors,
   onCancel,
   onChange,
   onSave,
@@ -941,7 +947,7 @@ export function EmployeeForm({
   departments: Department[];
   employeeOptions: EmployeeOption[];
   /** Field errors the last save came back with; merged with the local ones. */
-  serverFieldErrors?: FieldErrors;
+  serverErrors?: ServerErrors;
   onCancel: () => void;
   onChange: (draft: EmployeeDraft) => void;
   onSave: () => void;
@@ -967,11 +973,12 @@ export function EmployeeForm({
    * since the rejection stop showing it; a fresh rejection resets the set.
    */
   const [editedSinceRejection, setEditedSinceRejection] = useState<ReadonlySet<string>>(new Set());
-  // Keyed on the contents, not the object: callers are free to pass a fresh
-  // literal on every render, and re-running this on identity alone would wipe the
-  // set between the keystroke and the paint that should have honoured it.
-  const rejectionKey = JSON.stringify(serverFieldErrors ?? {});
-  useEffect(() => setEditedSinceRejection(new Set()), [rejectionKey]);
+  // Keyed on the rejection *count*, not on the payload or the object identity.
+  // Identity would reset the set on every render for a caller passing a fresh
+  // literal; payload equality would fail to reset when the operator edits a
+  // duplicate value, changes it back, and saves again — that second verdict is
+  // byte-identical to the first, so the field would stay silently unmarked.
+  useEffect(() => setEditedSinceRejection(new Set()), [serverErrors?.rejectionId]);
   const markEdited = (...fields: string[]) =>
     setEditedSinceRejection((current) => new Set([...current, ...fields]));
 
@@ -1120,7 +1127,7 @@ export function EmployeeForm({
   // field is the more specific of the two and wins.
   const fieldErrors: FieldErrors = {
     ...Object.fromEntries(
-      Object.entries(serverFieldErrors ?? {}).filter(([field]) => !editedSinceRejection.has(field))
+      Object.entries(serverErrors?.fields ?? {}).filter(([field]) => !editedSinceRejection.has(field))
     ),
     ...localErrors,
   };
@@ -1702,14 +1709,14 @@ function DepartmentsPage() {
   const queryClient = useQueryClient();
   const departments = useDepartments(api);
   const [draft, setDraft] = useState<DepartmentDraft | null>(null);
-  const [serverFieldErrors, setServerFieldErrors] = useState<FieldErrors>({});
+  const [serverErrors, setServerErrors] = useState<ServerErrors>(noServerErrors);
 
   const saveDepartment = useMutation({
     mutationFn: async (input: DepartmentDraft) =>
       input.id ? api.updateDepartment(input.id, { name: input.name }) : api.createDepartment({ name: input.name }),
     onSuccess: (department, input) => {
       setDraft(null);
-      setServerFieldErrors({});
+      setServerErrors(noServerErrors);
       notifySuccess(
         t(input.id ? 'copy.departmentUpdated' : 'copy.departmentCreated'),
         t(input.id ? 'copy.departmentUpdatedBody' : 'copy.departmentCreatedBody', { name: department.name })
@@ -1717,7 +1724,8 @@ function DepartmentsPage() {
       void queryClient.invalidateQueries({ queryKey: ['departments'] });
     },
     onError: (error) => {
-      setServerFieldErrors(notifyError(error, t, { unsaved: true }).fieldErrors);
+      const { fieldErrors } = notifyError(error, t, { unsaved: true });
+      setServerErrors((previous) => ({ fields: fieldErrors, rejectionId: previous.rejectionId + 1 }));
     },
   });
   const deleteDepartment = useMutation({
@@ -1804,10 +1812,10 @@ function DepartmentsPage() {
       {draft ? (
         <DepartmentForm
           draft={draft}
-          serverFieldErrors={serverFieldErrors}
+          serverErrors={serverErrors}
           onCancel={() => {
             setDraft(null);
-            setServerFieldErrors({});
+            setServerErrors(noServerErrors);
           }}
           onChange={setDraft}
           onSave={() => saveDepartment.mutate(draft)}
@@ -1820,7 +1828,7 @@ function DepartmentsPage() {
 
 export function DepartmentForm({
   draft,
-  serverFieldErrors,
+  serverErrors,
   onCancel,
   onChange,
   onSave,
@@ -1828,7 +1836,7 @@ export function DepartmentForm({
 }: {
   draft: DepartmentDraft;
   /** Field errors the last save came back with (e.g. the name is already taken). */
-  serverFieldErrors?: FieldErrors;
+  serverErrors?: ServerErrors;
   onCancel: () => void;
   onChange: (draft: DepartmentDraft) => void;
   onSave: () => void;
@@ -1837,10 +1845,11 @@ export function DepartmentForm({
   const { t } = useTranslation();
   const [submitted, setSubmitted] = useState(false);
   // See the employee form: a "name already taken" verdict is about the submitted
-  // value, so it clears as soon as the operator types a different one.
+  // value, so it clears as soon as the operator types a different one — and comes
+  // back on the next rejection, even one carrying the identical message.
   const [nameEdited, setNameEdited] = useState(false);
-  const serverNameError = serverFieldErrors?.['name'];
-  useEffect(() => setNameEdited(false), [serverNameError]);
+  const serverNameError = serverErrors?.fields['name'];
+  useEffect(() => setNameEdited(false), [serverErrors?.rejectionId]);
   const nameError =
     (submitted && !draft.name.trim() ? t('validation.required') : undefined) ??
     (nameEdited ? undefined : serverNameError);

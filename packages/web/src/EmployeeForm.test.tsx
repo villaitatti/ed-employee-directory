@@ -889,6 +889,48 @@ describe('EmployeeForm validation feedback', () => {
     expect(field?.closest('.employee-form-section')).toHaveClass('section-has-errors');
   });
 
+  it('blocks an active employee with no Sostituto-Responsabile client-side', async () => {
+    vi.spyOn(toast, 'error').mockImplementation(() => 'id');
+    const user = userEvent.setup();
+    // emp_2 is substitute-eligible, so the server's rule applies. Before this was
+    // mirrored client-side the form let the save through and the API answered
+    // SOSTITUTO_RESPONSABILE_REQUIRED after a round trip.
+    const { container, onSave } = renderForm({
+      ...validDraft,
+      approvalRoleIds: { ...validDraft.approvalRoleIds, substituteResponsabileIds: [] },
+    });
+
+    await user.click(screen.getByRole('button', { name: /Salva/i }));
+
+    expect(onSave).not.toHaveBeenCalled();
+    const field = container.querySelector('[data-field="substituteResponsabileIds"]');
+    expect(field).toHaveClass('field-invalid');
+    expect(within(field as HTMLElement).getByRole('alert')).toHaveTextContent(
+      'Seleziona almeno un Sostituto-Responsabile per questo dipendente.'
+    );
+  });
+
+  it('does not require approver roles while bootstrapping, when nobody is eligible', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    // No eligible candidates at all: the server's bootstrap exception applies, so
+    // neither role may be demanded — the very first Responsabile cannot have one.
+    renderWithProviders(
+      <EmployeeForm
+        draft={{ ...validDraft, approvalRoleIds: emptyEmployeeDraft.approvalRoleIds }}
+        departments={departments}
+        employeeOptions={[]}
+        onCancel={vi.fn()}
+        onChange={vi.fn()}
+        onSave={onSave}
+        isSaving={false}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /Salva/i }));
+    expect(onSave).toHaveBeenCalledOnce();
+  });
+
   it('lists every problem in a summary that jumps to the field it names', async () => {
     vi.spyOn(toast, 'error').mockImplementation(() => 'id');
     const user = userEvent.setup();
@@ -945,7 +987,7 @@ describe('EmployeeForm validation feedback', () => {
         draft={validDraft}
         departments={departments}
         employeeOptions={employeeOptions}
-        serverFieldErrors={{ workEmail: 'Già assegnata a un altro dipendente.' }}
+        serverErrors={{ fields: { workEmail: 'Già assegnata a un altro dipendente.' }, rejectionId: 1 }}
         onCancel={vi.fn()}
         onChange={vi.fn()}
         onSave={vi.fn()}
@@ -970,7 +1012,7 @@ describe('EmployeeForm validation feedback', () => {
           draft={draft}
           departments={departments}
           employeeOptions={employeeOptions}
-          serverFieldErrors={{ workEmail: 'Già assegnata a un altro dipendente.' }}
+          serverErrors={{ fields: { workEmail: 'Già assegnata a un altro dipendente.' }, rejectionId: 1 }}
           onCancel={vi.fn()}
           onChange={setDraft}
           onSave={vi.fn()}
@@ -986,6 +1028,42 @@ describe('EmployeeForm validation feedback', () => {
     // makes it stale, so it must not stay red while the operator fixes it.
     await user.type(screen.getByLabelText('Email di lavoro'), 'x');
     expect(container.querySelector('[data-field="workEmail"].field-invalid')).toBeNull();
+  });
+
+  it('re-marks a field when the identical rejection comes back', async () => {
+    const user = userEvent.setup();
+    const duplicate = { workEmail: 'Già assegnata a un altro dipendente.' };
+
+    function Controlled({ rejectionId }: { rejectionId: number }) {
+      const [draft, setDraft] = useState<EmployeeDraft>(validDraft);
+      return (
+        <EmployeeForm
+          draft={draft}
+          departments={departments}
+          employeeOptions={employeeOptions}
+          serverErrors={{ fields: duplicate, rejectionId }}
+          onCancel={vi.fn()}
+          onChange={setDraft}
+          onSave={vi.fn()}
+          isSaving={false}
+        />
+      );
+    }
+
+    const { container, rerender } = renderWithProviders(<Controlled rejectionId={1} />);
+    const marked = () => container.querySelector('[data-field="workEmail"].field-invalid');
+    expect(marked()).not.toBeNull();
+
+    // Editing dismisses the verdict, because it was about the submitted value.
+    await user.type(screen.getByLabelText('Email di lavoro'), 'x');
+    expect(marked()).toBeNull();
+
+    // Now the operator puts the duplicate address back and saves again. The
+    // server returns a byte-identical payload, so nothing about `fields` has
+    // changed — only that a second rejection happened. The mark has to return,
+    // otherwise the save fails with a toast and no indication of where.
+    rerender(<Controlled rejectionId={2} />);
+    expect(marked()).not.toBeNull();
   });
 
   it('reports in English when the operator has switched language', async () => {

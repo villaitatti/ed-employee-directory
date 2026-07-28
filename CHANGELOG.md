@@ -22,6 +22,8 @@
 - A termination date before the hire date came back from the API as an unattributable sentence with no field to blame, so it could not be highlighted. The rule now names the field it blames, and the same applies to the other cross-field date rules.
 - A duplicate value now identifies which field collided. The API previously answered "A record with these values already exists." without saying whether the Employee Number, the Work Email, or the department name was the problem; the field name (never the stored value) now travels with the error and the form marks it.
 - The sign-out button had no accessible name of its own, relying on the `title` attribute that has now been replaced.
+- A field marked by the server stopped being marked if the operator edited it, changed it back, and saved the same value again: the second rejection is byte-identical to the first, and the form had been treating "identical payload" as "same verdict the operator already dismissed". Rejections are now counted rather than compared.
+- A user whose account lacks the required role was told their session had expired and to sign in again, which cannot grant a role. A 403 is now reported separately from a 401 and points at IT support instead.
 
 ## 0.8.0 - 2026-07-28
 

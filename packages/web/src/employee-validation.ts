@@ -1,4 +1,11 @@
-import { WEEKDAY_KEYS, isValidDateString, parseFteInput, parseSessantesimiInput, validateStatusDates } from '@itatti/shared';
+import {
+  WEEKDAY_KEYS,
+  isValidDateString,
+  parseFteInput,
+  parseSessantesimiInput,
+  validateStatusDates,
+  workEmailSchema,
+} from '@itatti/shared';
 import type { EmployeeDraft } from './App.js';
 import type { Translate } from './i18n/types.js';
 
@@ -8,6 +15,24 @@ import type { Translate } from './i18n/types.js';
  * `weekly.<day>` and the approval roles under their role id list.
  */
 export type FieldErrors = Record<string, string>;
+
+/**
+ * The last save's field-level rejections, plus a counter of how many rejections
+ * have happened.
+ *
+ * The counter is what makes "this verdict is stale because I edited the field"
+ * work correctly. A form dismisses a server error once its field is touched, and
+ * has to un-dismiss it when a *new* verdict arrives — but two saves of the same
+ * bad value produce byte-identical `fields`, so equality can't distinguish them.
+ * Object identity can't either: a caller passing a fresh literal each render
+ * would reset the dismissals on every keystroke.
+ */
+export type ServerErrors = {
+  fields: FieldErrors;
+  rejectionId: number;
+};
+
+export const noServerErrors: ServerErrors = { fields: {}, rejectionId: 0 };
 
 
 /**
@@ -116,7 +141,10 @@ export function validateEmployeeDraft(
   const workEmail = draft.workEmail.trim();
   if (!workEmail) {
     errors['workEmail'] = t('validation.required');
-  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(workEmail)) {
+    // The API's own schema, not a lookalike regex: a hand-rolled pattern that is
+    // looser than Zod's `.email()` lets addresses through to be rejected on the
+    // round trip, and one that is stricter blocks addresses the server accepts.
+  } else if (!workEmailSchema.safeParse(workEmail).success) {
     errors['workEmail'] = t('validation.workEmail');
   }
 
