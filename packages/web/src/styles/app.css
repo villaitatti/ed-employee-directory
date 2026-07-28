@@ -809,6 +809,39 @@ button:focus-visible {
   max-width: 10rem;
 }
 
+/* A light sweep across a field the form just filled in for you, so the value
+   does not appear out of nowhere. Purely decorative: the overlay never takes
+   pointer events, so the field stays editable while it plays. */
+.field-shimmer .app-input-wrapper {
+  position: relative;
+  overflow: hidden;
+  border-radius: 9px;
+}
+
+.field-shimmer .app-input-wrapper::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklch, var(--brand), transparent 86%) 50%,
+    transparent 100%
+  );
+  animation: field-shimmer 1s ease-in-out;
+}
+
+@keyframes field-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(100%);
+  }
+}
+
 .retirement-control {
   display: grid;
   grid-template-columns: minmax(14rem, 19rem) minmax(15rem, max-content);
@@ -976,6 +1009,12 @@ button:focus-visible {
   .modal-dialog,
   .employee-form-section {
     animation: none;
+  }
+
+  /* Hidden rather than merely un-animated: a static tint sitting over the field
+     for a second reads as a highlight nobody asked for. */
+  .field-shimmer .app-input-wrapper::after {
+    content: none;
   }
 }
 

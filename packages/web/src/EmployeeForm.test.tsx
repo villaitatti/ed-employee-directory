@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { EmployeeForm, emptyEmployeeDraft } from './App.js';
+import { EmployeeForm, emptyEmployeeDraft, type EmployeeDraft } from './App.js';
 import { renderWithProviders } from './test/render.js';
 
 const department = { id: 'dept_1', name: 'Amministrazione', normalizedName: 'amministrazione', createdAt: '', updatedAt: '' };
@@ -637,5 +637,110 @@ describe('EmployeeForm modal', () => {
     );
 
     expect(screen.queryByText('Seleziona almeno un Responsabile per questo dipendente.')).not.toBeInTheDocument();
+  });
+  it('suggests the conventional work email once both names are filled', async () => {
+    const user = userEvent.setup();
+    let latestDraft = { ...emptyEmployeeDraft };
+
+    function Controlled() {
+      const [draft, setDraft] = useState({ ...emptyEmployeeDraft });
+      return (
+        <EmployeeForm
+          draft={draft}
+          departments={departments}
+          employeeOptions={employeeOptions}
+          onCancel={() => undefined}
+          onChange={(next) => {
+            latestDraft = next;
+            setDraft(next);
+          }}
+          onSave={vi.fn()}
+          isSaving={false}
+        />
+      );
+    }
+
+    renderWithProviders(<Controlled />);
+
+    // A first name alone is not enough to build an address from.
+    await user.type(screen.getByLabelText('Nome'), 'Andrea');
+    expect(latestDraft.workEmail).toBe('');
+
+    await user.type(screen.getByLabelText('Cognome'), 'Caselli');
+    expect(latestDraft.workEmail).toBe('acaselli@itatti.harvard.edu');
+    expect(screen.getByLabelText('Email di lavoro')).toHaveValue('acaselli@itatti.harvard.edu');
+  });
+
+  it('stops suggesting once the address has been edited by hand', async () => {
+    const user = userEvent.setup();
+    let latestDraft = { ...emptyEmployeeDraft };
+
+    function Controlled() {
+      const [draft, setDraft] = useState({ ...emptyEmployeeDraft });
+      return (
+        <EmployeeForm
+          draft={draft}
+          departments={departments}
+          employeeOptions={employeeOptions}
+          onCancel={() => undefined}
+          onChange={(next) => {
+            latestDraft = next;
+            setDraft(next);
+          }}
+          onSave={vi.fn()}
+          isSaving={false}
+        />
+      );
+    }
+
+    renderWithProviders(<Controlled />);
+
+    await user.type(screen.getByLabelText('Nome'), 'Andrea');
+    await user.type(screen.getByLabelText('Cognome'), 'Caselli');
+
+    const email = screen.getByLabelText('Email di lavoro');
+    await user.clear(email);
+    await user.type(email, 'andrea.caselli@itatti.harvard.edu');
+
+    // Correcting the surname must not clobber the address the operator chose.
+    await user.clear(screen.getByLabelText('Cognome'));
+    await user.type(screen.getByLabelText('Cognome'), 'Caselli-Verdi');
+    expect(latestDraft.workEmail).toBe('andrea.caselli@itatti.harvard.edu');
+  });
+
+  it('leaves an existing employee\'s address alone when their name is corrected', async () => {
+    const user = userEvent.setup();
+    const existing = {
+      ...emptyEmployeeDraft,
+      id: 'emp_9',
+      firstName: 'Andrea',
+      lastName: 'Caselli',
+      workEmail: 'legacy.address@itatti.harvard.edu',
+    };
+    let latestDraft: EmployeeDraft = { ...existing };
+
+    function Controlled() {
+      const [draft, setDraft] = useState<EmployeeDraft>({ ...existing });
+      return (
+        <EmployeeForm
+          draft={draft}
+          departments={departments}
+          employeeOptions={employeeOptions}
+          onCancel={() => undefined}
+          onChange={(next) => {
+            latestDraft = next;
+            setDraft(next);
+          }}
+          onSave={vi.fn()}
+          isSaving={false}
+        />
+      );
+    }
+
+    renderWithProviders(<Controlled />);
+
+    await user.clear(screen.getByLabelText('Cognome'));
+    await user.type(screen.getByLabelText('Cognome'), 'Caselli Rossi');
+    expect(latestDraft.workEmail).toBe('legacy.address@itatti.harvard.edu');
   });
 });

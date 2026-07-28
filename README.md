@@ -59,8 +59,13 @@ data. Two endpoints serve it, documented in `docs/openapi/time-off-directory.yam
 
 Two employee fields exist for this integration:
 
-- **Work Email** — HR-entered, required, and unique. It is never derived from an
-  employee's name and has no fallback: a missing address is an error, not a guess.
+- **Work Email** — HR-entered, required, and unique. No server-side code derives
+  it and it has no fallback: to the API and the importer a missing address is an
+  error, never a guess. The employee form does offer the house convention
+  (first initial + surname + `@itatti.harvard.edu`) as an editable suggestion
+  while a new employee's name is typed, so a person still reads and approves the
+  value before it is saved. The suggestion stops as soon as the field is edited
+  by hand, and never touches an employee who already has an address.
 - **Preferred Language** (`IT` or `EN`) — the language the portal greets the
   employee in. ED stays authoritative; the portal writes changes back here.
 

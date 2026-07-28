@@ -67,6 +67,7 @@ import {
   type WeekdayKey,
 } from '@itatti/shared';
 import { createApiClient } from './api/client.js';
+import { deriveWorkEmail } from './work-email.js';
 import { useEdAuth, wasSignedOut } from './auth/AuthProvider.js';
 import './styles/app.css';
 
@@ -874,6 +875,35 @@ export function EmployeeForm({
   const set = <K extends keyof EmployeeDraft>(key: K, value: EmployeeDraft[K]) => {
     onChange({ ...draft, [key]: value });
   };
+
+  // The address is suggested from the name, never imposed: once the operator has
+  // typed in the field — or when editing someone who already has one — the
+  // suggestion stops, so a manual correction for a double-barrelled surname or an
+  // address that predates the convention is never overwritten.
+  const [workEmailAuthored, setWorkEmailAuthored] = useState(() => Boolean(draft.workEmail));
+  const [workEmailShimmer, setWorkEmailShimmer] = useState(false);
+  const workEmailShimmerTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(workEmailShimmerTimer.current), []);
+
+  /**
+   * Fills the address in as the name is typed. Done here rather than in an effect
+   * on the derived value: applying the suggestion immediately makes the condition
+   * that triggered it false again, so an effect would clear its own shimmer timer
+   * on the very next render.
+   */
+  const setName = (key: 'firstName' | 'lastName', value: string) => {
+    const next = { ...draft, [key]: value };
+    const suggestion = deriveWorkEmail(next.firstName, next.lastName);
+    if (!workEmailAuthored && suggestion && suggestion !== next.workEmail) {
+      next.workEmail = suggestion;
+      setWorkEmailShimmer(true);
+      // Deriving the address is instantaneous, so the shimmer is paced for the eye
+      // rather than for the work: long enough to notice the field filled itself.
+      window.clearTimeout(workEmailShimmerTimer.current);
+      workEmailShimmerTimer.current = window.setTimeout(() => setWorkEmailShimmer(false), 1_000);
+    }
+    onChange(next);
+  };
   const setWeeklySchedule = (key: WeekdayKey, value: string) => {
     onChange({ ...draft, weeklySchedule: { ...draft.weeklySchedule, [key]: value } });
   };
@@ -1046,7 +1076,7 @@ export function EmployeeForm({
                   required
                   aria-label={t('fields.firstName')}
                   value={draft.firstName}
-                  onChange={(event) => set('firstName', event.currentTarget.value)}
+                  onChange={(event) => setName('firstName', event.currentTarget.value)}
                 />
               </Field>
               <Field
@@ -1059,7 +1089,7 @@ export function EmployeeForm({
                   required
                   aria-label={t('fields.lastName')}
                   value={draft.lastName}
-                  onChange={(event) => set('lastName', event.currentTarget.value)}
+                  onChange={(event) => setName('lastName', event.currentTarget.value)}
                 />
               </Field>
               <Field
@@ -1076,7 +1106,12 @@ export function EmployeeForm({
                 />
               </Field>
               <Field
-                className="employee-identity-email"
+                className={[
+                  'employee-identity-email',
+                  workEmailShimmer && 'field-shimmer',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
                 icon={<Mail />}
                 label={t('fields.workEmail')}
                 hint={t('copy.workEmailHint')}
@@ -1088,7 +1123,10 @@ export function EmployeeForm({
                   inputMode="email"
                   aria-label={t('fields.workEmail')}
                   value={draft.workEmail}
-                  onChange={(event) => set('workEmail', event.currentTarget.value)}
+                  onChange={(event) => {
+                    setWorkEmailAuthored(true);
+                    set('workEmail', event.currentTarget.value);
+                  }}
                 />
               </Field>
               <Field

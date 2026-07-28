@@ -4,7 +4,8 @@
 
 ### Added
 
-- Every employee now carries a **Work Email** — required, unique, and entered by HR. It is never derived from an employee's name and has no fallback, because mail routing and the Ferie portal both depend on it being correct.
+- Every employee now carries a **Work Email** — required, unique, and entered by HR. No server-side code derives it and it has no fallback, because mail routing and the Ferie portal both depend on it being correct: to the API and the importer, a missing address is an error rather than a guess.
+- While a new employee's name is typed, the form fills the Work Email in with the house convention — first initial, surname, `@itatti.harvard.edu`, so Andrea Caselli becomes `acaselli@itatti.harvard.edu` — and shimmers the field so the change is visible. It is only a suggestion: accents are stripped and spaces dropped, anyone the convention does not fit can simply be typed over, and once the address is edited by hand the form stops suggesting. An employee who already has an address is never touched.
 - Every employee now carries a **Preferred Language** (Italiano or Inglese, default Italiano): the language the Ferie time-off portal greets them in.
 - Both fields appear on the employee card, in `/api/v1` responses, and as "Work Email" and "Preferred Language" columns in the Excel and CSV export and import.
 - New time-off directory projection for the Ferie portal, `GET /api/v1/time-off-directory/employees`, with cursor pagination up to 100 rows a page. It derives clock intervals from the stored weekly hours — anchored at 09:00, with a 30-minute break once a day runs past four hours — so the portal can deduct hourly permesso against the contracted time.
