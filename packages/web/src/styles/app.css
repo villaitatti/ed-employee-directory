@@ -670,24 +670,37 @@ button:focus-visible {
   row-gap: var(--space-lg);
 }
 
+/* Seven fields over two rows: who the person is (number, name, birth date), then
+   how to reach them and where they sit (email, language, department). Twelve
+   columns because it divides evenly by both four and three, so the second row
+   lines up with the first — language under the surname, department under the
+   birth date. All spans collapse to one column below 900px. */
 .employee-identity-grid {
-  grid-template-columns:
-    minmax(8rem, 0.75fr)
-    minmax(12rem, 1.2fr)
-    repeat(2, minmax(10rem, 1fr))
-    minmax(11rem, 1fr);
+  grid-template-columns: repeat(12, minmax(0, 1fr));
 }
 
-/* Second row of the identity grid. The five columns above are sized for the five
-   name/department/date fields, so contact details get their own row: a work
-   address needs room to show in full, and the language picker only holds two
-   short options. Reset to one column each below 900px, where the grid collapses. */
-.employee-field-email {
+.employee-identity-number {
+  grid-column: span 2;
+}
+
+.employee-identity-name {
   grid-column: span 3;
 }
 
-.employee-field-language {
-  grid-column: span 2;
+.employee-identity-birthdate {
+  grid-column: span 4;
+}
+
+.employee-identity-email {
+  grid-column: span 5;
+}
+
+.employee-identity-language {
+  grid-column: span 3;
+}
+
+.employee-identity-department {
+  grid-column: span 4;
 }
 
 .employee-employment-grid {
@@ -863,16 +876,9 @@ button:focus-visible {
   transform: translateY(0) scale(0.98);
 }
 
-/* The employee form is the only screen built on Mantine buttons, so Save would
-   otherwise paint itself from the theme's indigo palette while every other
-   primary button on the app uses `.button.primary`, i.e. --brand. Drive Mantine's
-   own button variables from the brand tokens so the two blues match.
-   Scoped to this footer rather than all filled buttons because destructive
-   confirmations pass `color: 'red'`, which a blanket override would repaint. */
+/* The fill colour itself comes from the theme's `brand` palette, not from here:
+   Mantine sets --button-bg inline, which a stylesheet rule cannot override. */
 .employee-form-footer .app-button[data-variant="filled"] {
-  --button-bg: var(--brand);
-  --button-hover: color-mix(in oklch, var(--brand) 88%, black);
-  --button-color: var(--brand-ink);
   box-shadow: 0 5px 14px color-mix(in oklch, var(--brand), transparent 80%);
 }
 
@@ -1173,8 +1179,12 @@ button:focus-visible {
 
   /* One column here, so a multi-column span would generate implicit columns and
      push the field off the dialog. */
-  .employee-field-email,
-  .employee-field-language {
+  .employee-identity-number,
+  .employee-identity-name,
+  .employee-identity-birthdate,
+  .employee-identity-email,
+  .employee-identity-language,
+  .employee-identity-department {
     grid-column: auto;
   }
 

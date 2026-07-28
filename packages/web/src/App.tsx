@@ -1021,7 +1021,7 @@ export function EmployeeForm({
           >
             <div className="form-grid employee-identity-grid">
               <Field
-                className="employee-field-compact"
+                className="employee-field-compact employee-identity-number"
                 icon={<Hash />}
                 label={t('fields.employeeNumber')}
                 required
@@ -1036,22 +1036,12 @@ export function EmployeeForm({
                   onChange={(event) => set('employeeNumber', event.currentTarget.value)}
                 />
               </Field>
-              <Field icon={<Building2 />} label={t('fields.department')} required>
-                <Select
-                  required
-                  aria-label={t('fields.department')}
-                  placeholder={t('fields.select')}
-                  value={draft.departmentId || null}
-                  onChange={(value) => set('departmentId', value ?? '')}
-                  data={departments.map((department) => ({ value: department.id, label: department.name }))}
-                  searchable
-                  clearable
-                  openOnFocus
-                  nothingFoundMessage={t('copy.noOptionsFound')}
-                  comboboxProps={comboboxProps}
-                />
-              </Field>
-              <Field icon={<UserRound />} label={t('fields.firstName')} required>
+              <Field
+                className="employee-identity-name"
+                icon={<UserRound />}
+                label={t('fields.firstName')}
+                required
+              >
                 <TextInput
                   required
                   aria-label={t('fields.firstName')}
@@ -1059,7 +1049,12 @@ export function EmployeeForm({
                   onChange={(event) => set('firstName', event.currentTarget.value)}
                 />
               </Field>
-              <Field icon={<UserRound />} label={t('fields.lastName')} required>
+              <Field
+                className="employee-identity-name"
+                icon={<UserRound />}
+                label={t('fields.lastName')}
+                required
+              >
                 <TextInput
                   required
                   aria-label={t('fields.lastName')}
@@ -1067,7 +1062,12 @@ export function EmployeeForm({
                   onChange={(event) => set('lastName', event.currentTarget.value)}
                 />
               </Field>
-              <Field icon={<CalendarDays />} label={t('fields.birthDate')} required>
+              <Field
+                className="employee-identity-birthdate"
+                icon={<CalendarDays />}
+                label={t('fields.birthDate')}
+                required
+              >
                 <DateInput
                   required
                   ariaLabel={t('fields.birthDate')}
@@ -1076,7 +1076,7 @@ export function EmployeeForm({
                 />
               </Field>
               <Field
-                className="employee-field-email"
+                className="employee-identity-email"
                 icon={<Mail />}
                 label={t('fields.workEmail')}
                 hint={t('copy.workEmailHint')}
@@ -1092,7 +1092,7 @@ export function EmployeeForm({
                 />
               </Field>
               <Field
-                className="employee-field-language"
+                className="employee-identity-language"
                 icon={<Languages />}
                 label={t('fields.preferredLanguage')}
                 hint={t('copy.preferredLanguageHint')}
@@ -1103,6 +1103,26 @@ export function EmployeeForm({
                   onChange={(value) => value && set('preferredLanguage', value as Language)}
                   data={LANGUAGES.map((option) => ({ value: option, label: t(`language.${option}`) }))}
                   allowDeselect={false}
+                  comboboxProps={comboboxProps}
+                />
+              </Field>
+              <Field
+                className="employee-identity-department"
+                icon={<Building2 />}
+                label={t('fields.department')}
+                required
+              >
+                <Select
+                  required
+                  aria-label={t('fields.department')}
+                  placeholder={t('fields.select')}
+                  value={draft.departmentId || null}
+                  onChange={(value) => set('departmentId', value ?? '')}
+                  data={departments.map((department) => ({ value: department.id, label: department.name }))}
+                  searchable
+                  clearable
+                  openOnFocus
+                  nothingFoundMessage={t('copy.noOptionsFound')}
                   comboboxProps={comboboxProps}
                 />
               </Field>
