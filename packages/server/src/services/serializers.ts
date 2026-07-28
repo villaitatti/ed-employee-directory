@@ -68,6 +68,8 @@ export function serializeEmployee(employee: EmployeeWithDepartment): EmployeeDto
     employeeNumber: employee.employeeNumber,
     firstName: employee.firstName,
     lastName: employee.lastName,
+    workEmail: employee.workEmail,
+    preferredLanguage: employee.preferredLanguage,
     departmentId: employee.departmentId,
     department: employee.department ? serializeDepartment(employee.department) : undefined,
     birthDate: dateOnly(employee.birthDate) ?? '',

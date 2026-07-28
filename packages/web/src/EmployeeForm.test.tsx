@@ -44,9 +44,10 @@ describe('EmployeeForm modal', () => {
       />
     );
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    // 11 always-required fields + the Responsabile field, which is required here
-    // because an eligible Responsabile (emp_1) exists to pick and the draft is ATTIVO.
-    expect(container.querySelectorAll('.field-required')).toHaveLength(12);
+    // 12 always-required fields (including Work Email) + the Responsabile field,
+    // which is required here because an eligible Responsabile (emp_1) exists to
+    // pick and the draft is ATTIVO.
+    expect(container.querySelectorAll('.field-required')).toHaveLength(13);
   });
 
   it('renders stored dates with a localized, unambiguous display value', () => {

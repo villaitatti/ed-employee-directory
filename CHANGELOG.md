@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.8.0 - 2026-07-28
+
+### Added
+
+- Every employee now carries a **Work Email** — required, unique, and entered by HR. It is never derived from an employee's name and has no fallback, because mail routing and the Ferie portal both depend on it being correct.
+- Every employee now carries a **Preferred Language** (Italiano or Inglese, default Italiano): the language the Ferie time-off portal greets them in.
+- Both fields appear on the employee card, in `/api/v1` responses, and as "Work Email" and "Preferred Language" columns in the Excel and CSV export and import.
+- New time-off directory projection for the Ferie portal, `GET /api/v1/time-off-directory/employees`, with cursor pagination up to 100 rows a page. It derives clock intervals from the stored weekly hours — anchored at 09:00, with a 30-minute break once a day runs past four hours — so the portal can deduct hourly permesso against the contracted time.
+- New `PATCH /api/v1/time-off-directory/employees/:id/preferred-language`, the only field the portal may write back. It is guarded by its own `write:time-off-directory` scope rather than the read scope, rejects any other field in the request body, and is recorded in the audit log with the calling client as the actor.
+- New `TIME_OFF_DIRECTORY_ROLES` setting maps Employee Numbers to Ferie application roles (ED holds no application-role master data). A malformed entry or unknown role stops the server at boot rather than silently syncing employees with no roles.
+
+### Fixed
+
+- An import that omitted the "Responsabile Abilitato" column silently revoked Responsabile eligibility on every employee it updated, contradicting the documented partial-import behaviour. The flag is now preserved, as its Sostituto counterpart already was.
+
+### Changed
+
+- Work Email is stored and compared in lowercase, so uniqueness holds regardless of how the address was typed. The import reports a per-row error for a missing or malformed address, an address repeated within the file, and one already belonging to another employee — rather than failing the whole commit on the unique index.
+- Server test suites now run one file at a time, because they share a single Postgres database and truncate it between cases.
+
+### Upgrade notes
+
+- The migration backfills Work Email for the known roster (Employee Number 201) and then **aborts if any employee is left without an address**, rather than inventing one. If it stops, add the missing employees' real addresses to `packages/server/prisma/migrations/20260728120000_add_work_email_and_preferred_language/migration.sql` and re-run; the table is left untouched on abort.
+- Spreadsheets exported before 0.8.0 have no "Work Email" column. Because the field is required, importing such a file reports "Work Email is required." on every row — export a fresh file first. Preferred Language may be omitted safely: an existing employee keeps their stored value and a new one defaults to Italiano.
+- The Ferie portal needs a client granted `write:time-off-directory` in Auth0 for the language write; the read sync continues to use `AUTH0_READ_SCOPE`.
+
 ## 0.7.1 - 2026-07-27
 
 ### Added

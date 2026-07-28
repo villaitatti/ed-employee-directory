@@ -7,6 +7,7 @@ describe('employee write schema', () => {
       employeeNumber: 1001,
       firstName: 'Ada',
       lastName: 'Lovelace',
+      workEmail: 'Ada.Lovelace@Example.test',
       departmentId: 'dept_1',
       birthDate: '1980-01-15',
       hireDate: '2024-01-01',
@@ -20,5 +21,7 @@ describe('employee write schema', () => {
     });
 
     expect(parsed.fte).toBe(0.5);
+    // Folded to the canonical form the unique index is enforced on.
+    expect(parsed.workEmail).toBe('ada.lovelace@example.test');
   });
 });

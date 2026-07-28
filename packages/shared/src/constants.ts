@@ -15,6 +15,11 @@ export type TfrOption = (typeof TFR_OPTIONS)[number];
 export const EMPLOYEE_STATUSES = ['ATTIVO', 'CESSATO', 'DA_ASSUMERE'] as const;
 export type EmployeeStatus = (typeof EMPLOYEE_STATUSES)[number];
 
+// Interface language the Ferie portal shows an employee when they sign in. ED
+// is authoritative: the portal reads it on sync and writes changes back here.
+export const LANGUAGES = ['IT', 'EN'] as const;
+export type Language = (typeof LANGUAGES)[number];
+
 export const APPROVAL_ROLES = ['PRE_APPROVER', 'RESPONSABILE', 'SUBSTITUTE_RESPONSABILE'] as const;
 export type ApprovalRole = (typeof APPROVAL_ROLES)[number];
 
@@ -82,6 +87,10 @@ export const labels = {
       CESSATO: 'Cessato',
       DA_ASSUMERE: 'Da Assumere',
     },
+    language: {
+      IT: 'Italiano',
+      EN: 'Inglese',
+    },
   },
   en: {
     usaCategory: {
@@ -103,6 +112,10 @@ export const labels = {
       ATTIVO: 'Active',
       CESSATO: 'Terminated',
       DA_ASSUMERE: 'To Be Hired',
+    },
+    language: {
+      IT: 'Italian',
+      EN: 'English',
     },
   },
 } as const;

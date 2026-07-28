@@ -13,6 +13,7 @@ import {
   History,
   Languages,
   LogOut,
+  Mail,
   Plus,
   Save,
   Search,
@@ -39,6 +40,7 @@ import {
   DEFAULT_RETIREMENT_POLICY,
   DEFAULT_WEEKLY_SCHEDULE_MINUTES,
   EMPLOYEE_STATUSES,
+  LANGUAGES,
   WEEKDAY_KEYS,
   calculateRetirementDate,
   expectedWeeklyMinutesForFte,
@@ -59,6 +61,7 @@ import {
   type EmployeeOption,
   type EmployeeStatus,
   type ImportPreview,
+  type Language,
   type TfrOption,
   type UsaCategory,
   type WeekdayKey,
@@ -74,6 +77,8 @@ export type EmployeeDraft = {
   employeeNumber: string;
   firstName: string;
   lastName: string;
+  workEmail: string;
+  preferredLanguage: Language;
   departmentId: string;
   birthDate: string;
   hireDate: string;
@@ -115,6 +120,8 @@ const auditFieldTranslationKeys: Record<string, string> = {
   employeeNumber: 'fields.employeeNumber',
   firstName: 'fields.firstName',
   lastName: 'fields.lastName',
+  workEmail: 'fields.workEmail',
+  preferredLanguage: 'fields.preferredLanguage',
   departmentId: 'fields.department',
   name: 'fields.department',
   birthDate: 'fields.birthDate',
@@ -185,6 +192,7 @@ function formatAuditValue(key: string, value: unknown, t: Translate): string {
   if (key === 'contractType' && typeof value === 'string') return t(`contractType.${value}`);
   if (key === 'usaCategory' && typeof value === 'string') return t(`usaCategory.${value}`);
   if (key === 'tfr' && typeof value === 'string') return t(`tfr.${value}`);
+  if (key === 'preferredLanguage' && typeof value === 'string') return t(`language.${value}`);
   if (key === 'retirementPolicy' && isRecord(value)) {
     return `${value.years ?? '-'}y ${value.months ?? '-'}m`;
   }
@@ -240,6 +248,8 @@ export const emptyEmployeeDraft: EmployeeDraft = {
   employeeNumber: '',
   firstName: '',
   lastName: '',
+  workEmail: '',
+  preferredLanguage: 'IT',
   departmentId: '',
   birthDate: '',
   hireDate: '',
@@ -273,6 +283,8 @@ function toEmployeeDraft(employee: Employee): EmployeeDraft {
     employeeNumber: String(employee.employeeNumber),
     firstName: employee.firstName,
     lastName: employee.lastName,
+    workEmail: employee.workEmail,
+    preferredLanguage: employee.preferredLanguage,
     departmentId: employee.departmentId,
     birthDate: employee.birthDate,
     hireDate: employee.hireDate ?? '',
@@ -626,6 +638,8 @@ function EmployeesPage() {
         employeeNumber: Number(input.employeeNumber),
         firstName: input.firstName,
         lastName: input.lastName,
+        workEmail: input.workEmail,
+        preferredLanguage: input.preferredLanguage,
         departmentId: input.departmentId,
         birthDate: input.birthDate,
         hireDate: input.hireDate || null,
@@ -1051,6 +1065,35 @@ export function EmployeeForm({
                   aria-label={t('fields.lastName')}
                   value={draft.lastName}
                   onChange={(event) => set('lastName', event.currentTarget.value)}
+                />
+              </Field>
+              <Field
+                icon={<Mail />}
+                label={t('fields.workEmail')}
+                hint={t('copy.workEmailHint')}
+                required
+              >
+                <TextInput
+                  required
+                  type="email"
+                  inputMode="email"
+                  aria-label={t('fields.workEmail')}
+                  value={draft.workEmail}
+                  onChange={(event) => set('workEmail', event.currentTarget.value)}
+                />
+              </Field>
+              <Field
+                icon={<Languages />}
+                label={t('fields.preferredLanguage')}
+                hint={t('copy.preferredLanguageHint')}
+              >
+                <Select
+                  aria-label={t('fields.preferredLanguage')}
+                  value={draft.preferredLanguage}
+                  onChange={(value) => value && set('preferredLanguage', value as Language)}
+                  data={LANGUAGES.map((option) => ({ value: option, label: t(`language.${option}`) }))}
+                  allowDeselect={false}
+                  comboboxProps={comboboxProps}
                 />
               </Field>
               <Field icon={<CalendarDays />} label={t('fields.birthDate')} required>

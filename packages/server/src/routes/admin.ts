@@ -14,10 +14,13 @@ import {
   entityTypeSchema,
   importCommitSchema,
   isValidEmployeeNumber,
+  LANGUAGES,
   normalizeDepartmentName,
+  normalizeWorkEmail,
   retirementPolicySchema,
   WEEKDAY_KEYS,
   type EmployeeApprovalRoleIds,
+  type Language,
   type EmployeeApprovalRoleNumbers,
   type EmployeeWriteInput,
   type ImportPreviewRow,
@@ -34,6 +37,7 @@ import {
   parseEmployeeNumberList,
   parseBoolean,
   parseContractType,
+  parseLanguage,
   parseNullableDate,
   parseOptionalBoolean,
   parseStatus,
@@ -211,6 +215,14 @@ const retirementConfirmedAliases = [
   'retirement date overridden',
   'retirementdateconfirmed',
   'retirementdateoverridden',
+];
+const workEmailAliases = ['work email', 'workemail', 'email di lavoro', 'email lavoro', 'email'];
+const preferredLanguageAliases = [
+  'preferred language',
+  'preferredlanguage',
+  'lingua',
+  'lingua preferita',
+  'language',
 ];
 const substituteResponsabileAliases = [
   'sostituto responsabile',
@@ -804,6 +816,7 @@ adminRouter.put(
             tfr: before.tfr,
             canBeResponsible: before.canBeResponsible,
             canBeSubstituteResponsible: before.canBeSubstituteResponsible,
+            preferredLanguage: before.preferredLanguage,
             weeklySchedule: weeklyScheduleFromEmployee(before),
           },
           policy
@@ -881,6 +894,8 @@ adminRouter.get(
         'Employee Number',
         'First Name',
         'Last Name',
+        'Work Email',
+        'Preferred Language',
         'Department',
         'Birth Date',
         'Hire Date',
@@ -909,6 +924,8 @@ adminRouter.get(
           serialized.employeeNumber,
           serialized.firstName,
           serialized.lastName,
+          serialized.workEmail,
+          serialized.preferredLanguage,
           serialized.department?.name ?? '',
           serialized.birthDate,
           serialized.hireDate,
@@ -959,6 +976,8 @@ adminRouter.get(
       { header: 'Employee Number', key: 'employeeNumber', width: 18 },
       { header: 'First Name', key: 'firstName', width: 18 },
       { header: 'Last Name', key: 'lastName', width: 18 },
+      { header: 'Work Email', key: 'workEmail', width: 32 },
+      { header: 'Preferred Language', key: 'preferredLanguage', width: 20 },
       { header: 'Department', key: 'department', width: 28 },
       { header: 'Birth Date', key: 'birthDate', width: 14 },
       { header: 'Hire Date', key: 'hireDate', width: 14 },
@@ -995,6 +1014,8 @@ adminRouter.get(
         employeeNumber: serialized.employeeNumber,
         firstName: serialized.firstName,
         lastName: serialized.lastName,
+        workEmail: serialized.workEmail,
+        preferredLanguage: serialized.preferredLanguage,
         department: serialized.department?.name ?? '',
         birthDate: dateStringToExcelDate(serialized.birthDate),
         hireDate: dateStringToExcelDate(serialized.hireDate),
@@ -1082,6 +1103,7 @@ adminRouter.post(
           employeeNumber: true,
           firstName: true,
           lastName: true,
+          workEmail: true,
           status: true,
           canBeResponsible: true,
           canBeSubstituteResponsible: true,
@@ -1108,6 +1130,19 @@ adminRouter.post(
         employeeNumberRows.set(employeeNumber, rowNumbers);
       }
     }
+    // Work Email is unique in the database, so a duplicate would abort the whole
+    // commit transaction. Catch both kinds here — repeated within the file, and
+    // already taken by a different employee — so the operator gets a per-row
+    // error and can deselect it instead of losing the entire import.
+    const employeeByWorkEmail = new Map(employees.map((employee) => [employee.workEmail, employee]));
+    const workEmailRows = new Map<string, number[]>();
+    for (const { row, rowNumber } of records) {
+      const workEmail = normalizeWorkEmail(readFirst(row, workEmailAliases));
+      if (!workEmail) continue;
+      const rowNumbers = workEmailRows.get(workEmail) ?? [];
+      rowNumbers.push(rowNumber);
+      workEmailRows.set(workEmail, rowNumbers);
+    }
 
     const parsedRows = records.map(({ row, rowNumber }) => {
       const departmentName = readFirst(row, ['dipartimento', 'department']);
@@ -1123,6 +1158,18 @@ adminRouter.post(
       const duplicateRows = employeeNumberRows.get(employeeNumber) ?? [];
       if (duplicateRows.length > 1) {
         errors.push(`Employee Number ${employeeNumber} appears more than once in this file (rows ${duplicateRows.join(', ')}).`);
+      }
+
+      const workEmail = normalizeWorkEmail(readFirst(row, workEmailAliases));
+      const duplicateEmailRows = workEmail ? workEmailRows.get(workEmail) ?? [] : [];
+      if (duplicateEmailRows.length > 1) {
+        errors.push(`Work Email ${workEmail} appears more than once in this file (rows ${duplicateEmailRows.join(', ')}).`);
+      }
+      // Taken by somebody else: the same address on the same Employee Number is
+      // just this employee's own row being re-imported.
+      const emailOwner = workEmail ? employeeByWorkEmail.get(workEmail) : undefined;
+      if (emailOwner && emailOwner.employeeNumber !== employeeNumber) {
+        errors.push(`Work Email ${workEmail} already belongs to Employee Number ${emailOwner.employeeNumber}.`);
       }
 
       // Honor the "Retirement Date Confirmed" flag (the same column export
@@ -1145,10 +1192,20 @@ adminRouter.post(
         readFirst(row, ['sostituto abilitato', 'puo essere sostituto responsabile', 'can be substitute responsible'])
       );
       const weeklySchedule = parseWeeklyScheduleFromRow(row);
+      // An unrecognized language token is echoed back by parseLanguage; reject it
+      // by name here rather than letting the enum produce an opaque zod message.
+      const parsedLanguage = parseLanguage(readFirst(row, preferredLanguageAliases));
+      if (parsedLanguage !== undefined && !LANGUAGES.includes(parsedLanguage as Language)) {
+        errors.push(`Unknown preferred language: ${parsedLanguage}. Use IT or EN.`);
+      }
       const rawInput = {
         employeeNumber,
         firstName: readFirst(row, ['nome', 'first name', 'firstname']),
         lastName: readFirst(row, ['cognome', 'last name', 'lastname']),
+        workEmail: readFirst(row, workEmailAliases),
+        ...(parsedLanguage !== undefined && LANGUAGES.includes(parsedLanguage as Language)
+          ? { preferredLanguage: parsedLanguage as Language }
+          : {}),
         departmentId: department?.id ?? '',
         birthDate: parseNullableDate(readFirst(row, ['data di nascita', 'birth date', 'birthdate'])),
         hireDate: parseNullableDate(readFirst(row, ['data assunzione', 'hire date', 'hiredate'])),
@@ -1505,7 +1562,13 @@ adminRouter.post(
                   retirementDate: before.retirementDate.toISOString().slice(0, 10),
                   retirementDateOverridden: before.retirementDateOverridden,
                   tfr: before.tfr,
+                  // canBeResponsible must be carried through like its substitute
+                  // counterpart: without it, an import that omits the "Responsabile
+                  // Abilitato" column silently revoked the flag on every row it
+                  // touched, contradicting the documented partial-import behaviour.
+                  canBeResponsible: before.canBeResponsible,
                   canBeSubstituteResponsible: before.canBeSubstituteResponsible,
+                  preferredLanguage: before.preferredLanguage,
                   weeklySchedule: weeklyScheduleFromEmployee(before),
                 },
                 policy

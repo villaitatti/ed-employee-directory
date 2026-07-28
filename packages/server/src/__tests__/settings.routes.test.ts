@@ -20,6 +20,7 @@ async function seedEmployee(overrides: { retirementDateOverridden?: boolean; tfr
       employeeNumber: 1001,
       firstName: 'Giulia',
       lastName: 'Rossi',
+      workEmail: 'fixture1@example.test',
       departmentId: department.id,
       birthDate: new Date('1985-04-12T00:00:00.000Z'),
       hireDate: new Date('2015-09-01T00:00:00.000Z'),
@@ -48,6 +49,7 @@ async function seedApprovers(departmentId?: string) {
       employeeNumber: 9001,
       firstName: 'Responsabile',
       lastName: 'Uno',
+      workEmail: 'fixture2@example.test',
       departmentId: department,
       birthDate: new Date('1980-01-01T00:00:00.000Z'),
       hireDate: new Date('2010-01-01T00:00:00.000Z'),
@@ -64,6 +66,7 @@ async function seedApprovers(departmentId?: string) {
       employeeNumber: 9002,
       firstName: 'Sostituto',
       lastName: 'Due',
+      workEmail: 'fixture3@example.test',
       departmentId: department,
       birthDate: new Date('1981-01-01T00:00:00.000Z'),
       hireDate: new Date('2011-01-01T00:00:00.000Z'),
@@ -92,6 +95,7 @@ async function seedEmployeeUsingApprovers(departmentId: string, approvers: Await
       employeeNumber: 2002,
       firstName: 'Marco',
       lastName: 'Bianchi',
+      workEmail: 'fixture4@example.test',
       departmentId,
       birthDate: new Date('1985-04-12T00:00:00.000Z'),
       hireDate: new Date('2020-01-01T00:00:00.000Z'),
@@ -236,6 +240,7 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
         employeeNumber: 2002,
         firstName: 'Marco',
         lastName: 'Bianchi',
+        workEmail: 'fixture5@example.test',
         departmentId: department.id,
         birthDate: '1985-04-12',
         hireDate: '2020-01-01',
@@ -266,6 +271,7 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
         employeeNumber: 2002,
         firstName: 'Marco',
         lastName: 'Bianchi',
+        workEmail: 'fixture6@example.test',
         departmentId: department.id,
         birthDate: '1985-04-12',
         hireDate: '2020-01-01',
@@ -292,6 +298,7 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
         employeeNumber: 2002,
         firstName: 'Marco',
         lastName: 'Bianchi',
+        workEmail: 'fixture7@example.test',
         departmentId: department.id,
         birthDate: '1985-04-12',
         hireDate: '2020-01-01',
@@ -323,6 +330,7 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
         employeeNumber: 2002,
         firstName: 'Marco',
         lastName: 'Bianchi',
+        workEmail: 'fixture8@example.test',
         departmentId: department.id,
         birthDate: '1985-04-12',
         hireDate: '2020-01-01',
@@ -357,6 +365,7 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
         employeeNumber: 2002,
         firstName: 'Marco',
         lastName: 'Bianchi',
+        workEmail: 'fixture9@example.test',
         departmentId: department.id,
         birthDate: '1985-04-12',
         hireDate: '2020-01-01',
@@ -384,6 +393,7 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
         employeeNumber: 9010,
         firstName: 'Prima',
         lastName: 'Responsabile',
+        workEmail: 'fixture10@example.test',
         departmentId: department.id,
         birthDate: new Date('1980-01-01T00:00:00.000Z'),
         hireDate: new Date('2010-01-01T00:00:00.000Z'),
@@ -402,6 +412,7 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
         employeeNumber: soleResponsabile.employeeNumber,
         firstName: 'Prima',
         lastName: 'Responsabile',
+        workEmail: 'fixture11@example.test',
         departmentId: department.id,
         birthDate: '1980-01-01',
         hireDate: '2010-01-02',
@@ -422,6 +433,7 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
         employeeNumber: 2002,
         firstName: 'Marco',
         lastName: 'Bianchi',
+        workEmail: 'fixture12@example.test',
         departmentId: department.id,
         birthDate: '1985-04-12',
         hireDate: '2020-01-01',
@@ -447,6 +459,7 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
         employeeNumber: 2002,
         firstName: 'Marco',
         lastName: 'Bianchi',
+        workEmail: 'fixture13@example.test',
         departmentId: department.id,
         birthDate: '1985-04-12',
         hireDate: '2020-01-01',
@@ -478,6 +491,7 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
         employeeNumber: approvers.responsabile.employeeNumber,
         firstName: approvers.responsabile.firstName,
         lastName: approvers.responsabile.lastName,
+        workEmail: 'fixture14@example.test',
         departmentId: department.id,
         birthDate: '1980-01-01',
         hireDate: '2010-01-01',
@@ -504,6 +518,7 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
         employeeNumber: 9003,
         firstName: 'Sostituto',
         lastName: 'Tre',
+        workEmail: 'fixture15@example.test',
         departmentId: department.id,
         birthDate: new Date('1982-01-01T00:00:00.000Z'),
         hireDate: new Date('2012-01-01T00:00:00.000Z'),
@@ -522,6 +537,7 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
         employeeNumber: approvers.substitute.employeeNumber,
         firstName: approvers.substitute.firstName,
         lastName: approvers.substitute.lastName,
+        workEmail: 'fixture16@example.test',
         departmentId: department.id,
         birthDate: '1981-01-01',
         hireDate: '2011-01-01',
@@ -557,6 +573,7 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
         employeeNumber: 9004,
         firstName: 'Responsabile',
         lastName: 'Quattro',
+        workEmail: 'fixture17@example.test',
         departmentId: department.id,
         birthDate: new Date('1982-01-01T00:00:00.000Z'),
         hireDate: new Date('2012-01-01T00:00:00.000Z'),
@@ -575,6 +592,7 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
         employeeNumber: approvers.responsabile.employeeNumber,
         firstName: approvers.responsabile.firstName,
         lastName: approvers.responsabile.lastName,
+        workEmail: 'fixture18@example.test',
         departmentId: department.id,
         birthDate: '1980-01-01',
         hireDate: '2010-01-01',
@@ -620,6 +638,7 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
         employeeNumber: 1001,
         firstName: 'Giulia',
         lastName: 'Rossi',
+        workEmail: 'fixture19@example.test',
         departmentId: employee.departmentId,
         birthDate: '1985-04-12',
         hireDate: '2015-09-01',
@@ -652,8 +671,8 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
     // A CSV shaped like an export: includes the (now-stale) old date + the
     // confirmed=false flag.
     const csv = [
-      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,Status,Retirement Date,Retirement Date Confirmed,Responsabile,Sostituto-Responsabile,LU,MA,ME,GIO,VE',
-      `1001,Giulia,Rossi,${department.name},1985-04-12,2015-09-01,1,Exempt,Indeterminato,Attivo,2052-07-12,false,${approvers.responsabile.employeeNumber},${approvers.substitute.employeeNumber},"7,30","7,30","7,30","7,30","7,30"`,
+      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,Status,Retirement Date,Retirement Date Confirmed,Responsabile,Sostituto-Responsabile,LU,MA,ME,GIO,VE,Work Email',
+      `1001,Giulia,Rossi,${department.name},1985-04-12,2015-09-01,1,Exempt,Indeterminato,Attivo,2052-07-12,false,${approvers.responsabile.employeeNumber},${approvers.substitute.employeeNumber},"7,30","7,30","7,30","7,30","7,30",csv1@example.test`,
     ].join('\n');
 
     const preview = await request(app)
@@ -679,8 +698,8 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
     const approvers = await seedApprovers(department.id);
 
     const csv = [
-      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,Status,Retirement Date,Retirement Date Confirmed,Responsabile,Sostituto-Responsabile',
-      `1001,Giulia,Rossi,${department.name},1985-04-12,2015-09-01,1,Exempt,Indeterminato,Attivo,2060-01-01,true,${approvers.responsabile.employeeNumber},${approvers.substitute.employeeNumber}`,
+      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,Status,Retirement Date,Retirement Date Confirmed,Responsabile,Sostituto-Responsabile,Work Email',
+      `1001,Giulia,Rossi,${department.name},1985-04-12,2015-09-01,1,Exempt,Indeterminato,Attivo,2060-01-01,true,${approvers.responsabile.employeeNumber},${approvers.substitute.employeeNumber},csv2@example.test`,
     ].join('\n');
 
     const preview = await request(app)
@@ -702,8 +721,8 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
     const approvers = await seedApprovers(department.id);
 
     const csv = [
-      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,Status,Responsabile,Sostituto-Responsabile',
-      `1001,Giulia,Rossi,${department.name},1985-04-12,2015-09-01,1,Exempt,Indeterminato,Attivo,${approvers.responsabile.employeeNumber},${approvers.substitute.employeeNumber}`,
+      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,Status,Responsabile,Sostituto-Responsabile,Work Email',
+      `1001,Giulia,Rossi,${department.name},1985-04-12,2015-09-01,1,Exempt,Indeterminato,Attivo,${approvers.responsabile.employeeNumber},${approvers.substitute.employeeNumber},csv3@example.test`,
     ].join('\n');
 
     const preview = await request(app)
@@ -746,6 +765,7 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
         'ME',
         'GIO',
         'VE',
+        'Work Email',
       ],
       [
         3003,
@@ -766,6 +786,7 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
         '7,30',
         '7,30',
         '7,30',
+        'laura.neri@example.test',
       ],
     ]);
 
@@ -798,8 +819,8 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
     const approvers = await seedApprovers(department.id);
     // Only LU is filled; the other weekday columns are present but blank.
     const csv = [
-      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,Status,Responsabile,Sostituto-Responsabile,LU,MA,ME,GIO,VE',
-      `6001,Ada,Uno,${department.name},1985-04-12,2020-01-01,1,Exempt,Indeterminato,Attivo,${approvers.responsabile.employeeNumber},${approvers.substitute.employeeNumber},"6,00",,,,`,
+      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,Status,Responsabile,Sostituto-Responsabile,LU,MA,ME,GIO,VE,Work Email',
+      `6001,Ada,Uno,${department.name},1985-04-12,2020-01-01,1,Exempt,Indeterminato,Attivo,${approvers.responsabile.employeeNumber},${approvers.substitute.employeeNumber},"6,00",,,,,csv4@example.test`,
     ].join('\n');
 
     const preview = await request(app)
@@ -828,10 +849,10 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
       data: { name: 'Biblioteca', normalizedName: 'biblioteca' },
     });
     const csv = [
-      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,TFR,Status,Responsabile Abilitato,Sostituto Abilitato,Responsabile,Sostituto-Responsabile',
-      `4001,Ada,Uno,${department.name},1985-04-12,2020-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,true,true,4002,4003`,
-      `4002,Bruno,Due,${department.name},1986-04-12,2020-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,true,true,4001,4003`,
-      `4003,Carla,Tre,${department.name},1987-04-12,2020-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,true,true,4001,4002`,
+      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,TFR,Status,Responsabile Abilitato,Sostituto Abilitato,Responsabile,Sostituto-Responsabile,Work Email',
+      `4001,Ada,Uno,${department.name},1985-04-12,2020-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,true,true,4002,4003,csv5@example.test`,
+      `4002,Bruno,Due,${department.name},1986-04-12,2020-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,true,true,4001,4003,csv6@example.test`,
+      `4003,Carla,Tre,${department.name},1987-04-12,2020-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,true,true,4001,4002,csv7@example.test`,
     ].join('\n');
 
     const preview = await request(app)
@@ -862,9 +883,9 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
     // references no one — an invalid, non-importable row that 4101 then depends on.
     await seedApprovers(department.id);
     const csv = [
-      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,TFR,Status,Responsabile Abilitato,Sostituto Abilitato,Responsabile,Sostituto-Responsabile',
-      `4101,Ada,Uno,${department.name},1985-04-12,2020-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,true,true,4102,4102`,
-      `4102,Bruno,Due,${department.name},1986-04-12,2020-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,true,true,,`,
+      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,TFR,Status,Responsabile Abilitato,Sostituto Abilitato,Responsabile,Sostituto-Responsabile,Work Email',
+      `4101,Ada,Uno,${department.name},1985-04-12,2020-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,true,true,4102,4102,csv8@example.test`,
+      `4102,Bruno,Due,${department.name},1986-04-12,2020-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,true,true,,,csv9@example.test`,
     ].join('\n');
 
     const preview = await request(app)
@@ -891,9 +912,9 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
     // that row is invalid (blank first name) so it won't be applied. A second
     // row references 9001 — it must NOT silently pass against the stale DB copy.
     const csv = [
-      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,TFR,Status,Sostituto Abilitato,Responsabile,Sostituto-Responsabile',
-      `${approvers.responsabile.employeeNumber},,Uno,${department.name},1980-01-01,2010-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,false,${approvers.substitute.employeeNumber},${approvers.substitute.employeeNumber}`,
-      `5001,Marco,Bianchi,${department.name},1985-04-12,2020-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,false,${approvers.responsabile.employeeNumber},${approvers.substitute.employeeNumber}`,
+      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,TFR,Status,Sostituto Abilitato,Responsabile,Sostituto-Responsabile,Work Email',
+      `${approvers.responsabile.employeeNumber},,Uno,${department.name},1980-01-01,2010-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,false,${approvers.substitute.employeeNumber},${approvers.substitute.employeeNumber},csv10@example.test`,
+      `5001,Marco,Bianchi,${department.name},1985-04-12,2020-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,false,${approvers.responsabile.employeeNumber},${approvers.substitute.employeeNumber},csv11@example.test`,
     ].join('\n');
 
     const preview = await request(app)
@@ -918,8 +939,8 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
     // Out-of-file employee 2002 references 9001 as Responsabile. An import that
     // inactivates 9001 must be flagged at preview, not blow up the commit.
     const csv = [
-      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,Termination Date,FTE,USA Category,Contract Type,TFR,Status',
-      `${approvers.responsabile.employeeNumber},Responsabile,Uno,${department.name},1980-01-01,2010-01-01,2026-01-01,1,Exempt,Indeterminato,I Tatti,Cessato`,
+      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,Termination Date,FTE,USA Category,Contract Type,TFR,Status,Work Email',
+      `${approvers.responsabile.employeeNumber},Responsabile,Uno,${department.name},1980-01-01,2010-01-01,2026-01-01,1,Exempt,Indeterminato,I Tatti,Cessato,csv12@example.test`,
     ].join('\n');
 
     const preview = await request(app)
@@ -949,6 +970,7 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
         employeeNumber: 9004,
         firstName: 'Responsabile',
         lastName: 'Quattro',
+        workEmail: 'fixture20@example.test',
         departmentId: department.id,
         birthDate: new Date('1982-01-01T00:00:00.000Z'),
         hireDate: new Date('2012-01-01T00:00:00.000Z'),
@@ -968,8 +990,8 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
     });
 
     const csv = [
-      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,TFR,Status,Responsabile Abilitato',
-      `${approvers.responsabile.employeeNumber},Responsabile,Uno,${department.name},1980-01-01,2010-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,false`,
+      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,TFR,Status,Responsabile Abilitato,Work Email',
+      `${approvers.responsabile.employeeNumber},Responsabile,Uno,${department.name},1980-01-01,2010-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,false,csv13@example.test`,
     ].join('\n');
 
     const preview = await request(app)
@@ -992,8 +1014,8 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
     // Responsabile even though it is an active, assignable employee.
     const approvers = await seedApprovers(department.id);
     const csv = [
-      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,TFR,Status,Responsabile,Sostituto-Responsabile',
-      `5001,Ada,Uno,${department.name},1985-04-12,2020-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,${approvers.substitute.employeeNumber},${approvers.substitute.employeeNumber}`,
+      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,TFR,Status,Responsabile,Sostituto-Responsabile,Work Email',
+      `5001,Ada,Uno,${department.name},1985-04-12,2020-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,${approvers.substitute.employeeNumber},${approvers.substitute.employeeNumber},csv14@example.test`,
     ].join('\n');
 
     const preview = await request(app)
@@ -1014,8 +1036,8 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
     });
     const approvers = await seedApprovers(department.id);
     const csv = [
-      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,TFR,Status,Responsabile Abilitato,Sostituto Abilitato,Responsabile,Sostituto-Responsabile',
-      `5001,Ada,Uno,${department.name},1985-04-12,2020-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,true,false,${approvers.responsabile.employeeNumber},${approvers.substitute.employeeNumber}`,
+      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,TFR,Status,Responsabile Abilitato,Sostituto Abilitato,Responsabile,Sostituto-Responsabile,Work Email',
+      `5001,Ada,Uno,${department.name},1985-04-12,2020-01-01,1,Exempt,Indeterminato,I Tatti,Attivo,true,false,${approvers.responsabile.employeeNumber},${approvers.substitute.employeeNumber},csv15@example.test`,
     ].join('\n');
 
     const preview = await request(app)
@@ -1052,8 +1074,8 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
     // it doesn't touch approvals, so the now-inactive grandfathered approver
     // must not block it.
     const csv = [
-      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,Status',
-      `${employee.employeeNumber},Marco,Bianchi,${department.name},1985-04-12,2020-01-02,1,Exempt,Indeterminato,Attivo`,
+      'Employee Number,First Name,Last Name,Department,Birth Date,Hire Date,FTE,USA Category,Contract Type,Status,Work Email',
+      `${employee.employeeNumber},Marco,Bianchi,${department.name},1985-04-12,2020-01-02,1,Exempt,Indeterminato,Attivo,csv16@example.test`,
     ].join('\n');
 
     const preview = await request(app)
@@ -1092,6 +1114,7 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
         employeeNumber: employee.employeeNumber,
         firstName: employee.firstName,
         lastName: employee.lastName,
+        workEmail: 'fixture21@example.test',
         departmentId: department.id,
         birthDate: '1985-04-12',
         hireDate: '2020-01-01',
@@ -1112,10 +1135,10 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
 
   it('rejects an import file that exceeds the row cap', async () => {
     const header =
-      'Employee Number,First Name,Last Name,Department,Birth Date,FTE,USA Category,Contract Type,Status';
+      'Employee Number,First Name,Last Name,Department,Birth Date,FTE,USA Category,Contract Type,Status,Work Email';
     const lines = [header];
     for (let i = 0; i < 2001; i += 1) {
-      lines.push(`${i + 1},A,B,Amministrazione,1990-01-01,1,Exempt,Indeterminato,Da Assumere`);
+      lines.push(`${i + 1},A,B,Amministrazione,1990-01-01,1,Exempt,Indeterminato,Da Assumere,cap${i + 1}@example.test`);
     }
 
     const res = await request(app)
@@ -1135,6 +1158,7 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
         employeeNumber: employee.employeeNumber,
         firstName: 'Duplicate',
         lastName: 'Person',
+        workEmail: 'fixture22@example.test',
         departmentId: employee.departmentId,
         birthDate: '1990-01-01',
         fte: 1,
@@ -1157,6 +1181,7 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
         employeeNumber: 4004,
         firstName: 'Anna',
         lastName: 'Verdi',
+        workEmail: 'fixture23@example.test',
         departmentId: department.id,
         birthDate: new Date('1990-05-05T00:00:00.000Z'),
         retirementDate: new Date('2050-01-01T00:00:00.000Z'),
@@ -1171,8 +1196,8 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
     // A partial re-import with no "Retirement Date"/"Confirmed" columns must not
     // wipe the confirmed government date back to a calculated one.
     const csv = [
-      'Employee Number,First Name,Last Name,Department,Birth Date,FTE,USA Category,Contract Type,Status',
-      `4004,Anna,Verdi,${department.name},1990-05-05,1,Exempt,Indeterminato,Da Assumere`,
+      'Employee Number,First Name,Last Name,Department,Birth Date,FTE,USA Category,Contract Type,Status,Work Email',
+      `4004,Anna,Verdi,${department.name},1990-05-05,1,Exempt,Indeterminato,Da Assumere,csv17@example.test`,
     ].join('\n');
 
     const preview = await request(app)

@@ -61,7 +61,7 @@ export const requireAuth: RequestHandler[] = [
           sub: 'dev|staff-it',
           email: 'dev.staff-it@example.test',
           roles: [env.AUTH0_STAFF_ROLE],
-          scope: [env.AUTH0_READ_SCOPE],
+          scope: [env.AUTH0_READ_SCOPE, env.AUTH0_WRITE_SCOPE],
         };
         next();
       }
@@ -104,4 +104,18 @@ export const requireReadAccess: RequestHandler = (req, _res, next) => {
     return;
   }
   next(new HttpError(403, 'FORBIDDEN', `Scope ${env.AUTH0_READ_SCOPE} or role ${env.AUTH0_STAFF_ROLE} is required.`));
+};
+
+/**
+ * Guards the one field an external client may write. Deliberately keyed off its
+ * own scope rather than AUTH0_READ_SCOPE so the Ferie portal's read-only sync
+ * credentials cannot mutate anything, and a read token leak stays read-only.
+ */
+export const requireWriteAccess: RequestHandler = (req, _res, next) => {
+  const user = (req as AuthenticatedRequest).authUser;
+  if (user?.roles.includes(env.AUTH0_STAFF_ROLE) || user?.scope.includes(env.AUTH0_WRITE_SCOPE)) {
+    next();
+    return;
+  }
+  next(new HttpError(403, 'FORBIDDEN', `Scope ${env.AUTH0_WRITE_SCOPE} or role ${env.AUTH0_STAFF_ROLE} is required.`));
 };
