@@ -863,7 +863,16 @@ button:focus-visible {
   transform: translateY(0) scale(0.98);
 }
 
+/* The employee form is the only screen built on Mantine buttons, so Save would
+   otherwise paint itself from the theme's indigo palette while every other
+   primary button on the app uses `.button.primary`, i.e. --brand. Drive Mantine's
+   own button variables from the brand tokens so the two blues match.
+   Scoped to this footer rather than all filled buttons because destructive
+   confirmations pass `color: 'red'`, which a blanket override would repaint. */
 .employee-form-footer .app-button[data-variant="filled"] {
+  --button-bg: var(--brand);
+  --button-hover: color-mix(in oklch, var(--brand) 88%, black);
+  --button-color: var(--brand-ink);
   box-shadow: 0 5px 14px color-mix(in oklch, var(--brand), transparent 80%);
 }
 

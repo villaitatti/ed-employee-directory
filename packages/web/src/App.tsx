@@ -1350,7 +1350,10 @@ export function EmployeeForm({
             <Button variant="default" type="button" onClick={requestClose}>
             {t('actions.cancel')}
             </Button>
-            <Button type="submit" loading={isSaving} leftSection={<Save size={17} />}>
+            {/* `filled` is Mantine's default, but stating it makes the element carry
+                data-variant="filled" — which app.css needs to give this button the
+                brand blue and drop shadow the rest of the app's primary buttons use. */}
+            <Button variant="filled" type="submit" loading={isSaving} leftSection={<Save size={17} />}>
               {t('actions.save')}
             </Button>
           </div>
