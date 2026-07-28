@@ -85,6 +85,7 @@ import {
   FIELD_LABEL_KEYS,
   FIELD_SECTIONS,
   fieldErrorId,
+  isDecimalInteger,
   fieldLabels,
   firstErrorField,
   noServerErrors,
@@ -193,6 +194,17 @@ function formatTableDate(value: string | null | undefined): string {
   if (!value) return '';
   const date = parseDateOnlyToUtc(value);
   return date ? tableDateFormatter.format(date) : value;
+}
+
+/**
+ * A date written the way the form's own inputs write it: localized, `DD MMMM
+ * YYYY`. Deliberately not `formatTableDate`, which is fixed en-GB abbreviations
+ * chosen for dense table columns — prose that quotes a date the operator is
+ * looking at in a field has to agree with that field, in their language.
+ */
+function formatFieldDate(value: string, locale: string): string {
+  const parsed = dayjs(value, 'YYYY-MM-DD', true);
+  return parsed.isValid() ? parsed.locale(locale).format(DATE_INPUT_DISPLAY_FORMAT) : value;
 }
 
 function formatTableDateTime(value: string | null | undefined): string {
@@ -953,7 +965,10 @@ export function EmployeeForm({
   onSave: () => void;
   isSaving: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  // Same resolution as the DateInput's, so a date quoted in prose and the same
+  // date shown in the field can never disagree.
+  const dateLocale = i18n.resolvedLanguage === 'en' ? 'en' : 'it';
   const api = useApi();
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.settings });
   const retirementPolicy = settings.data?.retirementPolicy ?? DEFAULT_RETIREMENT_POLICY;
@@ -1057,7 +1072,7 @@ export function EmployeeForm({
       openConfirmation({
         title: t('copy.confirmationTitle'),
         message: t('copy.confirmUnconfirmRetirement', {
-          date: formatTableDate(draft.retirementDate),
+          date: formatFieldDate(draft.retirementDate, dateLocale),
         }),
         confirmLabel: t('actions.confirm'),
         cancelLabel: t('actions.cancel'),
@@ -2218,21 +2233,25 @@ export function SettingsPage() {
    * The same bounds the API enforces, phrased for the person typing. Without this
    * the only feedback for "70 years" is a 400 whose body reads "The request did
    * not pass validation."
+   *
+   * The grammar is checked before the conversion, not after: dropping the native
+   * `type="number"` (for its spinners and scroll-wheel hazard) also dropped the
+   * browser's refusal to accept `0x40`, which `Number()` reads as a perfectly
+   * in-range 64 and would recalculate every employee's retirement date from.
    */
   const policyErrors = (): FieldErrors => {
+    const bounded = (raw: string, min: number, max: number): string | undefined => {
+      const value = raw.trim();
+      if (!value) return t('validation.required');
+      if (!isDecimalInteger(value)) return t('validation.range', { min, max });
+      const parsed = Number(value);
+      return parsed < min || parsed > max ? t('validation.range', { min, max }) : undefined;
+    };
     const errors: FieldErrors = {};
-    const yearsValue = Number(years);
-    const monthsValue = Number(months);
-    if (!years.trim() || !Number.isInteger(yearsValue)) {
-      errors['years'] = t('validation.required');
-    } else if (yearsValue < RETIREMENT_YEARS_MIN || yearsValue > RETIREMENT_YEARS_MAX) {
-      errors['years'] = t('validation.range', { min: RETIREMENT_YEARS_MIN, max: RETIREMENT_YEARS_MAX });
-    }
-    if (!months.trim() || !Number.isInteger(monthsValue)) {
-      errors['months'] = t('validation.required');
-    } else if (monthsValue < RETIREMENT_MONTHS_MIN || monthsValue > RETIREMENT_MONTHS_MAX) {
-      errors['months'] = t('validation.range', { min: RETIREMENT_MONTHS_MIN, max: RETIREMENT_MONTHS_MAX });
-    }
+    const yearsError = bounded(years, RETIREMENT_YEARS_MIN, RETIREMENT_YEARS_MAX);
+    const monthsError = bounded(months, RETIREMENT_MONTHS_MIN, RETIREMENT_MONTHS_MAX);
+    if (yearsError) errors['years'] = yearsError;
+    if (monthsError) errors['months'] = monthsError;
     return errors;
   };
   const shownErrors = submitted ? policyErrors() : {};

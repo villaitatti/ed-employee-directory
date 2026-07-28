@@ -24,6 +24,8 @@
 - The sign-out button had no accessible name of its own, relying on the `title` attribute that has now been replaced.
 - A field marked by the server stopped being marked if the operator edited it, changed it back, and saved the same value again: the second rejection is byte-identical to the first, and the form had been treating "identical payload" as "same verdict the operator already dismissed". Rejections are now counted rather than compared.
 - A user whose account lacks the required role was told their session had expired and to sign in again, which cannot grant a role. A 403 is now reported separately from a 401 and points at IT support instead.
+- The retirement age and Employee Number fields accepted values that only look like numbers to JavaScript. `0x40`, `0b1000000`, and `6.4e1` were each read as 64 and submitted, so a typo in the retirement age could recalculate every employee's projected date from a figure nobody typed. Both fields now require plain decimal digits before any conversion happens.
+- The prompt shown when un-confirming a retirement date quoted the date in fixed English abbreviations (`30 Jun 2050`) even in Italian, disagreeing with the field directly above it. It now uses the same localized `DD MMMM YYYY` the field does.
 
 ## 0.8.0 - 2026-07-28
 

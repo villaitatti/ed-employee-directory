@@ -85,6 +85,19 @@ export function fieldErrorId(field: string): string {
   return `field-error-${field.replace(/\W/g, '-')}`;
 }
 
+/**
+ * A run of decimal digits and nothing else.
+ *
+ * `Number()` is not a validator: it reads `0x40`, `0b1000000`, and `6.4e1` all as
+ * 64. Every one of those would sail through a range check and be submitted as a
+ * value the operator never typed — for the retirement age, triggering a
+ * recalculation across every employee. Checking the grammar before converting
+ * means only what is legible in the field can be sent.
+ */
+export function isDecimalInteger(value: string): boolean {
+  return /^\d+$/.test(value.trim());
+}
+
 /** Human-readable, comma-separated list of the fields that need attention. */
 export function fieldLabels(fields: readonly string[], t: Translate): string {
   return fields
@@ -128,10 +141,10 @@ export function validateEmployeeDraft(
 ): FieldErrors {
   const errors: FieldErrors = {};
 
-  const employeeNumber = Number(draft.employeeNumber.trim());
-  if (!draft.employeeNumber.trim()) {
+  const employeeNumber = draft.employeeNumber.trim();
+  if (!employeeNumber) {
     errors['employeeNumber'] = t('validation.required');
-  } else if (!Number.isInteger(employeeNumber) || employeeNumber <= 0) {
+  } else if (!isDecimalInteger(employeeNumber) || Number(employeeNumber) <= 0) {
     errors['employeeNumber'] = t('validation.employeeNumber');
   }
 

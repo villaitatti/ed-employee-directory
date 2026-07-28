@@ -1030,6 +1030,33 @@ describe('EmployeeForm validation feedback', () => {
     expect(container.querySelector('[data-field="workEmail"].field-invalid')).toBeNull();
   });
 
+  it.each(['0x40', '6.4e1', '0b1000000'])(
+    'refuses %s as an employee number rather than coercing it to 64',
+    async (value) => {
+      vi.spyOn(toast, 'error').mockImplementation(() => 'id');
+      const user = userEvent.setup();
+      const { container, onSave } = renderForm({ ...validDraft, employeeNumber: value });
+
+      await user.click(screen.getByRole('button', { name: /Salva/i }));
+
+      expect(onSave).not.toHaveBeenCalled();
+      expect(container.querySelector('[data-field="employeeNumber"]')).toHaveClass('field-invalid');
+    }
+  );
+
+  it('quotes the discarded retirement date in the operator’s own date format', async () => {
+    const user = userEvent.setup();
+    renderForm({ ...validDraft, retirementDateOverridden: true, retirementDate: '2050-06-30' });
+
+    // Switching the confirmation off warns that the date will be recalculated.
+    await user.click(screen.getByRole('switch', { name: 'Data pensionamento confermata' }));
+
+    // "30 giugno 2050", matching what the field itself displays — not the
+    // table formatter's fixed-English "30 Jun 2050".
+    expect(await screen.findByText(/30 giugno 2050/)).toBeInTheDocument();
+    expect(screen.queryByText(/30 Jun 2050/)).not.toBeInTheDocument();
+  });
+
   it('re-marks a field when the identical rejection comes back', async () => {
     const user = userEvent.setup();
     const duplicate = { workEmail: 'Già assegnata a un altro dipendente.' };

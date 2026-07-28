@@ -139,4 +139,51 @@ describe('SettingsPage', () => {
     expect(container.querySelector('.field-invalid')).not.toBeNull();
     expect(years).toHaveAttribute('aria-invalid', 'true');
   });
+
+  // `Number()` reads all of these as an in-range 64. Dropping the native
+  // type="number" also dropped the browser's refusal to accept them, so the
+  // grammar has to be checked before the conversion — otherwise a typo silently
+  // recalculates every employee's retirement date from a value nobody typed.
+  it.each(['0x40', '6.4e1', '0b1000000', '64abc'])(
+    'refuses %s in the retirement age rather than coercing it to a number',
+    async (value) => {
+      vi.spyOn(toast, 'error').mockImplementation(() => 'id');
+      const fetchMock = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
+        jsonResponse({ data: { retirementPolicy: { years: 67, months: 3 }, updatedAt: null } })
+      );
+      vi.stubGlobal('fetch', fetchMock);
+
+      const user = userEvent.setup();
+      renderWithProviders(<SettingsPage />);
+      const years = await screen.findByLabelText('Anni');
+      await waitFor(() => expect(years).toHaveValue('67'));
+
+      await user.clear(years);
+      await user.type(years, value);
+      await user.click(screen.getByRole('button', { name: /Salva/i }));
+
+      expect(screen.queryByRole('button', { name: 'Conferma' })).not.toBeInTheDocument();
+      expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(false);
+      expect(years).toHaveAttribute('aria-invalid', 'true');
+    }
+  );
+
+  it('accepts a plain decimal integer', async () => {
+    const fetchMock = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse({ data: { retirementPolicy: { years: 67, months: 3 }, updatedAt: null } })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const user = userEvent.setup();
+    renderWithProviders(<SettingsPage />);
+    const years = await screen.findByLabelText('Anni');
+    await waitFor(() => expect(years).toHaveValue('67'));
+
+    await user.clear(years);
+    await user.type(years, '64');
+    await user.click(screen.getByRole('button', { name: /Salva/i }));
+
+    // Reaches the confirmation, which is where a valid policy should get to.
+    expect(await screen.findByRole('button', { name: 'Conferma' })).toBeInTheDocument();
+  });
 });
