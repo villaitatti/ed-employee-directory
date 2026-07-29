@@ -5,7 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Department } from '@itatti/shared';
 import { Button } from '@/components/ui/button';
 import { noServerErrors, type ServerErrors } from '../employee-validation.js';
-import { formatTableDateTime } from '../format.js';
+import { formatDateTime, useDateLocale } from '../format.js';
 import { useApi, useDepartments } from '../hooks.js';
 import { ActionTooltip } from '../ui/ActionTooltip.js';
 import { QueryError } from '../ui/QueryError.js';
@@ -17,6 +17,7 @@ import { DepartmentForm, emptyDepartmentDraft, type DepartmentDraft } from './De
 export function DepartmentsPage() {
   const { t } = useTranslation();
   const confirm = useConfirmation();
+  const dateLocale = useDateLocale();
   const api = useApi();
   const queryClient = useQueryClient();
   const departments = useDepartments(api);
@@ -86,7 +87,7 @@ export function DepartmentsPage() {
             {departments.data?.map((department) => (
               <tr key={department.id}>
                 <td>{department.name}</td>
-                <td>{formatTableDateTime(department.updatedAt)}</td>
+                <td>{formatDateTime(department.updatedAt, dateLocale)}</td>
                 <td>
                   <div className="flex items-center gap-1">
                     <Button

@@ -47,7 +47,6 @@
   --color-ink-muted: var(--ink-muted);
   --color-surface: var(--surface);
   --color-surface-raised: var(--surface-raised);
-  --color-surface-strong: var(--surface-strong);
   --color-line: var(--line);
   --color-brand: var(--brand);
   --color-brand-ink: var(--brand-ink);
@@ -93,7 +92,6 @@
   --ink-muted: oklch(0.55 0.018 250);
   --surface: oklch(0.985 0.005 250);
   --surface-raised: oklch(0.962 0.007 250);
-  --surface-strong: oklch(0.92 0.012 250);
   --line: oklch(0.84 0.014 250);
   --brand: oklch(0.37 0.082 251);
   --brand-ink: oklch(0.985 0.005 250);

@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { fieldErrorId, isDecimalInteger, type FieldErrors } from '../employee-validation.js';
-import { formatTableDateTime } from '../format.js';
+import { formatDateTime, useDateLocale } from '../format.js';
 import { useApi } from '../hooks.js';
 import { Field } from '../ui/Field.js';
 import { QueryError } from '../ui/QueryError.js';
@@ -22,6 +22,7 @@ import { PageHeading, PageSection } from '../ui/layout.js';
 export function SettingsPage() {
   const { t } = useTranslation();
   const confirm = useConfirmation();
+  const dateLocale = useDateLocale();
   const api = useApi();
   const queryClient = useQueryClient();
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.settings });
@@ -176,7 +177,7 @@ export function SettingsPage() {
 
         <p className="m-0 text-[0.82rem] font-bold text-ink-muted">
           {loaded?.updatedAt
-            ? `${t('settings.lastUpdated')}: ${formatTableDateTime(loaded.updatedAt)}`
+            ? `${t('settings.lastUpdated')}: ${formatDateTime(loaded.updatedAt, dateLocale)}`
             : t('settings.neverUpdated')}
         </p>
         <p className="m-0 rounded-lg bg-surface-raised p-4 text-[0.85rem] leading-relaxed text-ink-soft">

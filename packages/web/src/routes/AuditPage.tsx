@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import type { AuditLog } from '@itatti/shared';
-import { formatDate, formatTableDateTime, useDateLocale } from '../format.js';
+import { formatDate, formatDateTime, useDateLocale } from '../format.js';
 import { useApi, useDebounced } from '../hooks.js';
 import type { Translate } from '../i18n/types.js';
 import { QueryError } from '../ui/QueryError.js';
@@ -35,15 +35,6 @@ const auditFieldTranslationKeys: Record<string, string> = {
 
 const auditIgnoredFields = new Set(['id', 'createdAt', 'updatedAt', 'department']);
 const dateFields = new Set(['birthDate', 'hireDate', 'terminationDate', 'retirementDate']);
-
-/**
- * A date, written the one way this app writes dates: localized, `DD MMMM YYYY`.
- *
- * The tables used to have a format of their own — fixed en-GB `30 Jun 2050`,
- * chosen for column width — which meant an Italian operator read one spelling in
- * the directory and a different one in the field they were about to edit, and an
- * English operator got English either way. One convention, everywhere.
- */
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -150,7 +141,7 @@ export function AuditPage() {
               const employee = auditEmployeeLabel(entry);
               return (
                 <tr key={entry.id}>
-                  <td>{formatTableDateTime(entry.createdAt)}</td>
+                  <td>{formatDateTime(entry.createdAt, dateLocale)}</td>
                   <td>{entry.actorEmail ?? entry.actorSub}</td>
                   <td>
                     {employee ? (
