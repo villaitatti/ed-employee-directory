@@ -32,6 +32,10 @@ export const resources = {
         language: 'Lingua',
         confirm: 'Conferma',
         discard: 'Scarta modifiche',
+        openCalendar: 'Apri il calendario',
+        clearDate: 'Cancella la data',
+        previousMonth: 'Mese precedente',
+        nextMonth: 'Mese successivo',
       },
       fields: {
         firstName: 'Nome',
@@ -459,6 +463,10 @@ export const resources = {
         language: 'Language',
         confirm: 'Confirm',
         discard: 'Discard changes',
+        openCalendar: 'Open the calendar',
+        clearDate: 'Clear the date',
+        previousMonth: 'Previous month',
+        nextMonth: 'Next month',
       },
       fields: {
         firstName: 'First Name',

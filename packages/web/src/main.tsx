@@ -7,7 +7,6 @@ import { BrowserRouter } from 'react-router-dom';
 // would be painted by whichever Mantine rule happened to match. `app.css`
 // declares `mantine` below Tailwind's own layers.
 import '@mantine/core/styles.layer.css';
-import '@mantine/dates/styles.layer.css';
 import { ApiError } from './api/client.js';
 import { EdAuthProvider } from './auth/AuthProvider.js';
 import { RootErrorBoundary } from './ErrorBoundary.js';

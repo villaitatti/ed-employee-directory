@@ -29,7 +29,6 @@ import {
   X,
 } from 'lucide-react';
 import { MultiSelect, Pill } from '@mantine/core';
-import { DateInput as MantineDateInput } from '@mantine/dates';
 import { modals, useModals } from '@mantine/modals';
 import dayjs from 'dayjs';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -88,6 +87,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { ActionTooltip } from './ui/ActionTooltip.js';
 import { ComboboxField } from './ui/ComboboxField.js';
+import { DATE_INPUT_DISPLAY_FORMAT, DateField } from './ui/DateField.js';
 import { Field } from './ui/Field.js';
 import { FilePicker } from './ui/FilePicker.js';
 import { SelectField } from './ui/SelectField.js';
@@ -956,7 +956,7 @@ export function EmployeeForm({
   isSaving: boolean;
 }) {
   const { t, i18n } = useTranslation();
-  // Same resolution as the DateInput's, so a date quoted in prose and the same
+  // Same resolution as the DateField's, so a date quoted in prose and the same
   // date shown in the field can never disagree.
   const dateLocale = i18n.resolvedLanguage === 'en' ? 'en' : 'it';
   const api = useApi();
@@ -1326,7 +1326,7 @@ export function EmployeeForm({
                 required
                 {...fieldProps('birthDate')}
               >
-                <DateInput
+                <DateField
                   required
                   {...inputProps('birthDate')}
                   ariaLabel={t('fields.birthDate')}
@@ -1411,7 +1411,7 @@ export function EmployeeForm({
                 required={draft.status === 'ATTIVO'}
                 {...fieldProps('hireDate')}
               >
-                <DateInput
+                <DateField
                   {...inputProps('hireDate')}
                   ariaLabel={t('fields.hireDate')}
                   value={draft.hireDate}
@@ -1426,7 +1426,7 @@ export function EmployeeForm({
                   required={draft.status === 'CESSATO'}
                   {...fieldProps('terminationDate')}
                 >
-                  <DateInput
+                  <DateField
                     {...inputProps('terminationDate')}
                     ariaLabel={t('fields.terminationDate')}
                     value={draft.terminationDate}
@@ -1464,7 +1464,7 @@ export function EmployeeForm({
                 {...fieldProps('retirementDate')}
               >
                 <div className="retirement-control">
-                  <DateInput
+                  <DateField
                     ariaLabel={t('fields.retirementDate')}
                     required={draft.retirementDateOverridden}
                     {...inputProps('retirementDate')}
@@ -2492,78 +2492,6 @@ function EmployeeMultiSelect({
           {option.label}
         </Pill>
       )}
-    />
-  );
-}
-
-const DATE_INPUT_DISPLAY_FORMAT = 'DD MMMM YYYY';
-
-/** Day-first formats only — never fall back to browser Date (US month-first). */
-const DATE_INPUT_PARSE_FORMATS = [
-  DATE_INPUT_DISPLAY_FORMAT,
-  'D MMMM YYYY',
-  'DD/MM/YYYY',
-  'D/M/YYYY',
-  'DD-MM-YYYY',
-  'D-M-YYYY',
-  'DD.MM.YYYY',
-  'D.M.YYYY',
-  'YYYY-MM-DD',
-] as const;
-
-function parseEmployeeDateInput(input: string, locale: string): string | null {
-  const trimmed = input.trim();
-  if (!trimmed) return null;
-
-  for (const format of DATE_INPUT_PARSE_FORMATS) {
-    const parsed = dayjs(trimmed, format, locale, true);
-    if (parsed.isValid()) return parsed.format('YYYY-MM-DD');
-  }
-
-  return null;
-}
-
-function DateInput({
-  ariaLabel,
-  value,
-  onChange,
-  required,
-  disabled,
-  'aria-invalid': invalid,
-}: {
-  ariaLabel: string;
-  value: string;
-  onChange: (value: string) => void;
-  required?: boolean;
-  disabled?: boolean;
-  /** Draws the red border. The message itself lives on the surrounding Field. */
-  'aria-invalid'?: boolean;
-  'aria-describedby'?: string;
-}) {
-  const { t, i18n } = useTranslation();
-  const locale = i18n.resolvedLanguage === 'en' ? 'en' : 'it';
-
-  return (
-    <MantineDateInput
-      aria-label={ariaLabel}
-      required={required ?? false}
-      disabled={disabled ?? false}
-      error={invalid ?? false}
-      value={value || null}
-      onChange={(nextValue) => onChange(nextValue ?? '')}
-      valueFormat={DATE_INPUT_DISPLAY_FORMAT}
-      dateParser={(input) => parseEmployeeDateInput(input, locale)}
-      placeholder={t('fields.datePlaceholder')}
-      leftSection={<CalendarDays size={16} />}
-      clearable={!disabled}
-      // Keep clear via the X button, but don't clear when clicking the
-      // already-selected day (e.g. after typing 01/12/2000 and confirming it).
-      allowDeselect={false}
-      popoverProps={{
-        withinPortal: true,
-        zIndex: 1200,
-        transitionProps: { transition: 'pop', duration: 120 },
-      }}
     />
   );
 }

@@ -68,7 +68,9 @@ describe('EmployeeForm modal', () => {
     );
 
     const birthDate = screen.getByLabelText('Data di nascita');
-    expect(birthDate).toHaveAttribute('data-dates-input', 'true');
+    // A text box, never <input type="date">: the native one is month-first and
+    // labelled in the browser's language, not the operator's.
+    expect(birthDate).toHaveAttribute('type', 'text');
     expect(birthDate).toHaveValue('02 marzo 2026');
   });
 

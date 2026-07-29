@@ -1,22 +1,16 @@
 import type { ReactNode } from 'react';
-import { createTheme, Input, MantineProvider, Pill, type MantineColorsTuple } from '@mantine/core';
-import { DatesProvider } from '@mantine/dates';
+import { createTheme, MantineProvider, Pill, type MantineColorsTuple } from '@mantine/core';
 import { ModalsProvider } from '@mantine/modals';
 import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
 import 'dayjs/locale/it';
-import { useTranslation } from 'react-i18next';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
+// The date field parses nine day-first formats explicitly rather than letting
+// dayjs guess, which is what this plugin is for; the Italian locale is what
+// turns 1990-03-15 into "15 marzo 1990".
 dayjs.extend(customParseFormat);
 
-/**
- * Stable class hooks for the app stylesheet. Mantine's own `.mantine-Input-input`
- * style classes are internal and can be renamed in any release, so app.css targets
- * these instead — the officially supported way to reach into a component's parts.
- * `Input` covers every text-like control (TextInput, Select, MultiSelect,
- * DateInput) because they all render through it.
- */
 /**
  * The stylesheet's own brand blue, as a Mantine palette.
  *
@@ -49,27 +43,19 @@ const theme = createTheme({
   primaryShade: 8,
   defaultRadius: 'md',
   components: {
-    Input: Input.extend({
-      classNames: { wrapper: 'app-input-wrapper', input: 'app-input', section: 'app-input-section' },
-    }),
     Pill: Pill.extend({ classNames: { root: 'app-pill' } }),
   },
 });
 
 export function AppUiProvider({ children }: { children: ReactNode }) {
-  const { i18n } = useTranslation();
-  const locale = i18n.resolvedLanguage === 'en' ? 'en' : 'it';
-
   return (
     <MantineProvider theme={theme} env={import.meta.env.MODE === 'test' ? 'test' : 'default'}>
-      <DatesProvider settings={{ locale, firstDayOfWeek: 1, weekendDays: [0, 6] }}>
-        <ModalsProvider>
-          {/* `delay={0}`: every tooltip here names an icon-only control, and a
-              second of hesitation before saying what a button does is the exact
-              failing that ruled out the native `title` attribute. */}
-          <TooltipProvider delay={0}>{children}</TooltipProvider>
-        </ModalsProvider>
-      </DatesProvider>
+      <ModalsProvider>
+        {/* `delay={0}`: every tooltip here names an icon-only control, and a
+            second of hesitation before saying what a button does is the exact
+            failing that ruled out the native `title` attribute. */}
+        <TooltipProvider delay={0}>{children}</TooltipProvider>
+      </ModalsProvider>
     </MantineProvider>
   );
 }

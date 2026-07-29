@@ -17,11 +17,14 @@ function PopoverContent({
   alignOffset = 0,
   side = "bottom",
   sideOffset = 4,
+  // Added locally: a popover whose trigger is a small button inside a larger
+  // control (the date field's calendar icon) has to line up with the control.
+  anchor,
   ...props
 }: PopoverPrimitive.Popup.Props &
   Pick<
     PopoverPrimitive.Positioner.Props,
-    "align" | "alignOffset" | "side" | "sideOffset"
+    "align" | "alignOffset" | "side" | "sideOffset" | "anchor"
   >) {
   return (
     <PopoverPrimitive.Portal>
@@ -30,6 +33,7 @@ function PopoverContent({
         alignOffset={alignOffset}
         side={side}
         sideOffset={sideOffset}
+        anchor={anchor}
         className="isolate z-50"
       >
         <PopoverPrimitive.Popup
