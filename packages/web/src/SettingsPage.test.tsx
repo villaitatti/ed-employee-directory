@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { toast } from 'sonner';
-import { SettingsPage } from './App.js';
+import { SettingsPage } from './routes/SettingsPage.js';
 import { renderWithProviders } from './test/render.js';
 
 // JSON helper for fetch-mock responses.

@@ -1,13 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { screen } from '@testing-library/react';
-import {
-  DepartmentForm,
-  EmployeeForm,
-  ImportPage,
-  SettingsPage,
-  emptyDepartmentDraft,
-  emptyEmployeeDraft,
-} from './App.js';
+import { emptyEmployeeDraft } from './employee-draft.js';
+import { DepartmentForm, emptyDepartmentDraft } from './routes/DepartmentForm.js';
+import { EmployeeForm } from './routes/EmployeeForm.js';
+import { ImportPage } from './routes/ImportPage.js';
+import { SettingsPage } from './routes/SettingsPage.js';
 import { renderWithProviders } from './test/render.js';
 
 const department = {

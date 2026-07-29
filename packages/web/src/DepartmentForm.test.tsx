@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { DepartmentForm, emptyDepartmentDraft } from './App.js';
+import { DepartmentForm, emptyDepartmentDraft } from './routes/DepartmentForm.js';
 import { renderWithProviders } from './test/render.js';
 
 describe('DepartmentForm modal', () => {
