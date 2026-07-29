@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/combobox';
 
 export function employeeOptionLabel(option: EmployeeOption): string {
-  return `${option.lastName} ${option.firstName} (${option.employeeNumber})`;
+  return `${option.firstName} ${option.lastName} (${option.employeeNumber})`;
 }
 
 /**

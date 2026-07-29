@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { ImportPreview } from '@itatti/shared';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { employeeFullName } from '../employee-draft.js';
 import { useApi, useDepartments } from '../hooks.js';
 import { FilePicker } from '../ui/FilePicker.js';
 import { notifyError, notifySuccess, notifyValidation } from '../ui/feedback.js';
@@ -114,7 +115,7 @@ export function ImportPage() {
                 <th aria-label={t('fields.select')} />
                 <th>{t('fields.row')}</th>
                 <th>{t('fields.employeeNumber')}</th>
-                <th>{t('fields.lastName')}</th>
+                <th>{t('fields.fullName')}</th>
                 <th>{t('fields.department')}</th>
                 <th>{t('fields.action')}</th>
                 <th>{t('fields.errors')}</th>
@@ -142,7 +143,7 @@ export function ImportPage() {
                   </td>
                   <td>{row.rowNumber}</td>
                   <td>{row.normalized?.employeeNumber}</td>
-                  <td>{row.normalized?.lastName}</td>
+                  <td>{row.normalized ? employeeFullName(row.normalized) : ''}</td>
                   <td>
                     {row.normalized?.departmentId
                       ? departmentNameById.get(row.normalized.departmentId) ?? row.normalized.departmentId

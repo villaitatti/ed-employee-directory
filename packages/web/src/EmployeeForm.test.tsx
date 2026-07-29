@@ -536,8 +536,8 @@ describe('EmployeeForm modal', () => {
 
     const substituteSelect = screen.getByRole('combobox', { name: 'Sostituto-Responsabile' });
     await user.click(substituteSelect);
-    expect(screen.getByRole('option', { name: 'Bianchi Bruno (1002)' })).toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: 'Rossi Ada (1001)' })).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Bruno Bianchi (1002)' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Ada Rossi (1001)' })).not.toBeInTheDocument();
   });
 
   it('keeps a selected approver visible and removable even when no longer eligible', () => {
@@ -567,7 +567,7 @@ describe('EmployeeForm modal', () => {
     expect(removeButton.closest('[data-ineligible="true"]')).not.toBeNull();
     // An eligible selection carries no such flag.
     expect(
-      screen.getByRole('button', { name: /Rimuovi Rossi Ada/i }).closest('[data-ineligible="true"]')
+      screen.getByRole('button', { name: /Rimuovi Ada Rossi/i }).closest('[data-ineligible="true"]')
     ).toBeNull();
     removeButton.click();
     expect(onChange).toHaveBeenCalledWith(
@@ -594,8 +594,8 @@ describe('EmployeeForm modal', () => {
     const responsabileSelect = screen.getByRole('combobox', { name: 'Responsabile' });
     await user.click(responsabileSelect);
     // emp_1 is Responsabile-eligible; emp_2 is not.
-    expect(screen.getByRole('option', { name: 'Rossi Ada (1001)' })).toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: 'Bianchi Bruno (1002)' })).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Ada Rossi (1001)' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Bruno Bianchi (1002)' })).not.toBeInTheDocument();
   });
 
   it('exposes the two role-capability switches in their own section', () => {

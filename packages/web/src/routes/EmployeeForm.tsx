@@ -341,7 +341,7 @@ export function EmployeeForm({
         )}
         role="dialog"
         aria-modal="true"
-        aria-label={draft.id ? `${draft.lastName} ${draft.firstName}` : t('actions.createEmployee')}
+        aria-label={draft.id ? `${draft.firstName} ${draft.lastName}` : t('actions.createEmployee')}
         // Native constraint validation is suppressed in favour of our own: the
         // browser's bubble speaks the *browser's* language, points at one field
         // at a time, and can't express the cross-field rules (hire date required
@@ -365,7 +365,7 @@ export function EmployeeForm({
                 {t('copy.employeeRecord')}
               </p>
               <h3 className="m-0 text-xl leading-tight font-bold">
-                {draft.id ? `${draft.lastName} ${draft.firstName}` : t('actions.createEmployee')}
+                {draft.id ? `${draft.firstName} ${draft.lastName}` : t('actions.createEmployee')}
               </h3>
               <p className="m-0 hidden max-w-[58ch] text-[0.82rem] leading-snug text-ink-muted tablet:block">
                 {t('copy.employeeFormSubtitle')}

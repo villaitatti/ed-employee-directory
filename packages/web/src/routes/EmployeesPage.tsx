@@ -222,8 +222,7 @@ export function EmployeesPage() {
           <thead>
             <tr>
               <th>{t('fields.employeeNumber')}</th>
-              <th>{t('fields.lastName')}</th>
-              <th>{t('fields.firstName')}</th>
+              <th>{t('fields.fullName')}</th>
               <th>{t('fields.department')}</th>
               <th>{t('fields.status')}</th>
               <th>{t('fields.fte')}</th>
@@ -238,8 +237,7 @@ export function EmployeesPage() {
             {employees.data?.map((employee) => (
               <tr key={employee.id}>
                 <td>{employee.employeeNumber}</td>
-                <td>{employee.lastName}</td>
-                <td>{employee.firstName}</td>
+                <td>{employeeFullName(employee)}</td>
                 <td>{employee.department?.name}</td>
                 <td>
                   <StatusPill status={employee.status}>{t(`status.${employee.status}`)}</StatusPill>

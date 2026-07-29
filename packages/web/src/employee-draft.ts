@@ -119,9 +119,18 @@ export function employeeDirtyFingerprint(draft: EmployeeDraft): string {
   return JSON.stringify(draft.retirementDateOverridden ? draft : { ...draft, retirementDate: '' });
 }
 
-/** "Surname Forename", the order the directory table and dialog titles use. */
-export function employeeFullName(employee: Pick<Employee, 'firstName' | 'lastName'>): string {
-  return `${employee.lastName} ${employee.firstName}`.trim();
+/**
+ * How a person is named everywhere they are named: forename first.
+ *
+ * Lists here are still *ordered* by surname — that is what makes a directory
+ * scannable, and the API sorts on it — but ordering by a name and writing it
+ * backwards are two different decisions, and only the first one has a reason.
+ */
+export function employeeFullName(employee: {
+  firstName?: string | undefined;
+  lastName?: string | undefined;
+}): string {
+  return [employee.firstName, employee.lastName].filter(Boolean).join(' ');
 }
 
 export function parseDraftFte(value: string): number | null {

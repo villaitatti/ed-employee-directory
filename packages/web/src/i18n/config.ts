@@ -40,6 +40,7 @@ export const resources = {
       fields: {
         firstName: 'Nome',
         lastName: 'Cognome',
+        fullName: 'Nome e cognome',
         workEmail: 'Email di lavoro',
         preferredLanguage: 'Lingua preferita',
         department: 'Dipartimento',
@@ -471,6 +472,7 @@ export const resources = {
       fields: {
         firstName: 'First Name',
         lastName: 'Last Name',
+        fullName: 'Full Name',
         workEmail: 'Work Email',
         preferredLanguage: 'Preferred Language',
         department: 'Department',
