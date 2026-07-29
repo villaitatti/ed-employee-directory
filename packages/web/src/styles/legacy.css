@@ -1,0 +1,1470 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  color: var(--ink);
+  background:
+    linear-gradient(180deg, oklch(0.97 0.011 250) 0%, var(--surface) 18rem);
+}
+
+button,
+input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.64;
+}
+
+.data-surface table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.data-surface th,
+.data-surface td {
+  padding: 0.75rem 0.85rem;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.data-surface th {
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.data-surface td {
+  color: var(--ink);
+}
+
+input,
+select {
+  width: 100%;
+  min-height: 2.5rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  background: var(--surface);
+  padding: 0.55rem 0.7rem;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):focus,
+select:focus,
+button:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--brand), white 35%);
+  outline-offset: 2px;
+}
+
+.app-loading {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--brand);
+}
+
+.signin-screen {
+  min-height: 100vh;
+  display: grid;
+  align-items: center;
+  grid-template-columns: minmax(12rem, 20rem) minmax(18rem, 42rem);
+  gap: var(--space-2xl);
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: var(--space-2xl);
+}
+
+.signin-screen h1,
+.identity h1,
+.section-heading h2,
+.panel-heading h3 {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.signin-screen h1 {
+  font-size: 2rem;
+  line-height: 1.1;
+}
+
+.signin-screen p {
+  max-width: 58ch;
+  color: var(--ink-soft);
+}
+
+.signin-error {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.app-shell {
+  height: 100vh;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 4.75rem minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.topbar {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  min-height: 4.75rem;
+  padding: 0 var(--space-xl);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.brand-logo {
+  width: 8rem;
+  max-width: 32vw;
+  height: auto;
+  object-fit: contain;
+}
+
+.identity .brand-logo {
+  width: 7rem;
+}
+
+.identity h1 {
+  font-size: 1.1rem;
+  line-height: 1.15;
+}
+
+.eyebrow {
+  margin: 0 0 var(--space-2xs);
+  color: var(--ink-muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.topbar-actions,
+.action-row,
+.row-actions,
+.inline-field,
+.checkbox-row,
+.table-topline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.workbench {
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  align-items: stretch;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-lg) var(--space-md);
+  border-right: 1px solid var(--line);
+  background: var(--surface-raised);
+}
+
+.sidebar a {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: 2.5rem;
+  padding: 0 var(--space-sm);
+  border-radius: 8px;
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.sidebar a.active {
+  color: var(--brand);
+  background: color-mix(in oklch, var(--brand), white 90%);
+}
+
+.sidebar-version {
+  margin-top: auto;
+  padding: var(--space-md) var(--space-sm) 0;
+  color: var(--ink-muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.content {
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-xl);
+}
+
+.page-grid {
+  display: grid;
+  gap: var(--space-lg);
+  width: 100%;
+  max-width: 88rem;
+  margin: 0 auto;
+  align-content: start;
+}
+
+.employees-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-lg);
+}
+
+.section-heading h2 {
+  max-width: 62ch;
+  font-size: 1.15rem;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.toolbar {
+  display: grid;
+  grid-template-columns: minmax(16rem, 1fr) minmax(10rem, 14rem) minmax(12rem, 18rem);
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.import-toolbar {
+  grid-template-columns: minmax(16rem, 32rem) auto auto;
+  justify-content: start;
+}
+
+.search-field {
+  position: relative;
+  display: block;
+}
+
+.search-field svg {
+  position: absolute;
+  top: 50%;
+  left: 0.7rem;
+  transform: translateY(-50%);
+  color: var(--ink-muted);
+}
+
+.search-field input {
+  padding-left: 2.1rem;
+}
+
+.data-surface {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+/* Modal dialog */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: var(--space-lg);
+  background: color-mix(in oklch, var(--ink), transparent 55%);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  animation: overlay-in 0.16s ease-out;
+}
+
+.modal-dialog {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 44rem;
+  max-height: calc(100vh - 2 * var(--space-lg));
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow:
+    0 1px 2px oklch(0.2 0.02 250 / 0.08),
+    0 24px 60px -20px oklch(0.2 0.04 250 / 0.4);
+  overflow: hidden;
+  animation: dialog-in 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-lg) var(--space-xl);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-raised);
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--ink-muted);
+  background: transparent;
+}
+
+.modal-close:hover {
+  color: var(--ink);
+  background: var(--surface-strong);
+}
+
+.modal-body {
+  display: grid;
+  gap: var(--space-xl);
+  padding: var(--space-xl);
+  overflow-y: auto;
+}
+
+.form-section {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.form-section legend {
+  display: block;
+  width: 100%;
+  margin-bottom: var(--space-md);
+  padding: 0 0 var(--space-xs);
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  padding: var(--space-md) var(--space-xl);
+  border-top: 1px solid var(--line);
+  background: var(--surface-raised);
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-lg) var(--space-md);
+}
+
+.weekday-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(4.5rem, 1fr));
+  gap: var(--space-sm);
+}
+
+.weekday-grid input {
+  font-variant-numeric: tabular-nums;
+}
+
+.form-note,
+.form-warning {
+  margin: var(--space-sm) 0 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.form-note {
+  color: var(--ink-muted);
+}
+
+.form-warning {
+  color: var(--warning-ink);
+}
+
+.employee-multi-select {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.field {
+  display: grid;
+  gap: var(--space-xs);
+  align-content: start;
+}
+
+.field-full {
+  grid-column: 1 / -1;
+}
+
+/* Employee form */
+.employee-form-dialog {
+  width: min(96vw, 92rem);
+  max-width: 92rem;
+  max-height: calc(100vh - 2 * var(--space-md));
+  border-radius: 20px;
+  border-color: color-mix(in oklch, var(--line), var(--brand) 10%);
+  box-shadow:
+    0 1px 2px oklch(0.2 0.02 250 / 0.08),
+    0 34px 90px -28px oklch(0.2 0.05 250 / 0.5);
+}
+
+.employee-form-header {
+  align-items: center;
+  padding: var(--space-lg) calc(var(--space-xl) + var(--space-xs));
+  background:
+    radial-gradient(circle at 12% 0%, color-mix(in oklch, var(--brand), transparent 91%), transparent 45%),
+    color-mix(in oklch, var(--surface-raised), var(--surface) 38%);
+}
+
+.modal-title-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.modal-title-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  color: var(--brand-ink);
+  background: linear-gradient(145deg, color-mix(in oklch, var(--brand), white 8%), var(--brand));
+  box-shadow: 0 8px 20px color-mix(in oklch, var(--brand), transparent 76%);
+}
+
+.modal-title-copy {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.modal-eyebrow,
+.modal-description,
+.modal-footer-note {
+  margin: 0;
+}
+
+.modal-eyebrow {
+  color: var(--brand);
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.07em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.modal-description {
+  max-width: 58ch;
+  color: var(--ink-muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.employee-modal-close {
+  flex: 0 0 auto;
+  transition:
+    color 120ms ease,
+    background 120ms ease,
+    transform 120ms ease;
+}
+
+.employee-modal-close:hover {
+  transform: rotate(3deg) scale(1.04);
+}
+
+.employee-modal-close:active {
+  transform: scale(0.93);
+}
+
+.employee-form-body {
+  gap: var(--space-lg);
+  padding: calc(var(--space-lg) + var(--space-xs)) calc(var(--space-xl) + var(--space-xs));
+  background: color-mix(in oklch, var(--surface-raised), var(--surface) 48%);
+  scrollbar-gutter: stable;
+}
+
+.employee-form-section {
+  padding: var(--space-lg);
+  border: 1px solid color-mix(in oklch, var(--line), var(--brand) 7%);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 1px 3px oklch(0.2 0.02 250 / 0.045);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+  animation: section-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.employee-form-section:nth-child(2) {
+  animation-delay: 35ms;
+}
+
+.employee-form-section:nth-child(3) {
+  animation-delay: 70ms;
+}
+
+.employee-form-section:nth-child(4) {
+  animation-delay: 105ms;
+}
+
+.employee-form-section:nth-child(5) {
+  animation-delay: 140ms;
+}
+
+.employee-form-section:focus-within {
+  border-color: color-mix(in oklch, var(--brand), var(--line) 58%);
+  box-shadow:
+    0 1px 3px oklch(0.2 0.02 250 / 0.04),
+    0 8px 28px color-mix(in oklch, var(--brand), transparent 92%);
+}
+
+.employee-section-heading {
+  display: grid;
+  grid-template-columns: 2rem 2rem minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-lg);
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid color-mix(in oklch, var(--line), transparent 24%);
+}
+
+.employee-section-number,
+.employee-section-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+}
+
+.employee-section-number {
+  color: var(--brand);
+  background: color-mix(in oklch, var(--brand), var(--surface) 90%);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 850;
+  letter-spacing: 0.03em;
+}
+
+.employee-section-icon {
+  color: color-mix(in oklch, var(--brand), var(--ink-soft) 18%);
+  background: var(--surface-raised);
+  transition:
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.employee-section-icon svg {
+  width: 1.1rem;
+  height: 1.1rem;
+  stroke-width: 2.15;
+}
+
+.employee-form-section:focus-within .employee-section-icon {
+  color: var(--brand);
+  transform: translateY(-1px);
+}
+
+.employee-section-heading h4,
+.employee-section-heading p {
+  margin: 0;
+}
+
+.employee-section-heading h4 {
+  color: var(--ink);
+  font-size: 0.96rem;
+  line-height: 1.25;
+}
+
+.employee-section-heading p {
+  margin-top: 0.15rem;
+  color: var(--ink-muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.employee-form-dialog .form-grid {
+  column-gap: var(--space-lg);
+  row-gap: var(--space-lg);
+}
+
+/* Seven fields over two rows: who the person is (number, name, birth date), then
+   how to reach them and where they sit (email, language, department). Twelve
+   columns because it divides evenly by both four and three, so the second row
+   lines up with the first — language under the surname, department under the
+   birth date. All spans collapse to one column below 900px. */
+.employee-identity-grid {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
+.employee-identity-number {
+  grid-column: span 2;
+}
+
+.employee-identity-name {
+  grid-column: span 3;
+}
+
+.employee-identity-birthdate {
+  grid-column: span 4;
+}
+
+.employee-identity-email {
+  grid-column: span 5;
+}
+
+.employee-identity-language {
+  grid-column: span 3;
+}
+
+.employee-identity-department {
+  grid-column: span 4;
+}
+
+.employee-employment-grid {
+  grid-template-columns: repeat(4, minmax(10rem, 1fr));
+}
+
+.employee-classification-grid,
+.employee-approval-grid {
+  grid-template-columns: repeat(3, minmax(11rem, 1fr));
+}
+
+.employee-form-dialog .weekday-grid {
+  gap: var(--space-md);
+}
+
+.employee-form-dialog .field {
+  min-width: 0;
+  gap: var(--space-xs);
+}
+
+.employee-form-dialog .field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: 1.25rem;
+  color: var(--ink-soft);
+  font-size: 0.79rem;
+  font-weight: 750;
+  letter-spacing: 0.005em;
+}
+
+/* The required marker means the same thing in every form, so it is styled once
+   here rather than only inside the employee dialog. */
+.field-required {
+  color: var(--danger);
+  font-size: 0.9rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.field-label-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: color-mix(in oklch, var(--brand), var(--ink-soft) 22%);
+  transition:
+    color 150ms ease,
+    transform 150ms ease;
+}
+
+.field-label-icon svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  stroke-width: 2.15;
+}
+
+.employee-form-dialog .field:focus-within > .field-label,
+.employee-form-dialog .field:focus-within .field-label-icon {
+  color: var(--brand);
+}
+
+.employee-form-dialog .field:focus-within .field-label-icon {
+  transform: translateY(-1px);
+}
+
+.employee-form-dialog .app-input {
+  min-height: 2.75rem;
+  border-color: var(--line);
+  border-radius: 9px;
+  color: var(--ink);
+  background: var(--surface);
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    background 150ms ease;
+}
+
+.employee-form-dialog .app-input:hover:not(:disabled) {
+  border-color: color-mix(in oklch, var(--line), var(--brand) 28%);
+}
+
+.employee-form-dialog .app-input:focus,
+.employee-form-dialog .app-input:focus-within {
+  border-color: color-mix(in oklch, var(--brand), var(--line) 25%);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--brand), transparent 90%);
+}
+
+.employee-form-dialog .app-input-section {
+  color: var(--ink-muted);
+}
+
+.employee-form-dialog .app-pill {
+  border: 1px solid color-mix(in oklch, var(--brand), var(--line) 65%);
+  color: var(--brand);
+  background: color-mix(in oklch, var(--brand), var(--surface) 92%);
+  font-weight: 750;
+}
+
+/* An approver kept only because they are already assigned — they no longer meet
+   the eligibility rules and the save will be rejected until they are removed. */
+.employee-form-dialog .app-pill.employee-pill-invalid {
+  border-color: var(--warning-ink);
+  color: var(--warning-ink);
+  background: color-mix(in oklch, var(--warning-ink), var(--surface) 92%);
+}
+
+.employee-field-compact .app-input-wrapper {
+  max-width: 10rem;
+}
+
+/* A light sweep across a field the form just filled in for you, so the value
+   does not appear out of nowhere. Purely decorative: the overlay never takes
+   pointer events, so the field stays editable while it plays. */
+.field-shimmer .app-input-wrapper {
+  position: relative;
+  overflow: hidden;
+  border-radius: 9px;
+}
+
+.field-shimmer .app-input-wrapper::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklch, var(--brand), transparent 86%) 50%,
+    transparent 100%
+  );
+  animation: field-shimmer 1s ease-in-out;
+}
+
+@keyframes field-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.retirement-control {
+  display: grid;
+  grid-template-columns: minmax(14rem, 19rem) minmax(15rem, max-content);
+  align-items: center;
+  gap: var(--space-lg);
+}
+
+.field-hint {
+  display: block;
+  max-width: 42rem;
+  color: var(--ink-muted);
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+/* Sits where the hint would, one weight heavier and in the danger colour, so a
+   field that has failed reads differently from one that is merely explained. */
+.field-error {
+  display: flex;
+  align-items: start;
+  gap: 0.3rem;
+  max-width: 42rem;
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.78rem;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.field-error svg {
+  flex: none;
+  margin-top: 0.12rem;
+}
+
+/* Colour alone can't carry the state (contrast, colour blindness): the icon
+   above and the label's weight change say it too. */
+.field-invalid > .field-label,
+.field-invalid > .field-label .field-label-icon {
+  color: var(--danger);
+}
+
+.field-invalid > .field-label {
+  font-weight: 850;
+}
+
+/* Plain <input> fields (department name, retirement policy) aren't Mantine
+   components, so they don't get the library's invalid styling for free. */
+.field-invalid input[aria-invalid='true'] {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--danger), transparent 88%);
+}
+
+/* The whole marked field lights up faintly. A background tint rather than a
+   border keeps the grid from reflowing when an error appears or clears. Applies
+   everywhere a Field can be invalid — the employee dialog, the department dialog,
+   and the retirement-policy card — so the state reads the same in all three. */
+.field-invalid {
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--danger), transparent 96%);
+  box-shadow: 0 0 0 var(--space-xs) color-mix(in oklch, var(--danger), transparent 96%);
+  transition:
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+/* Wider than sonner's default so a two-line "what to do next" doesn't wrap into
+   a wall, and the description gets enough contrast to actually be read. */
+.ed-toast {
+  width: 25rem;
+}
+
+.ed-toast [data-description] {
+  line-height: 1.45;
+  opacity: 0.92;
+}
+
+/* The durable list of what is still wrong, pinned above the first section. */
+.form-error-summary {
+  display: flex;
+  gap: var(--space-sm);
+  margin: 0 0 var(--space-lg);
+  padding: var(--space-md);
+  border: 1px solid color-mix(in oklch, var(--danger), transparent 60%);
+  border-radius: 12px;
+  background: color-mix(in oklch, var(--danger), var(--surface) 93%);
+}
+
+.form-error-summary-icon {
+  display: inline-flex;
+  color: var(--danger);
+}
+
+.form-error-summary strong {
+  display: block;
+  margin-bottom: var(--space-xs);
+  color: var(--danger);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.form-error-summary ul {
+  display: grid;
+  gap: var(--space-2xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.form-error-summary li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  font-size: 0.79rem;
+  line-height: 1.4;
+}
+
+/* The field name is the affordance: clicking it scrolls to and focuses the
+   input, so a six-section form never needs to be hunted through. */
+.form-error-summary button {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--danger);
+  font: inherit;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.form-error-summary button:hover {
+  text-decoration-thickness: 2px;
+}
+
+.form-error-summary li > span {
+  color: var(--ink-soft);
+}
+
+/* The badge is a fourth column, declared only when there is one to place —
+   an always-present empty track would leave its grid gap behind. */
+.section-has-errors .employee-section-heading {
+  grid-template-columns: 2rem 2rem minmax(0, 1fr) auto;
+}
+
+/* Count badge on a section heading, for when the summary is scrolled away. */
+.section-error-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-inline-start: auto;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--danger), var(--surface) 88%);
+  color: var(--danger);
+  font-size: 0.72rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+/* Failed data load: a banner inside the surface that would otherwise render as
+   an empty table, with the retry button on the trailing edge. */
+.data-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin: var(--space-md);
+  padding: var(--space-md);
+  border: 1px solid color-mix(in oklch, var(--danger), transparent 65%);
+  border-radius: 10px;
+  background: color-mix(in oklch, var(--danger), var(--surface) 92%);
+  color: var(--danger);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.data-error > span {
+  display: grid;
+  gap: var(--space-2xs);
+}
+
+.data-error-hint {
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.approval-switch {
+  margin: 0 0 var(--space-lg);
+  padding: var(--space-md);
+  border-radius: 10px;
+  background: var(--surface-raised);
+}
+
+.employee-form-dialog .app-switch-label {
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.employee-form-footer {
+  justify-content: space-between;
+  gap: var(--space-lg);
+  padding: var(--space-md) calc(var(--space-xl) + var(--space-xs));
+}
+
+.modal-footer-note {
+  color: var(--ink-muted);
+  font-size: 0.75rem;
+}
+
+.modal-footer-note span {
+  color: var(--danger);
+  font-weight: 850;
+}
+
+.modal-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.employee-form-footer .app-button {
+  min-height: 2.75rem;
+  padding-inline: var(--space-md);
+  transition:
+    transform 120ms ease,
+    box-shadow 150ms ease;
+}
+
+.employee-form-footer .app-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.employee-form-footer .app-button:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
+/* The fill colour itself comes from the theme's `brand` palette, not from here:
+   Mantine sets --button-bg inline, which a stylesheet rule cannot override. */
+.employee-form-footer .app-button[data-variant="filled"] {
+  box-shadow: 0 5px 14px color-mix(in oklch, var(--brand), transparent 80%);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Settings page */
+.settings-grid {
+  max-width: 44rem;
+}
+
+.settings-card {
+  display: grid;
+  gap: var(--space-lg);
+  padding: var(--space-xl);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.settings-description {
+  margin: 0;
+  max-width: 60ch;
+  color: var(--ink-soft);
+}
+
+.settings-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(7rem, 12rem));
+  gap: var(--space-lg);
+}
+
+.settings-fields input {
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-meta {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.settings-note {
+  margin: 0;
+  padding: var(--space-md);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.settings-card .action-row {
+  justify-content: flex-end;
+}
+
+.field > .field-label {
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+@keyframes section-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-overlay,
+  .modal-dialog,
+  .employee-form-section {
+    animation: none;
+  }
+
+  /* Hidden rather than merely un-animated: a static tint sitting over the field
+     for a second reads as a highlight nobody asked for. */
+  .field-shimmer .app-input-wrapper::after {
+    content: none;
+  }
+}
+
+.inline-field {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.inline-field > input {
+  width: auto;
+  flex: 0 1 13rem;
+}
+
+.checkbox-row {
+  width: max-content;
+  min-height: 2.5rem;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.checkbox-row input {
+  width: auto;
+  min-height: auto;
+}
+
+.button,
+.icon-button,
+.icon-danger,
+.text-button {
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-weight: 800;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  min-height: 2.5rem;
+  padding: 0 0.9rem;
+  white-space: nowrap;
+}
+
+.button.primary {
+  color: var(--brand-ink);
+  background: var(--brand);
+}
+
+.button.secondary,
+.button.ghost {
+  color: var(--brand);
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+.button.ghost {
+  color: var(--ink-soft);
+}
+
+.icon-button,
+.icon-danger,
+.text-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  min-height: 2.25rem;
+  padding: 0 0.65rem;
+  background: transparent;
+  color: var(--ink-soft);
+}
+
+.icon-button {
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+.icon-danger {
+  color: var(--danger);
+}
+
+.text-button {
+  color: var(--brand);
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 6.4rem;
+  min-height: 1.7rem;
+  border-radius: 999px;
+  padding: 0 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.status-attivo {
+  color: oklch(0.31 0.08 146);
+  background: oklch(0.92 0.06 146);
+}
+
+.status-cessato {
+  color: oklch(0.37 0.09 25);
+  background: oklch(0.94 0.045 25);
+}
+
+.status-da_assumere {
+  color: oklch(0.35 0.08 251);
+  background: oklch(0.92 0.045 251);
+}
+
+.empty-state {
+  margin: 0;
+  padding: var(--space-xl);
+  color: var(--ink-muted);
+}
+
+.table-topline {
+  justify-content: space-between;
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--line);
+}
+
+.row-error {
+  background: var(--warning-bg);
+  color: var(--warning-ink);
+}
+
+.muted-text {
+  color: var(--ink-muted);
+}
+
+.audit-changes {
+  display: grid;
+  gap: var(--space-xs);
+  min-width: 24rem;
+}
+
+.audit-employee {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 9rem;
+}
+
+.audit-change {
+  display: grid;
+  grid-template-columns: minmax(8rem, 12rem) minmax(7rem, 1fr) auto minmax(7rem, 1fr);
+  gap: var(--space-xs);
+  align-items: start;
+}
+
+.audit-field {
+  color: var(--ink-soft);
+  font-weight: 800;
+}
+
+.audit-value {
+  overflow-wrap: anywhere;
+}
+
+.audit-arrow {
+  color: var(--ink-muted);
+  font-weight: 800;
+}
+
+@media (max-width: 900px) {
+  .modal-overlay {
+    padding: var(--space-sm);
+  }
+
+  .employee-form-dialog {
+    max-height: calc(100vh - 2 * var(--space-sm));
+    border-radius: 14px;
+  }
+
+  .retirement-control {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .employee-field-compact .app-input-wrapper {
+    max-width: none;
+  }
+
+  .employee-form-footer .modal-footer-note {
+    display: none;
+  }
+
+  .topbar,
+  .section-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* One column here, so a multi-column span would generate implicit columns and
+     push the field off the dialog. */
+  .employee-identity-number,
+  .employee-identity-name,
+  .employee-identity-birthdate,
+  .employee-identity-email,
+  .employee-identity-language,
+  .employee-identity-department {
+    grid-column: auto;
+  }
+
+  .weekday-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .modal-header,
+  .modal-body,
+  .modal-footer {
+    padding-inline: var(--space-lg);
+  }
+
+  .workbench {
+    grid-template-columns: 13.5rem minmax(0, 1fr);
+  }
+
+  .content {
+    padding: var(--space-md);
+  }
+
+  .toolbar,
+  .import-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .signin-screen {
+    grid-template-columns: 1fr;
+    padding: var(--space-xl);
+  }
+}
+
+@media (max-width: 720px) {
+  .modal-title-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+
+  .modal-description {
+    display: none;
+  }
+
+  .employee-form-body {
+    padding: var(--space-md);
+  }
+
+  .employee-form-section {
+    padding: var(--space-md);
+  }
+
+  .employee-section-heading {
+    grid-template-columns: 1.8rem minmax(0, 1fr);
+  }
+
+  .employee-section-icon {
+    display: none;
+  }
+
+  .modal-actions,
+  .modal-actions .app-button {
+    width: 100%;
+  }
+
+  .app-shell {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .topbar {
+    min-height: 0;
+    padding: var(--space-md);
+  }
+
+  .workbench {
+    grid-template-columns: 4.75rem minmax(0, 1fr);
+  }
+
+  .sidebar {
+    padding: var(--space-sm);
+  }
+
+  .sidebar a {
+    justify-content: center;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .sidebar a svg {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+
+  .sidebar-version {
+    padding-inline: 0;
+    text-align: center;
+    writing-mode: vertical-rl;
+  }
+}
