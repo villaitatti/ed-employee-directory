@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
-import { TriangleAlert } from 'lucide-react';
+import { CircleHelp, TriangleAlert } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,22 +56,36 @@ export function ConfirmationProvider({ children }: { children: ReactNode }) {
           }}
         >
           {request ? (
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                {/* An irreversible action gets a second signal before the words
-                    are read at all. The reversible confirmations do not, so the
-                    two never look alike at a glance. */}
-                {request.destructive ? (
-                  <AlertDialogMedia className="bg-destructive/10 text-destructive">
-                    <TriangleAlert aria-hidden="true" />
-                  </AlertDialogMedia>
-                ) : null}
-                <AlertDialogTitle>{request.title}</AlertDialogTitle>
-                <AlertDialogDescription>{request.message}</AlertDialogDescription>
+            // `size="sm"` is what centres the header and pairs the buttons into
+            // equal halves; the width comes back up because these messages name
+            // the record and say what happens to it, which is longer than the
+            // one line the narrow size assumes.
+            <AlertDialogContent size="sm" className="gap-5 p-6 data-[size=sm]:max-w-md">
+              <AlertDialogHeader className="gap-2">
+                {/* The mark carries the answer before the words are read: a red
+                    warning for what cannot be undone, a neutral question for
+                    what can. */}
+                <AlertDialogMedia
+                  className={cn(
+                    'mb-1 size-14 rounded-full',
+                    request.destructive ? 'bg-destructive/10 text-destructive' : 'bg-muted text-ink-soft'
+                  )}
+                >
+                  {request.destructive ? (
+                    <TriangleAlert className="size-7" aria-hidden="true" />
+                  ) : (
+                    <CircleHelp className="size-7" aria-hidden="true" />
+                  )}
+                </AlertDialogMedia>
+                <AlertDialogTitle className="text-lg font-bold">{request.title}</AlertDialogTitle>
+                <AlertDialogDescription className="text-balance">{request.message}</AlertDialogDescription>
               </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>{request.cancelLabel}</AlertDialogCancel>
+              {/* Flat, not the registry's separated footer bar: with the dialog
+                  centred, a grey strip under it cuts the composition in half. */}
+              <AlertDialogFooter className="mx-0 mb-0 grid grid-cols-2 gap-3 border-t-0 bg-transparent p-0">
+                <AlertDialogCancel size="lg">{request.cancelLabel}</AlertDialogCancel>
                 <AlertDialogAction
+                  size="lg"
                   // Solid red, not the registry's tinted `destructive` variant.
                   // That one reads as a quiet secondary next to an outlined
                   // Cancel; the button that deletes a record should be the one
