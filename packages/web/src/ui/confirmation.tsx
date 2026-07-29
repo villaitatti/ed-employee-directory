@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
+import { TriangleAlert } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -7,6 +8,7 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
+  AlertDialogMedia,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
@@ -55,13 +57,30 @@ export function ConfirmationProvider({ children }: { children: ReactNode }) {
           {request ? (
             <AlertDialogContent>
               <AlertDialogHeader>
+                {/* An irreversible action gets a second signal before the words
+                    are read at all. The reversible confirmations do not, so the
+                    two never look alike at a glance. */}
+                {request.destructive ? (
+                  <AlertDialogMedia className="bg-destructive/10 text-destructive">
+                    <TriangleAlert aria-hidden="true" />
+                  </AlertDialogMedia>
+                ) : null}
                 <AlertDialogTitle>{request.title}</AlertDialogTitle>
                 <AlertDialogDescription>{request.message}</AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>{request.cancelLabel}</AlertDialogCancel>
                 <AlertDialogAction
-                  {...(request.destructive ? { variant: 'destructive' as const } : {})}
+                  // Solid red, not the registry's tinted `destructive` variant.
+                  // That one reads as a quiet secondary next to an outlined
+                  // Cancel; the button that deletes a record should be the one
+                  // thing on the dialog you cannot mistake for anything else.
+                  {...(request.destructive
+                    ? {
+                        className:
+                          'bg-destructive text-white hover:bg-[color-mix(in_oklch,var(--destructive),black_8%)] focus-visible:border-destructive focus-visible:ring-destructive/40',
+                      }
+                    : {})}
                   onClick={() => {
                     setRequest(null);
                     request.onConfirm();
