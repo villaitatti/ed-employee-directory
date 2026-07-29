@@ -891,7 +891,7 @@ describe('EmployeeForm validation feedback', () => {
       'Seleziona almeno un Responsabile per questo dipendente.'
     );
     // And its section is badged, for when the field is scrolled out of view.
-    expect(field?.closest('.employee-form-section')).toHaveAttribute('data-has-errors', 'true');
+    expect(field?.closest('fieldset')).toHaveAttribute('data-has-errors', 'true');
   });
 
   it('blocks an active employee with no Sostituto-Responsabile client-side', async () => {

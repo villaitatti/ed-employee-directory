@@ -29,7 +29,7 @@ import {
   X,
 } from 'lucide-react';
 import dayjs from 'dayjs';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -91,6 +91,17 @@ import { Field } from './ui/Field.js';
 import { FilePicker } from './ui/FilePicker.js';
 import { SelectField } from './ui/SelectField.js';
 import { SwitchField } from './ui/SwitchField.js';
+import { QueryError } from './ui/QueryError.js';
+import {
+  DataSurface,
+  EmptyState,
+  Eyebrow,
+  PageHeading,
+  PageSection,
+  SearchField,
+  StatusPill,
+  Toolbar,
+} from './ui/layout.js';
 import { useConfirmation, useConfirmationOpen } from './ui/confirmation.js';
 import { notifyError, notifySuccess, notifyValidation } from './ui/feedback.js';
 import type { Translate } from './i18n/types.js';
@@ -126,13 +137,6 @@ export type EmployeeDraft = {
     substituteResponsabileIds: string[];
   };
 };
-
-const tableDateFormatter = new Intl.DateTimeFormat('en-GB', {
-  day: 'numeric',
-  month: 'short',
-  year: 'numeric',
-  timeZone: 'UTC',
-});
 
 const tableDateTimeFormatter = new Intl.DateTimeFormat('en-GB', {
   day: 'numeric',
@@ -171,39 +175,24 @@ const auditFieldTranslationKeys: Record<string, string> = {
 const auditIgnoredFields = new Set(['id', 'createdAt', 'updatedAt', 'department']);
 const dateFields = new Set(['birthDate', 'hireDate', 'terminationDate', 'retirementDate']);
 
-function parseDateOnlyToUtc(value: string): Date | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return null;
-  const [, yearRaw, monthRaw, dayRaw] = match;
-  const year = Number(yearRaw);
-  const month = Number(monthRaw);
-  const day = Number(dayRaw);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  if (
-    date.getUTCFullYear() !== year ||
-    date.getUTCMonth() !== month - 1 ||
-    date.getUTCDate() !== day
-  ) {
-    return null;
-  }
-  return date;
-}
-
-function formatTableDate(value: string | null | undefined): string {
-  if (!value) return '';
-  const date = parseDateOnlyToUtc(value);
-  return date ? tableDateFormatter.format(date) : value;
-}
-
 /**
- * A date written the way the form's own inputs write it: localized, `DD MMMM
- * YYYY`. Deliberately not `formatTableDate`, which is fixed en-GB abbreviations
- * chosen for dense table columns — prose that quotes a date the operator is
- * looking at in a field has to agree with that field, in their language.
+ * A date, written the one way this app writes dates: localized, `DD MMMM YYYY`.
+ *
+ * The tables used to have a format of their own — fixed en-GB `30 Jun 2050`,
+ * chosen for column width — which meant an Italian operator read one spelling in
+ * the directory and a different one in the field they were about to edit, and an
+ * English operator got English either way. One convention, everywhere.
  */
-function formatFieldDate(value: string, locale: string): string {
+function formatDate(value: string | null | undefined, locale: string): string {
+  if (!value) return '';
   const parsed = dayjs(value, 'YYYY-MM-DD', true);
   return parsed.isValid() ? parsed.locale(locale).format(DATE_INPUT_DISPLAY_FORMAT) : value;
+}
+
+/** The date locale, resolved the same way everywhere: Italian unless English. */
+function useDateLocale(): string {
+  const { i18n } = useTranslation();
+  return i18n.resolvedLanguage === 'en' ? 'en' : 'it';
 }
 
 function formatTableDateTime(value: string | null | undefined): string {
@@ -223,9 +212,9 @@ function comparableAuditValue(key: string, snapshot: Record<string, unknown>): u
   return snapshot[key];
 }
 
-function formatAuditValue(key: string, value: unknown, t: Translate): string {
+function formatAuditValue(key: string, value: unknown, t: Translate, locale: string): string {
   if (value === null || value === undefined || value === '') return '-';
-  if (dateFields.has(key) && typeof value === 'string') return formatTableDate(value);
+  if (dateFields.has(key) && typeof value === 'string') return formatDate(value, locale);
   if (key === 'status' && typeof value === 'string') return t(`status.${value}`);
   if (key === 'contractType' && typeof value === 'string') return t(`contractType.${value}`);
   if (key === 'usaCategory' && typeof value === 'string') return t(`usaCategory.${value}`);
@@ -243,7 +232,7 @@ function auditFieldLabel(key: string, t: Translate): string {
   return t(auditFieldTranslationKeys[key] ?? key);
 }
 
-function auditChanges(entry: AuditLog, t: Translate) {
+function auditChanges(entry: AuditLog, t: Translate, locale: string) {
   if (entry.action !== 'UPDATE' || !isRecord(entry.before) || !isRecord(entry.after)) return [];
   const keys = new Set([...Object.keys(entry.before), ...Object.keys(entry.after)]);
   return [...keys]
@@ -257,8 +246,8 @@ function auditChanges(entry: AuditLog, t: Translate) {
     .map(({ key, before, after }) => ({
       key,
       label: auditFieldLabel(key, t),
-      before: formatAuditValue(key, before, t),
-      after: formatAuditValue(key, after, t),
+      before: formatAuditValue(key, before, t, locale),
+      after: formatAuditValue(key, after, t, locale),
     }));
 }
 
@@ -279,7 +268,7 @@ function auditEmployeeLabel(entry: AuditLog): { name: string; number: string } |
 }
 
 function OptionalEyebrow({ text }: { text: string }) {
-  return text ? <p className="eyebrow">{text}</p> : null;
+  return text ? <Eyebrow>{text}</Eyebrow> : null;
 }
 
 export const emptyEmployeeDraft: EmployeeDraft = {
@@ -393,28 +382,6 @@ function useDebounced<T>(value: T, delayMs = 250): T {
   return debounced;
 }
 
-/** Visible, retryable banner for a failed data load — otherwise query failures
- *  (including an expired session) render as a silently empty table. */
-function QueryError({ error, onRetry }: { error: unknown; onRetry: () => void }) {
-  const { t } = useTranslation();
-  const described = describeError(error, t);
-  // A failed *read* has a different next step from a failed write: the catalogue
-  // description covers the codes that speak for themselves (expired session,
-  // deleted record), and the retry hint covers the rest.
-  const hint = described.reassure ? t('copy.loadErrorHint') : described.description;
-  return (
-    <div className="data-error" role="alert">
-      <span>
-        <strong>{described.title}</strong>
-        {hint ? <span className="data-error-hint">{hint}</span> : null}
-      </span>
-      <button type="button" className="button ghost" onClick={onRetry}>
-        {t('actions.retry')}
-      </button>
-    </div>
-  );
-}
-
 const FOCUSABLE_SELECTOR =
   'a[href]:not([tabindex="-1"]), button:not([disabled]):not([tabindex="-1"]), input:not([disabled]):not([type="hidden"]):not([tabindex="-1"]), select:not([disabled]):not([tabindex="-1"]), textarea:not([disabled]):not([tabindex="-1"]), [tabindex]:not([tabindex="-1"])';
 
@@ -487,6 +454,27 @@ function useModalDialog(requestClose: () => void) {
   return dialogRef;
 }
 
+/** The holding screen while Auth0 decides whether there is a session. */
+function AppSplash() {
+  return <div className="grid min-h-screen place-items-center text-2xl font-extrabold text-brand">ED</div>;
+}
+
+/**
+ * A primary-navigation link. Below the tablet breakpoint the sidebar is a strip of
+ * icons: the label collapses to nothing visible but stays in the accessible name.
+ */
+function NavItem({ to, icon, label }: { to: string; icon: ReactNode; label: string }) {
+  return (
+    <NavLink
+      to={to}
+      className="flex min-h-10 items-center justify-center gap-3 rounded-lg p-0 text-[0] font-bold text-ink-soft no-underline [&.active]:bg-[color-mix(in_oklch,var(--brand),white_90%)] [&.active]:text-brand [&_svg]:size-5 tablet:justify-start tablet:px-3 tablet:text-[0.92rem] tablet:[&_svg]:size-[18px]"
+    >
+      {icon}
+      {label}
+    </NavLink>
+  );
+}
+
 function Shell() {
   const { t, i18n } = useTranslation();
   const auth = useEdAuth();
@@ -519,14 +507,14 @@ function Shell() {
   }, [auth.isLoading, auth.isAuthenticated, auth.login, blockRedirect]);
 
   if (auth.isLoading) {
-    return <div className="app-loading">ED</div>;
+    return <AppSplash />;
   }
 
   if (!auth.isAuthenticated) {
     // Auto-redirect is in flight on a clean visit — show the splash, not the
     // sign-in screen, to avoid a flash of the manual button before navigation.
     if (!blockRedirect) {
-      return <div className="app-loading">ED</div>;
+      return <AppSplash />;
     }
 
     const signIn = () => {
@@ -539,24 +527,24 @@ function Shell() {
     };
 
     return (
-      <main className="signin-screen">
-        <img className="brand-logo" src="/itatti-logo.png" alt="I Tatti" />
-        <div>
-          <OptionalEyebrow text={t('copy.productEyebrow')} />
-          <h1>ED - Employee Directory</h1>
-          <p>{t('copy.subtitle')}</p>
+      <main className="mx-auto grid min-h-screen max-w-[72rem] grid-cols-1 items-center gap-12 p-8 desktop:grid-cols-[minmax(12rem,20rem)_minmax(18rem,42rem)] desktop:p-12">
+        <img className="h-auto w-32 max-w-[32vw] object-contain" src="/itatti-logo.png" alt="I Tatti" />
+        <div className="grid justify-items-start gap-4">
+          <div>
+            <OptionalEyebrow text={t('copy.productEyebrow')} />
+            <h1 className="m-0 text-[2rem] leading-[1.1]">ED - Employee Directory</h1>
+          </div>
+          <p className="m-0 max-w-[58ch] text-ink-soft">{t('copy.subtitle')}</p>
           {auth.error ? (
-            <p className="signin-error" role="alert">
+            <p className="m-0 font-semibold text-danger" role="alert">
               {t('copy.signInError')}
             </p>
           ) : loginFailed ? (
-            <p className="signin-error" role="alert">
+            <p className="m-0 font-semibold text-danger" role="alert">
               {t('copy.signInUnavailable')}
             </p>
           ) : null}
-          <button className="button primary" onClick={signIn}>
-            {t('actions.signIn')}
-          </button>
+          <Button onClick={signIn}>{t('actions.signIn')}</Button>
         </div>
       </main>
     );
@@ -569,73 +557,75 @@ function Shell() {
   return (
     <>
       {/* Toasts carry a title plus a "what to do next" line, so they need room to
-          breathe and a way out that isn't waiting: hence the wider panel (see
-          .ed-toast) and the close button. Errors also override the duration —
-          see notifyError. */}
-      <Toaster richColors closeButton position="top-right" toastOptions={{ className: 'ed-toast' }} />
-      <div className="app-shell">
-        <header className="topbar">
-          <div className="identity">
-            <img className="brand-logo" src="/itatti-logo.png" alt="I Tatti" />
+          breathe and a way out that isn't waiting: hence the wider-than-default
+          panel and the close button. Errors also override the duration — see
+          notifyError. */}
+      <Toaster
+        richColors
+        closeButton
+        position="top-right"
+        toastOptions={{
+          className: 'w-100 [&_[data-description]]:leading-relaxed [&_[data-description]]:opacity-90',
+        }}
+      />
+      <div className="grid h-screen min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
+        <header className="relative z-10 flex flex-col items-stretch justify-between gap-4 border-b border-line bg-surface p-4 desktop:min-h-[4.75rem] desktop:flex-row desktop:items-center desktop:px-8 desktop:py-0">
+          <div className="flex min-w-0 items-center gap-4">
+            <img className="h-auto w-28 max-w-[32vw] object-contain" src="/itatti-logo.png" alt="I Tatti" />
             <div>
               <OptionalEyebrow text={t('copy.productEyebrow')} />
-              <h1>ED - Employee Directory</h1>
+              <h1 className="m-0 text-[1.1rem] leading-[1.15]">ED - Employee Directory</h1>
             </div>
           </div>
-          <div className="topbar-actions">
+          <div className="flex items-center gap-3">
             {/* `aria-label` carries the accessible name — the sign-out button is
                 icon-only and would otherwise be unnamed. See ActionTooltip for
                 why these are not native `title` tooltips. */}
             <ActionTooltip label={t('actions.language')} side="bottom">
-              <button
-                className="icon-button"
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-ink-soft"
                 type="button"
                 onClick={toggleLanguage}
                 aria-label={t('actions.language')}
               >
                 <Languages size={18} />
                 <span>{i18n.language.toUpperCase()}</span>
-              </button>
+              </Button>
             </ActionTooltip>
             <ActionTooltip label={t('actions.signOut')} side="bottom">
-              <button
-                className="icon-button"
+              <Button
+                variant="outline"
+                size="icon-sm"
+                className="text-ink-soft"
                 type="button"
                 onClick={auth.logout}
                 aria-label={t('actions.signOut')}
               >
                 <LogOut size={18} />
-              </button>
+              </Button>
             </ActionTooltip>
           </div>
         </header>
-        <div className="workbench">
-          <nav className="sidebar" aria-label={t('nav.primary')}>
-            <NavLink to="/employees">
-              <UsersRound size={18} />
-              {t('nav.employees')}
-            </NavLink>
-            <NavLink to="/departments">
-              <Building2 size={18} />
-              {t('nav.departments')}
-            </NavLink>
-            <NavLink to="/import">
-              <Upload size={18} />
-              {t('nav.import')}
-            </NavLink>
-            <NavLink to="/audit">
-              <History size={18} />
-              {t('nav.audit')}
-            </NavLink>
-            <NavLink to="/settings">
-              <Settings size={18} />
-              {t('nav.settings')}
-            </NavLink>
-            <div className="sidebar-version" aria-label={`Version ${__APP_VERSION__}`}>
+        <div className="grid h-full min-h-0 grid-cols-[4.75rem_minmax(0,1fr)] items-stretch tablet:grid-cols-[13.5rem_minmax(0,1fr)] desktop:grid-cols-[15rem_minmax(0,1fr)]">
+          <nav
+            className="flex min-h-0 flex-col gap-1 overflow-y-auto border-r border-line bg-surface-raised p-3 tablet:px-4 tablet:py-6"
+            aria-label={t('nav.primary')}
+          >
+            <NavItem to="/employees" icon={<UsersRound size={18} />} label={t('nav.employees')} />
+            <NavItem to="/departments" icon={<Building2 size={18} />} label={t('nav.departments')} />
+            <NavItem to="/import" icon={<Upload size={18} />} label={t('nav.import')} />
+            <NavItem to="/audit" icon={<History size={18} />} label={t('nav.audit')} />
+            <NavItem to="/settings" icon={<Settings size={18} />} label={t('nav.settings')} />
+            <div
+              className="mt-auto pt-4 text-center text-[0.76rem] font-extrabold text-ink-muted [writing-mode:vertical-rl] tablet:px-3 tablet:text-left tablet:[writing-mode:horizontal-tb]"
+              aria-label={`Version ${__APP_VERSION__}`}
+            >
               v{__APP_VERSION__}
             </div>
           </nav>
-          <main className="content">
+          <main className="h-full min-h-0 min-w-0 overflow-auto p-4 desktop:p-8">
             <Routes>
               <Route path="/" element={<Navigate to="/employees" replace />} />
               <Route path="/employees" element={<EmployeesPage />} />
@@ -653,6 +643,7 @@ function Shell() {
 
 function EmployeesPage() {
   const { t } = useTranslation();
+  const dateLocale = useDateLocale();
   const confirm = useConfirmation();
   const api = useApi();
   const queryClient = useQueryClient();
@@ -783,33 +774,30 @@ function EmployeesPage() {
   };
 
   return (
-    <section className="page-grid employees-grid">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">{t('nav.employees')}</p>
-          <h2>{t('copy.subtitle')}</h2>
-        </div>
-        <div className="action-row">
-          <button className="button secondary" type="button" onClick={exportEmployees}>
-            <Download size={16} />
-            {t('actions.export')}
-          </button>
-          <button className="button primary" type="button" onClick={() => setDraft(emptyEmployeeDraft)}>
-            <Plus size={16} />
-            {t('actions.createEmployee')}
-          </button>
-        </div>
-      </div>
+    <PageSection>
+      <PageHeading
+        eyebrow={t('nav.employees')}
+        title={t('copy.subtitle')}
+        actions={
+          <>
+            <Button variant="outline" className="text-brand" type="button" onClick={exportEmployees}>
+              <Download size={16} />
+              {t('actions.export')}
+            </Button>
+            <Button type="button" onClick={() => setDraft(emptyEmployeeDraft)}>
+              <Plus size={16} />
+              {t('actions.createEmployee')}
+            </Button>
+          </>
+        }
+      />
 
-      <div className="toolbar">
-        <label className="search-field">
-          <Search size={16} />
-          <input
-            value={filters.q}
-            onChange={(event) => setFilters((current) => ({ ...current, q: event.target.value }))}
-            placeholder={t('fields.search')}
-          />
-        </label>
+      <Toolbar>
+        <SearchField
+          value={filters.q}
+          onChange={(q) => setFilters((current) => ({ ...current, q }))}
+          placeholder={t('fields.search')}
+        />
         {/* Clearable, because "any status" and "any department" are the normal
             state of this toolbar rather than an absence of an answer. */}
         <ComboboxField
@@ -829,9 +817,9 @@ function EmployeesPage() {
             label: department.name,
           }))}
         />
-      </div>
+      </Toolbar>
 
-      <div className="data-surface">
+      <DataSurface>
         <table>
           <thead>
             <tr>
@@ -856,28 +844,38 @@ function EmployeesPage() {
                 <td>{employee.firstName}</td>
                 <td>{employee.department?.name}</td>
                 <td>
-                  <span className={`status-pill status-${employee.status.toLowerCase()}`}>{t(`status.${employee.status}`)}</span>
+                  <StatusPill status={employee.status}>{t(`status.${employee.status}`)}</StatusPill>
                 </td>
                 <td>{employee.fte}</td>
                 <td>{t(`tfr.${employee.tfr}`)}</td>
                 <td>{employee.weeklySchedule.total.display}</td>
                 <td>{approvalSummary(employee, t)}</td>
-                <td>{formatTableDate(employee.retirementDate)}</td>
-                <td className="row-actions">
-                  <button className="text-button" type="button" onClick={() => setDraft(toEmployeeDraft(employee))}>
-                    {t('actions.edit')}
-                  </button>
-                  <ActionTooltip label={t('actions.delete')} side="left">
-                    <button
-                      className="icon-danger"
+                <td>{formatDate(employee.retirementDate, dateLocale)}</td>
+                <td>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-brand"
                       type="button"
-                      onClick={() => confirmDeleteEmployee(employee)}
-                      disabled={deleteEmployee.isPending}
-                      aria-label={t('actions.delete')}
+                      onClick={() => setDraft(toEmployeeDraft(employee))}
                     >
-                      <Trash2 size={16} />
-                    </button>
-                  </ActionTooltip>
+                      {t('actions.edit')}
+                    </Button>
+                    <ActionTooltip label={t('actions.delete')} side="left">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="text-danger"
+                        type="button"
+                        onClick={() => confirmDeleteEmployee(employee)}
+                        disabled={deleteEmployee.isPending}
+                        aria-label={t('actions.delete')}
+                      >
+                        <Trash2 size={16} />
+                      </Button>
+                    </ActionTooltip>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -885,9 +883,9 @@ function EmployeesPage() {
         </table>
         {employees.isError ? <QueryError error={employees.error} onRetry={() => void employees.refetch()} /> : null}
         {!employees.isLoading && !employees.isError && employees.data?.length === 0 ? (
-          <p className="empty-state">{t('copy.emptyEmployees')}</p>
+          <EmptyState>{t('copy.emptyEmployees')}</EmptyState>
         ) : null}
-      </div>
+      </DataSurface>
 
       {draft ? (
         <EmployeeForm
@@ -904,7 +902,7 @@ function EmployeesPage() {
           isSaving={saveEmployee.isPending}
         />
       ) : null}
-    </section>
+    </PageSection>
   );
 }
 
@@ -928,11 +926,9 @@ export function EmployeeForm({
   onSave: () => void;
   isSaving: boolean;
 }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const confirm = useConfirmation();
-  // Same resolution as the DateField's, so a date quoted in prose and the same
-  // date shown in the field can never disagree.
-  const dateLocale = i18n.resolvedLanguage === 'en' ? 'en' : 'it';
+  const dateLocale = useDateLocale();
   const api = useApi();
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.settings });
   const retirementPolicy = settings.data?.retirementPolicy ?? DEFAULT_RETIREMENT_POLICY;
@@ -1036,7 +1032,7 @@ export function EmployeeForm({
       confirm({
         title: t('copy.confirmationTitle'),
         message: t('copy.confirmUnconfirmRetirement', {
-          date: formatFieldDate(draft.retirementDate, dateLocale),
+          date: formatDate(draft.retirementDate, dateLocale),
         }),
         confirmLabel: t('actions.confirm'),
         cancelLabel: t('actions.cancel'),
@@ -1158,7 +1154,7 @@ export function EmployeeForm({
 
   return (
     <div
-      className="modal-overlay"
+      className="fixed inset-0 z-50 grid place-items-center bg-[color-mix(in_oklch,var(--ink),transparent_55%)] p-3 backdrop-blur-[2px] motion-safe:animate-in motion-safe:fade-in motion-safe:duration-150 desktop:p-6"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) requestClose();
@@ -1167,7 +1163,12 @@ export function EmployeeForm({
       <form
         ref={dialogRef}
         tabIndex={-1}
-        className="modal-dialog employee-form-dialog"
+        className={cn(
+          'flex max-h-[calc(100vh-1.5rem)] w-full flex-col overflow-hidden rounded-[14px] border border-line bg-surface shadow-[0_1px_2px_oklch(0.2_0.02_250/0.08),0_24px_60px_-20px_oklch(0.2_0.04_250/0.4)] motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:slide-in-from-bottom-2 motion-safe:duration-200 desktop:max-h-[calc(100vh-3rem)]',
+          'w-[min(96vw,92rem)] max-w-[92rem] border-[color-mix(in_oklch,var(--line),var(--brand)_10%)]',
+          'shadow-[0_1px_2px_oklch(0.2_0.02_250/0.08),0_34px_90px_-28px_oklch(0.2_0.05_250/0.5)]',
+          'desktop:max-h-[calc(100vh-2rem)] desktop:rounded-[20px]'
+        )}
         role="dialog"
         aria-modal="true"
         aria-label={draft.id ? `${draft.lastName} ${draft.firstName}` : t('actions.createEmployee')}
@@ -1181,19 +1182,28 @@ export function EmployeeForm({
           handleSubmit();
         }}
       >
-        <header className="modal-header employee-form-header">
-          <div className="modal-title-group">
-            <span className="modal-title-icon" aria-hidden="true">
+        <header className="flex items-center justify-between gap-4 border-b border-line bg-[radial-gradient(circle_at_12%_0%,color-mix(in_oklch,var(--brand),transparent_91%),transparent_45%),color-mix(in_oklch,var(--surface-raised),var(--surface)_38%)] px-6 py-6 desktop:px-9">
+          <div className="flex min-w-0 items-center gap-4">
+            <span
+              aria-hidden="true"
+              className="inline-flex size-10 flex-none items-center justify-center rounded-full bg-[linear-gradient(145deg,color-mix(in_oklch,var(--brand),white_8%),var(--brand))] text-brand-ink shadow-[0_8px_20px_color-mix(in_oklch,var(--brand),transparent_76%)] tablet:size-12"
+            >
               <UserRoundPlus size={23} />
             </span>
-            <div className="modal-title-copy">
-              <p className="modal-eyebrow">{t('copy.employeeRecord')}</p>
-              <h3>{draft.id ? `${draft.lastName} ${draft.firstName}` : t('actions.createEmployee')}</h3>
-              <p className="modal-description">{t('copy.employeeFormSubtitle')}</p>
+            <div className="grid min-w-0 gap-[0.2rem]">
+              <p className="m-0 text-[0.68rem] leading-tight font-black tracking-[0.07em] text-brand uppercase">
+                {t('copy.employeeRecord')}
+              </p>
+              <h3 className="m-0 text-xl leading-tight font-bold">
+                {draft.id ? `${draft.lastName} ${draft.firstName}` : t('actions.createEmployee')}
+              </h3>
+              <p className="m-0 hidden max-w-[58ch] text-[0.82rem] leading-snug text-ink-muted tablet:block">
+                {t('copy.employeeFormSubtitle')}
+              </p>
             </div>
           </div>
           <Button
-            className="employee-modal-close"
+            className="flex-none text-ink-muted transition-transform hover:rotate-3 hover:scale-105 active:scale-95"
             type="button"
             variant="ghost"
             size="icon-sm"
@@ -1204,32 +1214,40 @@ export function EmployeeForm({
           </Button>
         </header>
 
-        <div className="modal-body employee-form-body">
+        <div className="grid gap-6 overflow-y-auto bg-[color-mix(in_oklch,var(--surface-raised),var(--surface)_48%)] p-4 [scrollbar-gutter:stable] tablet:px-9 tablet:py-7">
           {/* A toast is gone in ten seconds and a red field six sections down is
               invisible from here. This is the durable list: it stays until the
               form is clean, and each entry jumps to the input it names. */}
           {invalidFields.length > 0 ? (
-            <div data-slot="form-error-summary" className="form-error-summary" role="alert">
-              <span className="form-error-summary-icon" aria-hidden="true">
+            <div
+              data-slot="form-error-summary"
+              role="alert"
+              className="mb-6 flex gap-3 rounded-xl border border-[color-mix(in_oklch,var(--danger),transparent_60%)] bg-[color-mix(in_oklch,var(--danger),var(--surface)_93%)] p-4"
+            >
+              <span className="inline-flex text-danger" aria-hidden="true">
                 <TriangleAlert size={18} />
               </span>
               <div>
-                <strong>
+                <strong className="mb-2 block text-[0.84rem] font-extrabold text-danger">
                   {t('validation.summaryHeading', { count: invalidFields.length })}
                 </strong>
-                <ul>
+                <ul className="m-0 grid list-none gap-1 p-0">
                   {invalidFields.map((field) => (
-                    <li key={field}>
+                    <li key={field} className="flex flex-wrap gap-1.5 text-[0.79rem] leading-snug">
+                      {/* The field name is the affordance: clicking it scrolls to
+                          and focuses the input, so a six-section form never needs
+                          to be hunted through. */}
                       <button
                         type="button"
                         onClick={() => focusField(field)}
+                        className="cursor-pointer border-0 bg-none p-0 font-[inherit] font-extrabold text-danger underline underline-offset-2 hover:decoration-2"
                         aria-label={t('validation.jumpToField', {
                           field: t(FIELD_LABEL_KEYS[field] ?? field),
                         })}
                       >
                         {t(FIELD_LABEL_KEYS[field] ?? field)}
                       </button>
-                      <span>{fieldErrors[field]}</span>
+                      <span className="text-ink-soft">{fieldErrors[field]}</span>
                     </li>
                   ))}
                 </ul>
@@ -1244,9 +1262,9 @@ export function EmployeeForm({
             description={t('copy.identitySectionHint')}
             errorCount={sectionErrorCount('identity')}
           >
-            <div className="form-grid employee-identity-grid">
+            <div className="grid grid-cols-1 gap-6 desktop:gap-x-6 desktop:grid-cols-[repeat(12,minmax(0,1fr))]">
               <Field
-                className="employee-field-compact employee-identity-number"
+                className="desktop:col-span-2 desktop:[&_input]:max-w-40"
                 icon={<Hash />}
                 label={t('fields.employeeNumber')}
                 required
@@ -1264,7 +1282,7 @@ export function EmployeeForm({
                 />
               </Field>
               <Field
-                className="employee-identity-name"
+                className="desktop:col-span-3"
                 icon={<UserRound />}
                 label={t('fields.firstName')}
                 required
@@ -1279,7 +1297,7 @@ export function EmployeeForm({
                 />
               </Field>
               <Field
-                className="employee-identity-name"
+                className="desktop:col-span-3"
                 icon={<UserRound />}
                 label={t('fields.lastName')}
                 required
@@ -1294,7 +1312,7 @@ export function EmployeeForm({
                 />
               </Field>
               <Field
-                className="employee-identity-birthdate"
+                className="desktop:col-span-4"
                 icon={<CalendarDays />}
                 label={t('fields.birthDate')}
                 required
@@ -1309,7 +1327,7 @@ export function EmployeeForm({
                 />
               </Field>
               <Field
-                className="employee-identity-email"
+                className="desktop:col-span-5"
                 shimmer={workEmailShimmer}
                 icon={<Mail />}
                 label={t('fields.workEmail')}
@@ -1331,7 +1349,7 @@ export function EmployeeForm({
                 />
               </Field>
               <Field
-                className="employee-identity-language"
+                className="desktop:col-span-3"
                 icon={<Languages />}
                 label={t('fields.preferredLanguage')}
                 hint={t('copy.preferredLanguageHint')}
@@ -1344,7 +1362,7 @@ export function EmployeeForm({
                 />
               </Field>
               <Field
-                className="employee-identity-department"
+                className="desktop:col-span-4"
                 icon={<Building2 />}
                 label={t('fields.department')}
                 required
@@ -1369,7 +1387,7 @@ export function EmployeeForm({
             description={t('copy.employmentSectionHint')}
             errorCount={sectionErrorCount('employment')}
           >
-            <div className="form-grid employee-employment-grid">
+            <div className="grid grid-cols-1 gap-6 desktop:gap-x-6 desktop:grid-cols-[repeat(4,minmax(10rem,1fr))]">
               <Field label={t('fields.status')}>
                 <SelectField
                   label={t('fields.status')}
@@ -1409,7 +1427,7 @@ export function EmployeeForm({
                 </Field>
               ) : null}
               <Field
-                className="employee-field-compact"
+                className="desktop:[&_input]:max-w-40"
                 icon={<Gauge />}
                 label={t('fields.fte')}
                 hint={t('copy.fteHint')}
@@ -1426,7 +1444,6 @@ export function EmployeeForm({
                 />
               </Field>
               <Field
-                className="employee-retirement-field"
                 icon={<CalendarDays />}
                 label={t('fields.retirementDate')}
                 hint={t('copy.retirementDateHint', {
@@ -1437,7 +1454,7 @@ export function EmployeeForm({
                 full
                 {...fieldProps('retirementDate')}
               >
-                <div className="retirement-control">
+                <div className="grid grid-cols-1 items-center gap-6 desktop:grid-cols-[minmax(14rem,19rem)_minmax(15rem,max-content)]">
                   <DateField
                     ariaLabel={t('fields.retirementDate')}
                     required={draft.retirementDateOverridden}
@@ -1462,7 +1479,7 @@ export function EmployeeForm({
             title={t('sections.classification')}
             description={t('copy.classificationSectionHint')}
           >
-            <div className="form-grid employee-classification-grid">
+            <div className="grid grid-cols-1 gap-6 desktop:gap-x-6 desktop:grid-cols-[repeat(3,minmax(11rem,1fr))]">
               <Field label={t('fields.contractType')}>
                 <SelectField
                   label={t('fields.contractType')}
@@ -1501,7 +1518,7 @@ export function EmployeeForm({
             description={t('copy.approvalSectionHint')}
             errorCount={sectionErrorCount('approval')}
           >
-            <div className="form-grid employee-approval-grid">
+            <div className="grid grid-cols-1 gap-6 desktop:gap-x-6 desktop:grid-cols-[repeat(3,minmax(11rem,1fr))]">
               <Field label={t('fields.preApprovers')}>
                 <EmployeeMultiSelect
                   label={t('fields.preApprovers')}
@@ -1555,7 +1572,7 @@ export function EmployeeForm({
             title={t('sections.roleCapabilities')}
             description={t('copy.roleCapabilitiesSectionHint')}
           >
-            <div className="approval-switch approval-capabilities">
+            <div className="grid justify-items-start gap-3 rounded-[10px] bg-surface-raised p-4">
               <SwitchField
                 checked={draft.canBeResponsible}
                 onCheckedChange={(checked) => set('canBeResponsible', checked)}
@@ -1576,7 +1593,7 @@ export function EmployeeForm({
             description={t('copy.weeklySectionHint')}
             errorCount={sectionErrorCount('weekly')}
           >
-            <div className="weekday-grid">
+            <div className="grid grid-cols-2 gap-4 [&_input]:tabular-nums desktop:grid-cols-[repeat(5,minmax(4.5rem,1fr))]">
               {WEEKDAY_KEYS.map((key) => (
                 <Field
                   key={key}
@@ -1595,7 +1612,13 @@ export function EmployeeForm({
                 </Field>
               ))}
             </div>
-            <p className={showWeeklyWarning ? 'form-warning' : 'form-note'} data-field="weeklySchedule">
+            <p
+              className={cn(
+                'mt-3 mb-0 text-[0.82rem] font-bold',
+                showWeeklyWarning ? 'text-warning' : 'text-ink-muted'
+              )}
+              data-field="weeklySchedule"
+            >
               {weeklyTotal === null
                 ? t('copy.invalidWeeklySchedule')
                 : showWeeklyWarning && expectedWeeklyMinutes !== null
@@ -1606,18 +1629,21 @@ export function EmployeeForm({
                   : t('copy.weeklyScheduleTotal', { total: formatSessantesimiMinutes(weeklyTotal) })}
             </p>
             {errorFor('weeklySchedule') ? (
-              <p className="field-error" role="alert">
+              <p className="mt-2 mb-0 text-[0.78rem] leading-snug font-[650] text-danger" role="alert">
                 {errorFor('weeklySchedule')}
               </p>
             ) : null}
           </EmployeeFormSection>
         </div>
 
-        <footer className="modal-footer employee-form-footer">
-          <p className="modal-footer-note">
-            <span aria-hidden="true">*</span> {t('copy.requiredFields')}
+        <footer className="flex items-center justify-between gap-6 border-t border-line bg-surface-raised px-4 py-4 desktop:px-9">
+          <p className="m-0 hidden text-xs text-ink-muted desktop:block">
+            <span aria-hidden="true" className="font-black text-danger">
+              *
+            </span>{' '}
+            {t('copy.requiredFields')}
           </p>
-          <div className="modal-actions">
+          <div className="flex w-full items-center gap-3 [&>*]:w-full tablet:w-auto tablet:[&>*]:w-auto">
             <Button
               variant="outline"
               size="lg"
@@ -1704,20 +1730,18 @@ function DepartmentsPage() {
   };
 
   return (
-    <section className="page-grid">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">{t('nav.departments')}</p>
-          <h2>{t('copy.departmentsSubtitle')}</h2>
-        </div>
-        <div className="action-row">
-          <button className="button primary" type="button" onClick={() => setDraft(emptyDepartmentDraft)}>
+    <PageSection>
+      <PageHeading
+        eyebrow={t('nav.departments')}
+        title={t('copy.departmentsSubtitle')}
+        actions={
+          <Button type="button" onClick={() => setDraft(emptyDepartmentDraft)}>
             <Plus size={16} />
             {t('actions.createDepartment')}
-          </button>
-        </div>
-      </div>
-      <div className="data-surface">
+          </Button>
+        }
+      />
+      <DataSurface>
         <table>
           <thead>
             <tr>
@@ -1731,25 +1755,31 @@ function DepartmentsPage() {
               <tr key={department.id}>
                 <td>{department.name}</td>
                 <td>{formatTableDateTime(department.updatedAt)}</td>
-                <td className="row-actions">
-                  <button
-                    className="text-button"
-                    type="button"
-                    onClick={() => setDraft({ id: department.id, name: department.name })}
-                  >
-                    {t('actions.edit')}
-                  </button>
-                  <ActionTooltip label={t('actions.delete')} side="left">
-                    <button
-                      className="icon-danger"
+                <td>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-brand"
                       type="button"
-                      onClick={() => confirmDeleteDepartment(department)}
-                      disabled={deleteDepartment.isPending}
-                      aria-label={t('actions.delete')}
+                      onClick={() => setDraft({ id: department.id, name: department.name })}
                     >
-                      <Trash2 size={16} />
-                    </button>
-                  </ActionTooltip>
+                      {t('actions.edit')}
+                    </Button>
+                    <ActionTooltip label={t('actions.delete')} side="left">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="text-danger"
+                        type="button"
+                        onClick={() => confirmDeleteDepartment(department)}
+                        disabled={deleteDepartment.isPending}
+                        aria-label={t('actions.delete')}
+                      >
+                        <Trash2 size={16} />
+                      </Button>
+                    </ActionTooltip>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -1759,9 +1789,9 @@ function DepartmentsPage() {
           <QueryError error={departments.error} onRetry={() => void departments.refetch()} />
         ) : null}
         {!departments.isLoading && !departments.isError && departments.data?.length === 0 ? (
-          <p className="empty-state">{t('copy.emptyDepartments')}</p>
+          <EmptyState>{t('copy.emptyDepartments')}</EmptyState>
         ) : null}
-      </div>
+      </DataSurface>
 
       {draft ? (
         <DepartmentForm
@@ -1776,7 +1806,7 @@ function DepartmentsPage() {
           isSaving={saveDepartment.isPending}
         />
       ) : null}
-    </section>
+    </PageSection>
   );
 }
 
@@ -1831,7 +1861,7 @@ export function DepartmentForm({
 
   return (
     <div
-      className="modal-overlay"
+      className="fixed inset-0 z-50 grid place-items-center bg-[color-mix(in_oklch,var(--ink),transparent_55%)] p-3 backdrop-blur-[2px] motion-safe:animate-in motion-safe:fade-in motion-safe:duration-150 desktop:p-6"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) requestClose();
@@ -1840,7 +1870,7 @@ export function DepartmentForm({
       <form
         ref={dialogRef}
         tabIndex={-1}
-        className="modal-dialog"
+        className="flex max-h-[calc(100vh-1.5rem)] w-full max-w-[44rem] flex-col overflow-hidden rounded-[14px] border border-line bg-surface shadow-[0_1px_2px_oklch(0.2_0.02_250/0.08),0_24px_60px_-20px_oklch(0.2_0.04_250/0.4)] motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:slide-in-from-bottom-2 motion-safe:duration-200 desktop:max-h-[calc(100vh-3rem)]"
         role="dialog"
         aria-modal="true"
         aria-label={draft.id ? draft.name : t('actions.createDepartment')}
@@ -1860,27 +1890,38 @@ export function DepartmentForm({
           onSave();
         }}
       >
-        <header className="modal-header">
+        <header className="flex items-start justify-between gap-4 border-b border-line bg-surface-raised px-6 py-6 desktop:px-8">
           <div>
-            <p className="eyebrow">{t('nav.departments')}</p>
-            <h3>{draft.id ? draft.name : t('actions.createDepartment')}</h3>
+            <Eyebrow>{t('nav.departments')}</Eyebrow>
+            <h3 className="m-0 text-xl leading-tight font-bold">
+              {draft.id ? draft.name : t('actions.createDepartment')}
+            </h3>
           </div>
-          <button className="modal-close" type="button" onClick={requestClose} aria-label={t('actions.close')}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="flex-none text-ink-muted"
+            type="button"
+            onClick={requestClose}
+            aria-label={t('actions.close')}
+          >
             <X size={18} />
-          </button>
+          </Button>
         </header>
 
-        <div className="modal-body">
-          <fieldset className="form-section">
-            <legend>{t('sections.identity')}</legend>
-            <div className="form-grid">
+        <div className="grid gap-8 overflow-y-auto px-6 py-8 desktop:px-8">
+          <fieldset className="m-0 min-w-0 border-0 p-0">
+            <legend className="mb-4 block w-full border-b border-line pb-2 text-[0.74rem] font-extrabold tracking-wider text-ink-soft uppercase">
+              {t('sections.identity')}
+            </legend>
+            <div className="grid grid-cols-1 gap-6">
               <Field label={t('fields.department')} required name="name" error={nameError} full>
-                <input
+                <Input
                   required
                   autoFocus
-                  // Named explicitly: the wrapping label now also contains the
-                  // required marker and the error text, which would otherwise be
-                  // read out as part of this input's name.
+                  // Named explicitly: the caption beside this input is not a
+                  // `<label>` element, because most fields here wrap a combobox
+                  // or a date picker rather than a plain input.
                   aria-label={t('fields.department')}
                   aria-invalid={Boolean(nameError)}
                   {...(nameError ? { 'aria-describedby': fieldErrorId('name') } : {})}
@@ -1895,14 +1936,14 @@ export function DepartmentForm({
           </fieldset>
         </div>
 
-        <footer className="modal-footer">
-          <button className="button ghost" type="button" onClick={requestClose}>
+        <footer className="flex items-center justify-end gap-3 border-t border-line bg-surface-raised px-6 py-4 desktop:px-8">
+          <Button variant="outline" className="text-ink-soft" type="button" onClick={requestClose}>
             {t('actions.cancel')}
-          </button>
-          <button className="button primary" type="submit" disabled={isSaving}>
+          </Button>
+          <Button type="submit" disabled={isSaving}>
             <Save size={16} />
             {t('actions.save')}
-          </button>
+          </Button>
         </footer>
       </form>
     </div>
@@ -1974,46 +2015,39 @@ export function ImportPage() {
   });
 
   return (
-    <section className="page-grid">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">{t('nav.import')}</p>
-          <h2>{t('copy.importInstructions')}</h2>
-        </div>
-      </div>
+    <PageSection>
+      <PageHeading eyebrow={t('nav.import')} title={t('copy.importInstructions')} />
       <form
-        className="toolbar import-toolbar"
+        className="grid grid-cols-1 items-center justify-start gap-3 desktop:grid-cols-[minmax(16rem,32rem)_auto]"
         onSubmit={(event) => {
           event.preventDefault();
           previewImport.mutate();
         }}
       >
         <FilePicker
-          className="import-file-input"
           label={t('copy.excelFileLabel')}
           accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           placeholder={t('copy.excelFilePlaceholder')}
           value={file}
           onChange={chooseFile}
         />
-        <button className="button primary" type="submit" disabled={!file || previewImport.isPending}>
+        <Button type="submit" disabled={!file || previewImport.isPending}>
           <FileCheck2 size={16} />
           {t('actions.preview')}
-        </button>
+        </Button>
       </form>
       {preview ? (
-        <div className="data-surface">
-          <div className="table-topline">
+        <DataSurface>
+          <div className="flex items-center justify-between gap-3 border-b border-line p-4">
             <strong>{t('copy.rowsCount', { count: preview.rows.length })}</strong>
-            <button
-              className="button primary"
+            <Button
               type="button"
               onClick={() => commitImport.mutate()}
               disabled={selectedRows.length === 0 || commitImport.isPending}
             >
               <ClipboardList size={16} />
               {t('actions.commit')}
-            </button>
+            </Button>
           </div>
           <table>
             <thead>
@@ -2029,7 +2063,10 @@ export function ImportPage() {
             </thead>
             <tbody>
               {preview.rows.map((row) => (
-                <tr key={row.rowNumber} className={row.errors.length ? 'row-error' : undefined}>
+                <tr
+                  key={row.rowNumber}
+                  className={row.errors.length ? 'bg-warning-surface [&>td]:text-warning' : undefined}
+                >
                   <td>
                     <Checkbox
                       aria-label={`${t('fields.select')} ${row.rowNumber}`}
@@ -2058,14 +2095,15 @@ export function ImportPage() {
               ))}
             </tbody>
           </table>
-        </div>
+        </DataSurface>
       ) : null}
-    </section>
+    </PageSection>
   );
 }
 
 function AuditPage() {
   const { t } = useTranslation();
+  const dateLocale = useDateLocale();
   const api = useApi();
   const [employeeNumber, setEmployeeNumber] = useState('');
   const debouncedEmployeeNumber = useDebounced(employeeNumber);
@@ -2075,20 +2113,16 @@ function AuditPage() {
   });
 
   return (
-    <section className="page-grid">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">{t('nav.audit')}</p>
-          <h2>{t('audit.title')}</h2>
-        </div>
-      </div>
-      <div className="toolbar">
-        <label className="search-field">
-          <Search size={16} />
-          <input value={employeeNumber} onChange={(event) => setEmployeeNumber(event.target.value)} placeholder={t('fields.employeeNumber')} />
-        </label>
-      </div>
-      <div className="data-surface">
+    <PageSection>
+      <PageHeading eyebrow={t('nav.audit')} title={t('audit.title')} />
+      <Toolbar>
+        <SearchField
+          value={employeeNumber}
+          onChange={setEmployeeNumber}
+          placeholder={t('fields.employeeNumber')}
+        />
+      </Toolbar>
+      <DataSurface>
         <table>
           <thead>
             <tr>
@@ -2102,7 +2136,7 @@ function AuditPage() {
           </thead>
           <tbody>
             {audit.data?.map((entry) => {
-              const changes = auditChanges(entry, t);
+              const changes = auditChanges(entry, t, dateLocale);
               const employee = auditEmployeeLabel(entry);
               return (
                 <tr key={entry.id}>
@@ -2110,34 +2144,37 @@ function AuditPage() {
                   <td>{entry.actorEmail ?? entry.actorSub}</td>
                   <td>
                     {employee ? (
-                      <span className="audit-employee">
+                      <span className="grid min-w-36 gap-[0.1rem]">
                         {employee.name ? <span>{employee.name}</span> : null}
-                        {employee.number ? <span className="muted-text">{employee.number}</span> : null}
+                        {employee.number ? <span className="text-ink-muted">{employee.number}</span> : null}
                       </span>
                     ) : (
-                      <span className="muted-text">-</span>
+                      <span className="text-ink-muted">-</span>
                     )}
                   </td>
                   <td>{t(`entityType.${entry.entityType}`)}</td>
                   <td>{t(`auditAction.${entry.action}`)}</td>
                   <td>
                     {changes.length > 0 ? (
-                      <div className="audit-changes">
+                      <div className="grid min-w-96 gap-2">
                         {changes.map((change) => (
-                          <div className="audit-change" key={change.key}>
-                            <span className="audit-field">{change.label}</span>
-                            <span className="audit-value" title={t('audit.oldValue')}>
+                          <div
+                            className="grid grid-cols-[minmax(8rem,12rem)_minmax(7rem,1fr)_auto_minmax(7rem,1fr)] items-start gap-2"
+                            key={change.key}
+                          >
+                            <span className="font-extrabold text-ink-soft">{change.label}</span>
+                            <span className="[overflow-wrap:anywhere]" title={t('audit.oldValue')}>
                               {change.before}
                             </span>
-                            <span className="audit-arrow">-&gt;</span>
-                            <span className="audit-value" title={t('audit.newValue')}>
+                            <span className="font-extrabold text-ink-muted">-&gt;</span>
+                            <span className="[overflow-wrap:anywhere]" title={t('audit.newValue')}>
                               {change.after}
                             </span>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <span className="muted-text">{t('audit.noFieldChanges')}</span>
+                      <span className="text-ink-muted">{t('audit.noFieldChanges')}</span>
                     )}
                   </td>
                 </tr>
@@ -2146,8 +2183,8 @@ function AuditPage() {
           </tbody>
         </table>
         {audit.isError ? <QueryError error={audit.error} onRetry={() => void audit.refetch()} /> : null}
-      </div>
-    </section>
+      </DataSurface>
+    </PageSection>
   );
 }
 
@@ -2218,23 +2255,18 @@ export function SettingsPage() {
   });
 
   return (
-    <section className="page-grid settings-grid">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">{t('nav.settings')}</p>
-          <h2>{t('settings.title')}</h2>
-        </div>
-      </div>
+    <PageSection className="max-w-[44rem]">
+      <PageHeading eyebrow={t('nav.settings')} title={t('settings.title')} />
 
       {settings.isError ? <QueryError error={settings.error} onRetry={() => void settings.refetch()} /> : null}
       {loaded?.malformed ? (
-        <p className="form-warning" role="alert">
+        <p className="m-0 text-[0.82rem] font-bold text-warning" role="alert">
           {t('settings.corruptWarning')}
         </p>
       ) : null}
 
       <form
-        className="settings-card"
+        className="grid gap-6 rounded-xl border border-line bg-surface p-8"
         noValidate
         onSubmit={(event) => {
           event.preventDefault();
@@ -2264,19 +2296,20 @@ export function SettingsPage() {
           });
         }}
       >
-        <p className="settings-description">{t('settings.description')}</p>
+        <p className="m-0 max-w-[60ch] text-ink-soft">{t('settings.description')}</p>
 
-        <div className="settings-fields">
+        <div className="grid grid-cols-[repeat(2,minmax(7rem,12rem))] gap-6">
           <Field label={t('settings.years')} required name="years" error={shownErrors['years']}>
             {/* Deliberately not type="number": that adds the browser's spinner
                 arrows (styled differently in every browser) and makes a stray
                 scroll-wheel silently change a value that recalculates every
                 employee's retirement date. The range is enforced by
                 `policyErrors`, in the operator's language. */}
-            <input
+            <Input
               required
               type="text"
               inputMode="numeric"
+              className="tabular-nums"
               aria-label={t('settings.years')}
               aria-invalid={Boolean(shownErrors['years'])}
               {...(shownErrors['years'] ? { 'aria-describedby': fieldErrorId('years') } : {})}
@@ -2293,10 +2326,11 @@ export function SettingsPage() {
                 scroll-wheel silently change a value that recalculates every
                 employee's retirement date. The range is enforced by
                 `policyErrors`, in the operator's language. */}
-            <input
+            <Input
               required
               type="text"
               inputMode="numeric"
+              className="tabular-nums"
               aria-label={t('settings.months')}
               aria-invalid={Boolean(shownErrors['months'])}
               {...(shownErrors['months'] ? { 'aria-describedby': fieldErrorId('months') } : {})}
@@ -2309,21 +2343,23 @@ export function SettingsPage() {
           </Field>
         </div>
 
-        <p className="settings-meta">
+        <p className="m-0 text-[0.82rem] font-bold text-ink-muted">
           {loaded?.updatedAt
             ? `${t('settings.lastUpdated')}: ${formatTableDateTime(loaded.updatedAt)}`
             : t('settings.neverUpdated')}
         </p>
-        <p className="settings-note">{t('settings.recalcNote')}</p>
+        <p className="m-0 rounded-lg bg-surface-raised p-4 text-[0.85rem] leading-relaxed text-ink-soft">
+          {t('settings.recalcNote')}
+        </p>
 
-        <div className="action-row">
-          <button className="button primary" type="submit" disabled={savePolicy.isPending}>
+        <div className="flex items-center justify-end gap-3">
+          <Button type="submit" disabled={savePolicy.isPending}>
             <Save size={16} />
             {t('actions.save')}
-          </button>
+          </Button>
         </div>
       </form>
-    </section>
+    </PageSection>
   );
 }
 
@@ -2369,24 +2405,48 @@ function EmployeeFormSection({
   return (
     <fieldset
       {...(errorCount > 0 ? { 'data-has-errors': 'true' } : {})}
-      className={cn('form-section', 'employee-form-section', errorCount > 0 && 'section-has-errors')}
+      // The stagger is per-section rather than an nth-child rule, now that the
+      // sections are drawn by a component that knows its own number.
+      style={{ animationDelay: `${(Number(number) - 1) * 35}ms` }}
+      className={cn(
+        'group/section m-0 min-w-0 rounded-[14px] border border-[color-mix(in_oklch,var(--line),var(--brand)_7%)] bg-surface p-4 tablet:p-6',
+        'shadow-[0_1px_3px_oklch(0.2_0.02_250/0.045)] transition-[border-color,box-shadow] duration-150',
+        'focus-within:border-[color-mix(in_oklch,var(--brand),var(--line)_58%)]',
+        'focus-within:shadow-[0_1px_3px_oklch(0.2_0.02_250/0.04),0_8px_28px_color-mix(in_oklch,var(--brand),transparent_92%)]',
+        'motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:fill-mode-both motion-safe:duration-300'
+      )}
     >
-      <legend className="visually-hidden">{title}</legend>
-      <div className="employee-section-heading">
-        <span className="employee-section-number" aria-hidden="true">
+      <legend className="sr-only">{title}</legend>
+      {/* The badge gets a track of its own only when there is one to place: an
+          always-present empty column would leave its grid gap behind. */}
+      <div
+        className={cn(
+          'mb-6 grid items-center gap-3 border-b border-[color-mix(in_oklch,var(--line),transparent_24%)] pb-4',
+          errorCount > 0
+            ? 'grid-cols-[1.8rem_minmax(0,1fr)_auto] tablet:grid-cols-[2rem_2rem_minmax(0,1fr)_auto]'
+            : 'grid-cols-[1.8rem_minmax(0,1fr)] tablet:grid-cols-[2rem_2rem_minmax(0,1fr)]'
+        )}
+      >
+        <span
+          aria-hidden="true"
+          className="inline-flex size-8 items-center justify-center rounded-full bg-[color-mix(in_oklch,var(--brand),var(--surface)_90%)] text-[0.68rem] font-black tracking-wide tabular-nums text-brand"
+        >
           {number}
         </span>
-        <span className="employee-section-icon" aria-hidden="true">
+        <span
+          aria-hidden="true"
+          className="hidden size-8 items-center justify-center rounded-full bg-surface-raised text-[color-mix(in_oklch,var(--brand),var(--ink-soft)_18%)] transition-[color,transform] duration-150 group-focus-within/section:-translate-y-px group-focus-within/section:text-brand tablet:inline-flex [&_svg]:size-[1.1rem] [&_svg]:[stroke-width:2.15]"
+        >
           {icon}
         </span>
         <div>
-          <h4>{title}</h4>
-          <p>{description}</p>
+          <h4 className="m-0 text-[0.96rem] leading-tight text-ink">{title}</h4>
+          <p className="m-0 mt-[0.15rem] text-[0.78rem] leading-snug text-ink-muted">{description}</p>
         </div>
         {/* Scrolling past a collapsed-looking section shouldn't hide the fact
             that something in it still needs attention. */}
         {errorCount > 0 ? (
-          <span className="section-error-badge">
+          <span className="ms-auto inline-flex items-center gap-1 rounded-full bg-[color-mix(in_oklch,var(--danger),var(--surface)_88%)] px-2 py-[0.15rem] text-[0.72rem] font-extrabold whitespace-nowrap text-danger">
             <TriangleAlert size={13} aria-hidden="true" />
             {t('validation.sectionErrors', { count: errorCount })}
           </span>

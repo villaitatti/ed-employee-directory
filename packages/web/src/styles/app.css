@@ -2,11 +2,6 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 
-/* The hand-written stylesheet this migration is replacing. Imported into
-   Tailwind's `base` layer so a utility class in the markup always wins over a
-   leftover rule here, which is what lets the two coexist while it shrinks. */
-@import './legacy.css' layer(base);
-
 /**
  * Design tokens.
  *
@@ -20,6 +15,13 @@
 @theme {
   --font-sans: Aptos, 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
   --radius: 0.625rem;
+
+  /* The two widths this app actually changes shape at, named for what they mean
+     rather than borrowed from Tailwind's `md`/`lg`, whose numbers are different.
+     Below `tablet` the sidebar is icons only and the dialogs go edge to edge;
+     below `desktop` the multi-column form grids fold to one column. */
+  --breakpoint-tablet: 721px;
+  --breakpoint-desktop: 901px;
 
   /* Deriving an address is instantaneous, so the sweep across a field the form
      just filled in is paced for the eye rather than for the work. */
@@ -118,21 +120,25 @@
   --border: var(--line);
   --input: var(--line);
   --ring: color-mix(in oklch, var(--brand), white 35%);
-
-  /* Spacing scale used by the stylesheet still being migrated. */
-  --space-2xs: 0.25rem;
-  --space-xs: 0.5rem;
-  --space-sm: 0.75rem;
-  --space-md: 1rem;
-  --space-lg: 1.5rem;
-  --space-xl: 2rem;
-  --space-2xl: 3rem;
 }
 
 @layer base {
   html {
     font-size: 16px;
     letter-spacing: 0;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    min-width: 320px;
+    color: var(--ink);
+    /* Light at the top, settling into the page colour by the fold. */
+    background: linear-gradient(180deg, oklch(0.97 0.011 250) 0%, var(--surface) 18rem);
   }
 
   /* Preflight leaves headings at the inherited weight; this app has always drawn
@@ -142,5 +148,13 @@
   h3,
   h4 {
     font-weight: 700;
+  }
+
+  /* For the handful of elements not drawn by a shadcn component — the nav links,
+     the summary's jump buttons. Every shadcn control sets `outline-none` and
+     draws its own ring, so none of them is affected. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
   }
 }

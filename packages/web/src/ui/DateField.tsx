@@ -145,9 +145,9 @@ export function DateField({
       }}
     >
       <InputGroup ref={anchorRef}>
-        <InputGroupAddon>
-          <CalendarDays size={16} aria-hidden="true" />
-        </InputGroupAddon>
+        {/* The calendar icon is the popover's trigger and nothing else: a second,
+            decorative one on the leading edge would make the field look like it
+            had two of them. */}
         <InputGroupInput
           ref={inputRef}
           // Never `type="date"`: that hands the field to the browser's own widget,
@@ -160,6 +160,7 @@ export function DateField({
           {...(disabled ? { disabled: true } : {})}
           {...(invalid ? { 'aria-invalid': true } : {})}
           {...(describedBy ? { 'aria-describedby': describedBy } : {})}
+          className="pl-2.5"
           placeholder={t('fields.datePlaceholder')}
           value={text}
           onChange={(event) => type(event.currentTarget.value)}
