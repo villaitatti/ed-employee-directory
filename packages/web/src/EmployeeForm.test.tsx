@@ -193,6 +193,43 @@ describe('EmployeeForm modal', () => {
     expect(birthDate).toHaveValue('01 maggio 1990');
   });
 
+  it('closes the calendar once a day is picked', async () => {
+    // Regression: picking a day handed the caret back to the box, and the
+    // focus handler that opens the calendar read that as the operator arriving
+    // at the field — so the calendar re-opened the instant it closed.
+    const user = userEvent.setup();
+
+    function ControlledEmployeeForm() {
+      const [draft, setDraft] = useState({ ...emptyEmployeeDraft });
+      return (
+        <EmployeeForm
+          draft={draft}
+          departments={departments}
+          employeeOptions={employeeOptions}
+          onCancel={() => undefined}
+          onChange={setDraft}
+          onSave={vi.fn()}
+          isSaving={false}
+        />
+      );
+    }
+
+    renderWithProviders(<ControlledEmployeeForm />);
+
+    const birthDate = screen.getByLabelText('Data di nascita');
+    await user.click(birthDate);
+    await user.type(birthDate, '04/12/2000');
+    await user.click(await screen.findByRole('button', { name: '4 dicembre 2000' }));
+
+    expect(birthDate).toHaveValue('04 dicembre 2000');
+    expect(screen.queryByRole('button', { name: '4 dicembre 2000' })).not.toBeInTheDocument();
+
+    // And clicking the box offers it again — the caret never left, so there is
+    // no focus event to rely on here.
+    await user.click(birthDate);
+    expect(await screen.findByRole('button', { name: '4 dicembre 2000' })).toBeInTheDocument();
+  });
+
   it('keeps the typed date when clicking the already-selected calendar day', async () => {
     const user = userEvent.setup();
     let latestDraft = { ...emptyEmployeeDraft };

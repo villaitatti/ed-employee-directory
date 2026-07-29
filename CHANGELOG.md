@@ -16,6 +16,8 @@
 
 - The three "this employee is still an approver" errors name the people involved instead of listing bare Employee Numbers. "Compare nel workflow di 1003" made the operator go and look up who 1003 is before they could act on it; it now says "Compare nel workflow di Carla Verdi (1003)". The API sends the list structured rather than pre-joined, so the order a name is written in stays a decision the interface makes.
 - An interpolation the server did not supply used to leave `{{employees}}` sitting in the sentence. A missing value now thins the sentence instead of showing the operator the template.
+- Picking a day now closes the calendar. It closed and then re-opened itself: handing the caret back to the text box was read as the operator arriving at the field. Clicking the box re-offers the calendar, which focus alone cannot do once the caret is already there.
+- The calendar rebuilt its entire day grid on every render, because the component overrides were declared inline and so were a new component type each time. React Day Picker re-renders on focus, which made a click on a day land on a button that had already been replaced.
 
 - Field-level error messages are now wired to their input with `aria-describedby`. Mantine computed that attribute from its own internals and discarded anything passed in, so per-field descriptions were unavailable and a screen reader had only the live-region announcement to go on.
 - A field's caption is no longer a `<label>` wrapping the entire control. It had been read out as part of the input's accessible name, error message included.

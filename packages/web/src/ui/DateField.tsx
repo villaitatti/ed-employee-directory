@@ -102,6 +102,14 @@ export function DateField({
   const [open, setOpen] = useState(false);
   /** What has been typed, or `null` while the field is showing the stored value. */
   const [typed, setTyped] = useState<string | null>(null);
+  /**
+   * Whether the next focus on the box should open the calendar.
+   *
+   * Arriving at an empty field should offer it; being handed the caret back
+   * after picking a day should not, or closing the calendar re-opens it on the
+   * way out.
+   */
+  const openOnNextFocus = useRef(true);
 
   const selected = toCalendarDate(value);
   const display = selected ? dayjs(selected).locale(locale).format(DATE_INPUT_DISPLAY_FORMAT) : '';
@@ -130,7 +138,13 @@ export function DateField({
     setTyped(null);
     onChange(dayjs(date).format('YYYY-MM-DD'));
     setOpen(false);
-    inputRef.current?.focus();
+    // Picking a day answers the question, so the caret goes back to the box —
+    // but only if it left. Handing focus back is finishing, not arriving, so it
+    // must not count as the kind of focus that opens the calendar.
+    if (document.activeElement !== inputRef.current) {
+      openOnNextFocus.current = false;
+      inputRef.current?.focus();
+    }
   };
 
   const clear = () => {
@@ -177,7 +191,14 @@ export function DateField({
           placeholder={t('fields.datePlaceholder')}
           value={text}
           onChange={(event) => type(event.currentTarget.value)}
-          onFocus={() => setOpen(true)}
+          onFocus={() => {
+            if (openOnNextFocus.current) setOpen(true);
+            openOnNextFocus.current = true;
+          }}
+          // Focus alone isn't enough to re-offer the calendar: after picking a
+          // day the box keeps the caret, so clicking it to choose a different
+          // date fires no focus event at all.
+          onClick={() => setOpen(true)}
           onBlur={() => setTyped(null)}
         />
         <InputGroupAddon align="inline-end">
