@@ -94,8 +94,8 @@ describe('no native browser form UI', () => {
 
     // A bare <input type="file"> renders the browser's own control, which reads
     // "Choose File / No file chosen" in the browser's language and ignores the
-    // app's styling. Mantine keeps a real file input to open the picker but hides
-    // it, exposing a styled button with our own placeholder instead.
+    // app's styling. FilePicker keeps a real file input to open the picker but
+    // hides it, exposing a styled button with our own placeholder instead.
     const nativeInput = container.querySelector('input[type="file"]');
     expect(nativeInput).toHaveStyle({ display: 'none' });
     expect(screen.getByRole('button', { name: 'File Excel da importare' })).toBeInTheDocument();

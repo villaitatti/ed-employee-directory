@@ -28,7 +28,6 @@ import {
   UsersRound,
   X,
 } from 'lucide-react';
-import { modals, useModals } from '@mantine/modals';
 import dayjs from 'dayjs';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -92,6 +91,7 @@ import { Field } from './ui/Field.js';
 import { FilePicker } from './ui/FilePicker.js';
 import { SelectField } from './ui/SelectField.js';
 import { SwitchField } from './ui/SwitchField.js';
+import { useConfirmation, useConfirmationOpen } from './ui/confirmation.js';
 import { notifyError, notifySuccess, notifyValidation } from './ui/feedback.js';
 import type { Translate } from './i18n/types.js';
 import { cn } from '@/lib/utils';
@@ -415,34 +415,6 @@ function QueryError({ error, onRetry }: { error: unknown; onRetry: () => void })
   );
 }
 
-function openConfirmation({
-  title,
-  message,
-  confirmLabel,
-  cancelLabel,
-  onConfirm,
-  destructive = false,
-}: {
-  title: string;
-  message: string;
-  confirmLabel: string;
-  cancelLabel: string;
-  onConfirm: () => void;
-  destructive?: boolean;
-}) {
-  modals.openConfirmModal({
-    title,
-    centered: true,
-    radius: 'lg',
-    overlayProps: { backgroundOpacity: 0.55, blur: 4 },
-    transitionProps: { transition: 'pop', duration: 160 },
-    children: <p className="m-0 text-sm">{message}</p>,
-    labels: { confirm: confirmLabel, cancel: cancelLabel },
-    ...(destructive ? { confirmProps: { color: 'red' } } : {}),
-    onConfirm,
-  });
-}
-
 const FOCUSABLE_SELECTOR =
   'a[href]:not([tabindex="-1"]), button:not([disabled]):not([tabindex="-1"]), input:not([disabled]):not([type="hidden"]):not([tabindex="-1"]), select:not([disabled]):not([tabindex="-1"]), textarea:not([disabled]):not([tabindex="-1"]), [tabindex]:not([tabindex="-1"])';
 
@@ -453,23 +425,23 @@ const FOCUSABLE_SELECTOR =
  * is left to an `autoFocus` field when present; otherwise the first focusable is
  * focused.
  *
- * While a Mantine confirmation is layered on top (discard changes, un-confirming a
+ * While a confirmation is layered on top (discard changes, un-confirming a
  * retirement date) that confirmation owns the keyboard and this hook stands down.
- * Without the guard the two fight: Mantine closes the confirmation on Escape from a
- * window capture-phase listener and this hook — bubbling afterwards — immediately
- * re-opens it, so Escape can never dismiss it; and on Tab this hook pulls focus out
- * of the confirmation's focus trap and back into the form behind it. Reading the
- * stack depth off Mantine's context is what makes the guard reliable: the reducer
- * dispatch has not been committed yet while the closing event is still bubbling, so
+ * Without the guard the two fight: the confirmation closes itself on Escape from
+ * its own document listener and this hook — running in the same event — would
+ * immediately re-open it, so Escape could never dismiss it; and on Tab this hook
+ * would pull focus out of the confirmation's focus trap and back into the form
+ * behind it. Reading the flag off the provider is what makes the guard reliable:
+ * React has not re-rendered yet while the closing event is still in flight, so
  * the last rendered value still reports the confirmation as open.
  */
 function useModalDialog(requestClose: () => void) {
   const dialogRef = useRef<HTMLFormElement>(null);
   const requestCloseRef = useRef(requestClose);
   requestCloseRef.current = requestClose;
-  const layeredModalCount = useModals().modals.length;
-  const layeredModalCountRef = useRef(layeredModalCount);
-  layeredModalCountRef.current = layeredModalCount;
+  const confirmationOpen = useConfirmationOpen();
+  const confirmationOpenRef = useRef(confirmationOpen);
+  confirmationOpenRef.current = confirmationOpen;
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -481,7 +453,7 @@ function useModalDialog(requestClose: () => void) {
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (layeredModalCountRef.current > 0) return;
+      if (confirmationOpenRef.current) return;
       if (event.key === 'Escape') {
         requestCloseRef.current();
         return;
@@ -681,6 +653,7 @@ function Shell() {
 
 function EmployeesPage() {
   const { t } = useTranslation();
+  const confirm = useConfirmation();
   const api = useApi();
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState({ q: '', status: '', departmentId: '' });
@@ -771,7 +744,7 @@ function EmployeesPage() {
 
   const confirmDeleteEmployee = (employee: Employee) => {
     if (deleteEmployee.isPending) return;
-    openConfirmation({
+    confirm({
       title: t('copy.confirmationTitle'),
       // Name the record being destroyed: on a table of similar rows, "this
       // employee" is not enough to catch a misclick before it is irreversible.
@@ -956,6 +929,7 @@ export function EmployeeForm({
   isSaving: boolean;
 }) {
   const { t, i18n } = useTranslation();
+  const confirm = useConfirmation();
   // Same resolution as the DateField's, so a date quoted in prose and the same
   // date shown in the field can never disagree.
   const dateLocale = i18n.resolvedLanguage === 'en' ? 'en' : 'it';
@@ -1059,7 +1033,7 @@ export function EmployeeForm({
     // Unchecking recalculates the date from the birth date on save — warn before
     // discarding a date that was previously confirmed.
     if (draft.retirementDateOverridden && draft.retirementDate) {
-      openConfirmation({
+      confirm({
         title: t('copy.confirmationTitle'),
         message: t('copy.confirmUnconfirmRetirement', {
           date: formatFieldDate(draft.retirementDate, dateLocale),
@@ -1101,7 +1075,7 @@ export function EmployeeForm({
       onCancel();
       return;
     }
-    openConfirmation({
+    confirm({
       title: t('copy.confirmationTitle'),
       message: t('copy.discardChanges'),
       confirmLabel: t('actions.discard'),
@@ -1109,7 +1083,7 @@ export function EmployeeForm({
       destructive: true,
       onConfirm: onCancel,
     });
-  }, [isDirty, onCancel, t]);
+  }, [confirm, isDirty, onCancel, t]);
 
   const dialogRef = useModalDialog(requestClose);
 
@@ -1684,6 +1658,7 @@ export const emptyDepartmentDraft: DepartmentDraft = {
 
 function DepartmentsPage() {
   const { t } = useTranslation();
+  const confirm = useConfirmation();
   const api = useApi();
   const queryClient = useQueryClient();
   const departments = useDepartments(api);
@@ -1718,7 +1693,7 @@ function DepartmentsPage() {
 
   const confirmDeleteDepartment = (department: Department) => {
     if (deleteDepartment.isPending) return;
-    openConfirmation({
+    confirm({
       title: t('copy.confirmationTitle'),
       message: t('copy.confirmDeleteDepartment', { name: department.name }),
       confirmLabel: t('actions.delete'),
@@ -1822,6 +1797,7 @@ export function DepartmentForm({
   isSaving: boolean;
 }) {
   const { t } = useTranslation();
+  const confirm = useConfirmation();
   const [submitted, setSubmitted] = useState(false);
   // See the employee form: a "name already taken" verdict is about the submitted
   // value, so it clears as soon as the operator types a different one — and comes
@@ -1841,7 +1817,7 @@ export function DepartmentForm({
       onCancel();
       return;
     }
-    openConfirmation({
+    confirm({
       title: t('copy.confirmationTitle'),
       message: t('copy.discardChanges'),
       confirmLabel: t('actions.discard'),
@@ -1849,7 +1825,7 @@ export function DepartmentForm({
       destructive: true,
       onConfirm: onCancel,
     });
-  }, [isDirty, onCancel, t]);
+  }, [confirm, isDirty, onCancel, t]);
 
   const dialogRef = useModalDialog(requestClose);
 
@@ -2177,6 +2153,7 @@ function AuditPage() {
 
 export function SettingsPage() {
   const { t } = useTranslation();
+  const confirm = useConfirmation();
   const api = useApi();
   const queryClient = useQueryClient();
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.settings });
@@ -2278,7 +2255,7 @@ export function SettingsPage() {
           // Table-wide write: confirm before recalculating every non-confirmed
           // employee's projected retirement date, echoing the values being saved
           // so the operator can catch a typo before it touches every record.
-          openConfirmation({
+          confirm({
             title: t('copy.confirmationTitle'),
             message: t('settings.confirmRecalc', { years, months }),
             confirmLabel: t('actions.confirm'),

@@ -1,9 +1,3 @@
-/* Mantine, on its way out, ranks below everything Tailwind emits — otherwise its
-   unlayered rules outrank every utility class and paint the shadcn components.
-   `main.tsx` imports its layered builds so this ordering can take effect, and the
-   declaration has to come first: layer order is fixed by first mention. */
-@layer mantine, theme, base, components, utilities;
-
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';

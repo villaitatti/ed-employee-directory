@@ -143,9 +143,9 @@ describe('DepartmentForm modal', () => {
       />
     );
 
-    // Cancelling the Mantine confirmation keeps the form open.
+    // Cancelling the confirmation keeps the form open.
     await user.keyboard('{Escape}');
-    const confirmation = await screen.findByRole('dialog', { name: 'Conferma richiesta' });
+    const confirmation = await screen.findByRole('alertdialog', { name: 'Conferma richiesta' });
     await user.click(within(confirmation).getByRole('button', { name: 'Annulla' }));
     expect(onCancel).not.toHaveBeenCalled();
 

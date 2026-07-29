@@ -2,11 +2,6 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
-// The layered builds, not the plain ones: unlayered Mantine CSS outranks every
-// Tailwind utility, so while the two libraries coexist the shadcn components
-// would be painted by whichever Mantine rule happened to match. `app.css`
-// declares `mantine` below Tailwind's own layers.
-import '@mantine/core/styles.layer.css';
 import { ApiError } from './api/client.js';
 import { EdAuthProvider } from './auth/AuthProvider.js';
 import { RootErrorBoundary } from './ErrorBoundary.js';

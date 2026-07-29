@@ -348,7 +348,7 @@ describe('EmployeeForm modal', () => {
 
     // No discard prompt: Escape closes straight away.
     await user.keyboard('{Escape}');
-    expect(screen.queryByRole('dialog', { name: 'Conferma richiesta' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('alertdialog', { name: 'Conferma richiesta' })).not.toBeInTheDocument();
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
@@ -430,9 +430,9 @@ describe('EmployeeForm modal', () => {
       />
     );
 
-    // Cancelling the Mantine confirmation keeps the form open.
+    // Cancelling the confirmation keeps the form open.
     await user.keyboard('{Escape}');
-    const confirmation = await screen.findByRole('dialog', { name: 'Conferma richiesta' });
+    const confirmation = await screen.findByRole('alertdialog', { name: 'Conferma richiesta' });
     await user.click(within(confirmation).getByRole('button', { name: 'Annulla' }));
     expect(onCancel).not.toHaveBeenCalled();
 
@@ -444,9 +444,9 @@ describe('EmployeeForm modal', () => {
 
   it('lets the discard confirmation own the keyboard while it is open', async () => {
     // Regression: the form's Escape/Tab handler used to be bound to `document`,
-    // so it fought the layered Mantine confirmation — Escape re-opened the
-    // confirmation the instant Mantine closed it, and Tab pulled focus back out
-    // into the form behind it.
+    // so it fought the layered confirmation — Escape re-opened the confirmation
+    // the instant it closed itself, and Tab pulled focus back out into the form
+    // behind it.
     const onCancel = vi.fn();
     const user = userEvent.setup();
 
@@ -469,7 +469,7 @@ describe('EmployeeForm modal', () => {
     await user.type(screen.getByLabelText('Nome'), 'Ada');
 
     await user.keyboard('{Escape}');
-    const confirmation = await screen.findByRole('dialog', { name: 'Conferma richiesta' });
+    const confirmation = await screen.findByRole('alertdialog', { name: 'Conferma richiesta' });
 
     // Tab stays inside the confirmation instead of escaping into the form behind it.
     await user.tab();
@@ -478,7 +478,7 @@ describe('EmployeeForm modal', () => {
     // Escape dismisses the confirmation instead of re-opening it, and leaves the
     // form itself open.
     await user.keyboard('{Escape}');
-    expect(screen.queryByRole('dialog', { name: 'Conferma richiesta' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('alertdialog', { name: 'Conferma richiesta' })).not.toBeInTheDocument();
     expect(onCancel).not.toHaveBeenCalled();
     expect(screen.getByRole('dialog', { name: 'Nuovo dipendente' })).toBeInTheDocument();
   });
