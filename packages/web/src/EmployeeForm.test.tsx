@@ -563,9 +563,11 @@ describe('EmployeeForm modal', () => {
     expect(removeButton).toBeInTheDocument();
     // Flagged visually too, so it reads as something to fix rather than a normal
     // selection sitting next to the eligible ones.
-    expect(removeButton.closest('.employee-pill-invalid')).not.toBeNull();
+    expect(removeButton.closest('[data-ineligible="true"]')).not.toBeNull();
     // An eligible selection carries no such flag.
-    expect(screen.getByRole('button', { name: /Rimuovi Rossi Ada/i }).closest('.employee-pill-invalid')).toBeNull();
+    expect(
+      screen.getByRole('button', { name: /Rimuovi Rossi Ada/i }).closest('[data-ineligible="true"]')
+    ).toBeNull();
     removeButton.click();
     expect(onChange).toHaveBeenCalledWith(
       expect.objectContaining({

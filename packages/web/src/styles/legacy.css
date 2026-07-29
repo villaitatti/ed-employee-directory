@@ -430,11 +430,6 @@ button:focus-visible {
   color: var(--warning-ink);
 }
 
-.employee-multi-select {
-  display: grid;
-  gap: var(--space-xs);
-}
-
 /* Employee form */
 .employee-form-dialog {
   width: min(96vw, 92rem);
@@ -677,21 +672,6 @@ button:focus-visible {
 
 .employee-form-dialog .weekday-grid {
   gap: var(--space-md);
-}
-
-.employee-form-dialog .app-pill {
-  border: 1px solid color-mix(in oklch, var(--brand), var(--line) 65%);
-  color: var(--brand);
-  background: color-mix(in oklch, var(--brand), var(--surface) 92%);
-  font-weight: 750;
-}
-
-/* An approver kept only because they are already assigned — they no longer meet
-   the eligibility rules and the save will be rejected until they are removed. */
-.employee-form-dialog .app-pill.employee-pill-invalid {
-  border-color: var(--warning-ink);
-  color: var(--warning-ink);
-  background: color-mix(in oklch, var(--warning-ink), var(--surface) 92%);
 }
 
 .employee-field-compact input {

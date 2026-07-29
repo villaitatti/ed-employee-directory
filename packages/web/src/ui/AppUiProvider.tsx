@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { createTheme, MantineProvider, Pill, type MantineColorsTuple } from '@mantine/core';
+import { createTheme, MantineProvider, type MantineColorsTuple } from '@mantine/core';
 import { ModalsProvider } from '@mantine/modals';
 import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
@@ -42,9 +42,6 @@ const theme = createTheme({
   primaryColor: 'brand',
   primaryShade: 8,
   defaultRadius: 'md',
-  components: {
-    Pill: Pill.extend({ classNames: { root: 'app-pill' } }),
-  },
 });
 
 export function AppUiProvider({ children }: { children: ReactNode }) {

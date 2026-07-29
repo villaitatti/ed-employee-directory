@@ -28,7 +28,6 @@ import {
   UsersRound,
   X,
 } from 'lucide-react';
-import { MultiSelect, Pill } from '@mantine/core';
 import { modals, useModals } from '@mantine/modals';
 import dayjs from 'dayjs';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -88,6 +87,7 @@ import { Input } from '@/components/ui/input';
 import { ActionTooltip } from './ui/ActionTooltip.js';
 import { ComboboxField } from './ui/ComboboxField.js';
 import { DATE_INPUT_DISPLAY_FORMAT, DateField } from './ui/DateField.js';
+import { EmployeeMultiSelect } from './ui/EmployeeMultiSelect.js';
 import { Field } from './ui/Field.js';
 import { FilePicker } from './ui/FilePicker.js';
 import { SelectField } from './ui/SelectField.js';
@@ -2372,10 +2372,6 @@ function parseDraftWeeklySchedule(schedule: Record<WeekdayKey, string>): Record<
   }
 }
 
-function employeeOptionLabel(option: EmployeeOption): string {
-  return `${option.lastName} ${option.firstName} (${option.employeeNumber})`;
-}
-
 function EmployeeFormSection({
   number,
   icon,
@@ -2421,78 +2417,6 @@ function EmployeeFormSection({
       </div>
       {children}
     </fieldset>
-  );
-}
-
-function EmployeeMultiSelect({
-  label,
-  options,
-  labelOptions,
-  value,
-  onChange,
-  'aria-invalid': invalid,
-}: {
-  label: string;
-  /** Selectable options for the dropdown (already filtered for eligibility). */
-  options: EmployeeOption[];
-  /** Broader pool used only to label already-selected chips (e.g. an approver
-   * who has since lost eligibility and is no longer in `options`). */
-  labelOptions: EmployeeOption[];
-  value: string[];
-  onChange: (value: string[]) => void;
-  /** Draws the red border; the message lives on the surrounding Field. */
-  'aria-invalid'?: boolean;
-  'aria-describedby'?: string;
-}) {
-  const { t } = useTranslation();
-  const labelById = new Map(labelOptions.map((option) => [option.id, option]));
-  const data = options.map((option) => ({ value: option.id, label: employeeOptionLabel(option) }));
-
-  // Preserve selected values that are no longer eligible so they remain visible
-  // and removable. Once removed, they disappear from the available data and
-  // cannot be selected again.
-  const ineligibleIds = new Set<string>();
-  value.forEach((id) => {
-    if (data.some((option) => option.value === id)) return;
-    const option = labelById.get(id);
-    ineligibleIds.add(id);
-    data.push({
-      value: id,
-      label: option ? employeeOptionLabel(option) : t('copy.ineligibleApprover'),
-    });
-  });
-
-  return (
-    <MultiSelect
-      className="employee-multi-select"
-      aria-label={label}
-      error={invalid ?? false}
-      placeholder={t('actions.addApprover')}
-      value={value}
-      onChange={onChange}
-      data={data}
-      searchable
-      clearable
-      openOnFocus
-      hidePickedOptions
-      nothingFoundMessage={t('copy.noOptionsFound')}
-      comboboxProps={{ withinPortal: true, zIndex: 1200, transitionProps: { transition: 'pop', duration: 120 } }}
-      renderPill={({ option, onRemove }) => (
-        <Pill
-          // Approvers kept only because they are already assigned read as a
-          // problem to fix, not as a normal selection.
-          className={ineligibleIds.has(String(option.value)) ? 'employee-pill-invalid' : undefined}
-          withRemoveButton
-          onRemove={() => onRemove?.()}
-          removeButtonProps={{
-            'aria-label': `${t('actions.remove')} ${option.label}`,
-            'aria-hidden': false,
-          }}
-        >
-          {option.label}
-        </Pill>
-      )}
-    />
   );
 }
 
