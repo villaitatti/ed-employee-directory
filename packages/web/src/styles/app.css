@@ -26,6 +26,19 @@
 @theme {
   --font-sans: Aptos, 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
   --radius: 0.625rem;
+
+  /* Deriving an address is instantaneous, so the sweep across a field the form
+     just filled in is paced for the eye rather than for the work. */
+  --animate-field-shimmer: field-shimmer 1s ease-in-out;
+
+  @keyframes field-shimmer {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(100%);
+    }
+  }
 }
 
 @theme inline {

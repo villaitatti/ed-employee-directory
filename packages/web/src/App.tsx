@@ -28,7 +28,7 @@ import {
   UsersRound,
   X,
 } from 'lucide-react';
-import { FileInput, MultiSelect, Pill, Select, TextInput } from '@mantine/core';
+import { MultiSelect, Pill } from '@mantine/core';
 import { DateInput as MantineDateInput } from '@mantine/dates';
 import { modals, useModals } from '@mantine/modals';
 import dayjs from 'dayjs';
@@ -85,10 +85,16 @@ import {
 } from './employee-validation.js';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
 import { ActionTooltip } from './ui/ActionTooltip.js';
+import { ComboboxField } from './ui/ComboboxField.js';
+import { Field } from './ui/Field.js';
+import { FilePicker } from './ui/FilePicker.js';
+import { SelectField } from './ui/SelectField.js';
 import { SwitchField } from './ui/SwitchField.js';
 import { notifyError, notifySuccess, notifyValidation } from './ui/feedback.js';
 import type { Translate } from './i18n/types.js';
+import { cn } from '@/lib/utils';
 import { deriveWorkEmail } from './work-email.js';
 import { useEdAuth, wasSignedOut } from './auth/AuthProvider.js';
 import './styles/app.css';
@@ -831,31 +837,24 @@ function EmployeesPage() {
             placeholder={t('fields.search')}
           />
         </label>
-        <Select
-          className="toolbar-select"
-          value={filters.status || null}
-          onChange={(value) => setFilters((current) => ({ ...current, status: value ?? '' }))}
-          aria-label={t('fields.status')}
+        {/* Clearable, because "any status" and "any department" are the normal
+            state of this toolbar rather than an absence of an answer. */}
+        <ComboboxField
+          label={t('fields.status')}
           placeholder={t('fields.status')}
-          data={EMPLOYEE_STATUSES.map((status) => ({ value: status, label: t(`status.${status}`) }))}
-          searchable
-          clearable
-          openOnFocus
-          nothingFoundMessage={t('copy.noOptionsFound')}
-          comboboxProps={{ withinPortal: true, zIndex: 1200, transitionProps: { transition: 'pop', duration: 120 } }}
+          value={filters.status}
+          onChange={(status) => setFilters((current) => ({ ...current, status }))}
+          options={EMPLOYEE_STATUSES.map((status) => ({ value: status, label: t(`status.${status}`) }))}
         />
-        <Select
-          className="toolbar-select"
-          value={filters.departmentId || null}
-          onChange={(value) => setFilters((current) => ({ ...current, departmentId: value ?? '' }))}
-          aria-label={t('fields.department')}
+        <ComboboxField
+          label={t('fields.department')}
           placeholder={t('fields.department')}
-          data={(departments.data ?? []).map((department) => ({ value: department.id, label: department.name }))}
-          searchable
-          clearable
-          openOnFocus
-          nothingFoundMessage={t('copy.noOptionsFound')}
-          comboboxProps={{ withinPortal: true, zIndex: 1200, transitionProps: { transition: 'pop', duration: 120 } }}
+          value={filters.departmentId}
+          onChange={(departmentId) => setFilters((current) => ({ ...current, departmentId }))}
+          options={(departments.data ?? []).map((department) => ({
+            value: department.id,
+            label: department.name,
+          }))}
         />
       </div>
 
@@ -1113,11 +1112,6 @@ export function EmployeeForm({
   }, [isDirty, onCancel, t]);
 
   const dialogRef = useModalDialog(requestClose);
-  const comboboxProps = {
-    withinPortal: true,
-    zIndex: 1200,
-    transitionProps: { transition: 'pop' as const, duration: 120 },
-  };
 
   /**
    * Errors are silent until the first save attempt, then live: marking every
@@ -1145,15 +1139,17 @@ export function EmployeeForm({
    * halves together is what stops an input from turning red while its message
    * lives on a different field — the kind of drift 14 hand-written pairs invite.
    *
-   * The input only takes a boolean: Mantine renders the red border and sets
-   * `aria-invalid`, while the message stays in the Field's own slot so it looks
-   * the same next to the plain `<input>`s elsewhere in the app. Screen readers
-   * get it from the message's `role="alert"` and from the summary above the form
-   * — Mantine computes `aria-describedby` from its own internals and drops any
-   * value passed in, so per-field descriptions are not available to us here.
+   * The control gets the red border and `aria-invalid`; the message itself stays
+   * in the Field's own slot, and the control points at it. Mantine used to
+   * compute `aria-describedby` from its own internals and drop anything passed
+   * in, so per-field descriptions were unavailable and the message relied on
+   * `role="alert"` alone. On plain inputs they can be wired properly.
    */
   const fieldProps = (field: string) => ({ name: field, error: errorFor(field) });
-  const inputProps = (field: string) => ({ error: Boolean(errorFor(field)) });
+  const inputProps = (field: string) =>
+    errorFor(field)
+      ? ({ 'aria-invalid': true, 'aria-describedby': fieldErrorId(field) } as const)
+      : ({} as const);
 
   /** Puts the caret in the first field the operator has to fix. */
   const focusField = (field: string) => {
@@ -1239,7 +1235,7 @@ export function EmployeeForm({
               invisible from here. This is the durable list: it stays until the
               form is clean, and each entry jumps to the input it names. */}
           {invalidFields.length > 0 ? (
-            <div className="form-error-summary" role="alert">
+            <div data-slot="form-error-summary" className="form-error-summary" role="alert">
               <span className="form-error-summary-icon" aria-hidden="true">
                 <TriangleAlert size={18} />
               </span>
@@ -1282,7 +1278,7 @@ export function EmployeeForm({
                 required
                 {...fieldProps('employeeNumber')}
               >
-                <TextInput
+                <Input
                   required
                   autoFocus
                   data-autofocus
@@ -1300,7 +1296,7 @@ export function EmployeeForm({
                 required
                 {...fieldProps('firstName')}
               >
-                <TextInput
+                <Input
                   required
                   {...inputProps('firstName')}
                   aria-label={t('fields.firstName')}
@@ -1315,7 +1311,7 @@ export function EmployeeForm({
                 required
                 {...fieldProps('lastName')}
               >
-                <TextInput
+                <Input
                   required
                   {...inputProps('lastName')}
                   aria-label={t('fields.lastName')}
@@ -1339,19 +1335,15 @@ export function EmployeeForm({
                 />
               </Field>
               <Field
-                className={[
-                  'employee-identity-email',
-                  workEmailShimmer && 'field-shimmer',
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
+                className="employee-identity-email"
+                shimmer={workEmailShimmer}
                 icon={<Mail />}
                 label={t('fields.workEmail')}
                 hint={t('copy.workEmailHint')}
                 required
                 {...fieldProps('workEmail')}
               >
-                <TextInput
+                <Input
                   required
                   type="email"
                   inputMode="email"
@@ -1370,13 +1362,11 @@ export function EmployeeForm({
                 label={t('fields.preferredLanguage')}
                 hint={t('copy.preferredLanguageHint')}
               >
-                <Select
-                  aria-label={t('fields.preferredLanguage')}
+                <SelectField
+                  label={t('fields.preferredLanguage')}
                   value={draft.preferredLanguage}
-                  onChange={(value) => value && set('preferredLanguage', value as Language)}
-                  data={LANGUAGES.map((option) => ({ value: option, label: t(`language.${option}`) }))}
-                  allowDeselect={false}
-                  comboboxProps={comboboxProps}
+                  onChange={(value) => set('preferredLanguage', value as Language)}
+                  options={LANGUAGES.map((option) => ({ value: option, label: t(`language.${option}`) }))}
                 />
               </Field>
               <Field
@@ -1386,19 +1376,13 @@ export function EmployeeForm({
                 required
                 {...fieldProps('departmentId')}
               >
-                <Select
-                  required
-                  {...inputProps('departmentId')}
-                  aria-label={t('fields.department')}
+                <ComboboxField
+                  label={t('fields.department')}
                   placeholder={t('fields.select')}
-                  value={draft.departmentId || null}
-                  onChange={(value) => set('departmentId', value ?? '')}
-                  data={departments.map((department) => ({ value: department.id, label: department.name }))}
-                  searchable
-                  clearable
-                  openOnFocus
-                  nothingFoundMessage={t('copy.noOptionsFound')}
-                  comboboxProps={comboboxProps}
+                  value={draft.departmentId}
+                  onChange={(value) => set('departmentId', value)}
+                  options={departments.map((department) => ({ value: department.id, label: department.name }))}
+                  {...inputProps('departmentId')}
                 />
               </Field>
             </div>
@@ -1413,16 +1397,11 @@ export function EmployeeForm({
           >
             <div className="form-grid employee-employment-grid">
               <Field label={t('fields.status')}>
-                <Select
-                  aria-label={t('fields.status')}
+                <SelectField
+                  label={t('fields.status')}
                   value={draft.status}
-                  onChange={(value) => value && setStatus(value as EmployeeStatus)}
-                  data={EMPLOYEE_STATUSES.map((option) => ({ value: option, label: t(`status.${option}`) }))}
-                  searchable
-                  openOnFocus
-                  allowDeselect={false}
-                  nothingFoundMessage={t('copy.noOptionsFound')}
-                  comboboxProps={comboboxProps}
+                  onChange={(value) => setStatus(value as EmployeeStatus)}
+                  options={EMPLOYEE_STATUSES.map((option) => ({ value: option, label: t(`status.${option}`) }))}
                 />
               </Field>
               <Field
@@ -1463,7 +1442,7 @@ export function EmployeeForm({
                 required
                 {...fieldProps('fte')}
               >
-                <TextInput
+                <Input
                   required
                   inputMode="decimal"
                   {...inputProps('fte')}
@@ -1511,45 +1490,30 @@ export function EmployeeForm({
           >
             <div className="form-grid employee-classification-grid">
               <Field label={t('fields.contractType')}>
-                <Select
-                  aria-label={t('fields.contractType')}
+                <SelectField
+                  label={t('fields.contractType')}
                   value={draft.contractType}
-                  onChange={(value) => value && set('contractType', value as ContractType)}
-                  data={CONTRACT_TYPES.map((option) => ({ value: option, label: t(`contractType.${option}`) }))}
-                  searchable
-                  openOnFocus
-                  allowDeselect={false}
-                  nothingFoundMessage={t('copy.noOptionsFound')}
-                  comboboxProps={comboboxProps}
+                  onChange={(value) => set('contractType', value as ContractType)}
+                  options={CONTRACT_TYPES.map((option) => ({ value: option, label: t(`contractType.${option}`) }))}
                 />
               </Field>
               {draft.contractType === 'CONTRATTO_USA' && (
                 <Field label={t('fields.usaCategory')}>
-                  <Select
-                    aria-label={t('fields.usaCategory')}
+                  <SelectField
+                    label={t('fields.usaCategory')}
                     value={draft.usaCategory}
-                    onChange={(value) => value && set('usaCategory', value as UsaCategory)}
-                    data={USA_CATEGORIES.map((option) => ({ value: option, label: t(`usaCategory.${option}`) }))}
-                    searchable
-                    openOnFocus
-                    allowDeselect={false}
-                    nothingFoundMessage={t('copy.noOptionsFound')}
-                    comboboxProps={comboboxProps}
+                    onChange={(value) => set('usaCategory', value as UsaCategory)}
+                    options={USA_CATEGORIES.map((option) => ({ value: option, label: t(`usaCategory.${option}`) }))}
                   />
                 </Field>
               )}
               {draft.contractType !== 'CONTRATTO_USA' && (
                 <Field label={t('fields.tfr')}>
-                  <Select
-                    aria-label={t('fields.tfr')}
+                  <SelectField
+                    label={t('fields.tfr')}
                     value={draft.tfr}
-                    onChange={(value) => value && set('tfr', value as TfrOption)}
-                    data={TFR_OPTIONS.map((option) => ({ value: option, label: t(`tfr.${option}`) }))}
-                    searchable
-                    openOnFocus
-                    allowDeselect={false}
-                    nothingFoundMessage={t('copy.noOptionsFound')}
-                    comboboxProps={comboboxProps}
+                    onChange={(value) => set('tfr', value as TfrOption)}
+                    options={TFR_OPTIONS.map((option) => ({ value: option, label: t(`tfr.${option}`) }))}
                   />
                 </Field>
               )}
@@ -1646,7 +1610,7 @@ export function EmployeeForm({
                   required
                   {...fieldProps(`weekly.${key}`)}
                 >
-                  <TextInput
+                  <Input
                     required
                     inputMode="decimal"
                     {...inputProps(`weekly.${key}`)}
@@ -2048,18 +2012,13 @@ export function ImportPage() {
           previewImport.mutate();
         }}
       >
-        {/* A bare <input type="file"> renders the browser's own control, which
-            says "Choose File / No file chosen" in the *browser's* language on an
-            otherwise Italian page, and ignores the app's styling entirely. */}
-        <FileInput
+        <FilePicker
           className="import-file-input"
-          aria-label={t('copy.excelFileLabel')}
+          label={t('copy.excelFileLabel')}
           accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           placeholder={t('copy.excelFilePlaceholder')}
           value={file}
           onChange={chooseFile}
-          clearable
-          leftSection={<Upload size={16} />}
         />
         <button className="button primary" type="submit" disabled={!file || previewImport.isPending}>
           <FileCheck2 size={16} />
@@ -2436,9 +2395,8 @@ function EmployeeFormSection({
   const { t } = useTranslation();
   return (
     <fieldset
-      className={['form-section', 'employee-form-section', errorCount > 0 && 'section-has-errors']
-        .filter(Boolean)
-        .join(' ')}
+      {...(errorCount > 0 ? { 'data-has-errors': 'true' } : {})}
+      className={cn('form-section', 'employee-form-section', errorCount > 0 && 'section-has-errors')}
     >
       <legend className="visually-hidden">{title}</legend>
       <div className="employee-section-heading">
@@ -2472,7 +2430,7 @@ function EmployeeMultiSelect({
   labelOptions,
   value,
   onChange,
-  error,
+  'aria-invalid': invalid,
 }: {
   label: string;
   /** Selectable options for the dropdown (already filtered for eligibility). */
@@ -2483,7 +2441,8 @@ function EmployeeMultiSelect({
   value: string[];
   onChange: (value: string[]) => void;
   /** Draws the red border; the message lives on the surrounding Field. */
-  error?: boolean;
+  'aria-invalid'?: boolean;
+  'aria-describedby'?: string;
 }) {
   const { t } = useTranslation();
   const labelById = new Map(labelOptions.map((option) => [option.id, option]));
@@ -2507,7 +2466,7 @@ function EmployeeMultiSelect({
     <MultiSelect
       className="employee-multi-select"
       aria-label={label}
-      error={error ?? false}
+      error={invalid ?? false}
       placeholder={t('actions.addApprover')}
       value={value}
       onChange={onChange}
@@ -2570,7 +2529,7 @@ function DateInput({
   onChange,
   required,
   disabled,
-  error,
+  'aria-invalid': invalid,
 }: {
   ariaLabel: string;
   value: string;
@@ -2578,7 +2537,8 @@ function DateInput({
   required?: boolean;
   disabled?: boolean;
   /** Draws the red border. The message itself lives on the surrounding Field. */
-  error?: boolean;
+  'aria-invalid'?: boolean;
+  'aria-describedby'?: string;
 }) {
   const { t, i18n } = useTranslation();
   const locale = i18n.resolvedLanguage === 'en' ? 'en' : 'it';
@@ -2588,7 +2548,7 @@ function DateInput({
       aria-label={ariaLabel}
       required={required ?? false}
       disabled={disabled ?? false}
-      error={error ?? false}
+      error={invalid ?? false}
       value={value || null}
       onChange={(nextValue) => onChange(nextValue ?? '')}
       valueFormat={DATE_INPUT_DISPLAY_FORMAT}
@@ -2605,68 +2565,6 @@ function DateInput({
         transitionProps: { transition: 'pop', duration: 120 },
       }}
     />
-  );
-}
-
-function Field({
-  label,
-  icon,
-  children,
-  full,
-  className,
-  required,
-  hint,
-  error,
-  name,
-}: {
-  label: string;
-  icon?: React.ReactNode;
-  children: React.ReactNode;
-  full?: boolean;
-  className?: string;
-  required?: boolean;
-  hint?: string;
-  /** When set, the field is styled as invalid and shows this instead of the hint. */
-  error?: string | undefined;
-  /** Field key, so a failed save can scroll to and focus this input. */
-  name?: string;
-}) {
-  return (
-    <label
-      className={['field', full && 'field-full', error && 'field-invalid', className]
-        .filter(Boolean)
-        .join(' ')}
-      {...(name ? { 'data-field': name } : {})}
-    >
-      <span className="field-label">
-        {icon ? (
-          <span className="field-label-icon" aria-hidden="true">
-            {icon}
-          </span>
-        ) : null}
-        {label}
-        {required ? (
-          <span className="field-required" aria-hidden="true">
-            *
-          </span>
-        ) : null}
-      </span>
-      {children}
-      {/* The error replaces the hint rather than stacking under it: with both
-          visible the instruction and the complaint compete, and the row grows
-          enough to push the next field out of view. `role="alert"` so a screen
-          reader hears it when it appears after a rejected save; the id is what a
-          native input's `aria-describedby` points at (Mantine's own inputs
-          overwrite that attribute, so they rely on the alert instead). */}
-      {error ? (
-        <span className="field-error" role="alert" {...(name ? { id: fieldErrorId(name) } : {})}>
-          <TriangleAlert size={13} aria-hidden="true" />
-          {error}
-        </span>
-      ) : hint ? (
-        <span className="field-hint">{hint}</span>
-      ) : null}
-    </label>
   );
 }
 

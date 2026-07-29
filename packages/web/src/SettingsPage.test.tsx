@@ -136,7 +136,7 @@ describe('SettingsPage', () => {
       'Controlla i campi evidenziati',
       expect.objectContaining({ description: expect.stringContaining('Anni') })
     );
-    expect(container.querySelector('.field-invalid')).not.toBeNull();
+    expect(container.querySelector('[data-invalid="true"]')).not.toBeNull();
     expect(years).toHaveAttribute('aria-invalid', 'true');
   });
 

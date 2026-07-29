@@ -57,7 +57,7 @@ button:disabled {
   color: var(--ink);
 }
 
-input,
+input:not([data-slot]),
 select {
   width: 100%;
   min-height: 2.5rem;
@@ -68,7 +68,7 @@ select {
   padding: 0.55rem 0.7rem;
 }
 
-input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):focus,
+input:not([data-slot]):not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):focus,
 select:focus,
 button:focus-visible {
   outline: 2px solid color-mix(in oklch, var(--brand), white 35%);
@@ -435,16 +435,6 @@ button:focus-visible {
   gap: var(--space-xs);
 }
 
-.field {
-  display: grid;
-  gap: var(--space-xs);
-  align-content: start;
-}
-
-.field-full {
-  grid-column: 1 / -1;
-}
-
 /* Employee form */
 .employee-form-dialog {
   width: min(96vw, 92rem);
@@ -689,82 +679,6 @@ button:focus-visible {
   gap: var(--space-md);
 }
 
-.employee-form-dialog .field {
-  min-width: 0;
-  gap: var(--space-xs);
-}
-
-.employee-form-dialog .field-label {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  min-height: 1.25rem;
-  color: var(--ink-soft);
-  font-size: 0.79rem;
-  font-weight: 750;
-  letter-spacing: 0.005em;
-}
-
-/* The required marker means the same thing in every form, so it is styled once
-   here rather than only inside the employee dialog. */
-.field-required {
-  color: var(--danger);
-  font-size: 0.9rem;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.field-label-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: color-mix(in oklch, var(--brand), var(--ink-soft) 22%);
-  transition:
-    color 150ms ease,
-    transform 150ms ease;
-}
-
-.field-label-icon svg {
-  width: 1.05rem;
-  height: 1.05rem;
-  stroke-width: 2.15;
-}
-
-.employee-form-dialog .field:focus-within > .field-label,
-.employee-form-dialog .field:focus-within .field-label-icon {
-  color: var(--brand);
-}
-
-.employee-form-dialog .field:focus-within .field-label-icon {
-  transform: translateY(-1px);
-}
-
-.employee-form-dialog .app-input {
-  min-height: 2.75rem;
-  border-color: var(--line);
-  border-radius: 9px;
-  color: var(--ink);
-  background: var(--surface);
-  transition:
-    border-color 150ms ease,
-    box-shadow 150ms ease,
-    background 150ms ease;
-}
-
-.employee-form-dialog .app-input:hover:not(:disabled) {
-  border-color: color-mix(in oklch, var(--line), var(--brand) 28%);
-}
-
-.employee-form-dialog .app-input:focus,
-.employee-form-dialog .app-input:focus-within {
-  border-color: color-mix(in oklch, var(--brand), var(--line) 25%);
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--brand), transparent 90%);
-}
-
-.employee-form-dialog .app-input-section {
-  color: var(--ink-muted);
-}
-
 .employee-form-dialog .app-pill {
   border: 1px solid color-mix(in oklch, var(--brand), var(--line) 65%);
   color: var(--brand);
@@ -780,41 +694,8 @@ button:focus-visible {
   background: color-mix(in oklch, var(--warning-ink), var(--surface) 92%);
 }
 
-.employee-field-compact .app-input-wrapper {
+.employee-field-compact input {
   max-width: 10rem;
-}
-
-/* A light sweep across a field the form just filled in for you, so the value
-   does not appear out of nowhere. Purely decorative: the overlay never takes
-   pointer events, so the field stays editable while it plays. */
-.field-shimmer .app-input-wrapper {
-  position: relative;
-  overflow: hidden;
-  border-radius: 9px;
-}
-
-.field-shimmer .app-input-wrapper::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    color-mix(in oklch, var(--brand), transparent 86%) 50%,
-    transparent 100%
-  );
-  animation: field-shimmer 1s ease-in-out;
-}
-
-@keyframes field-shimmer {
-  from {
-    transform: translateX(-100%);
-  }
-
-  to {
-    transform: translateX(100%);
-  }
 }
 
 .retirement-control {
@@ -822,65 +703,6 @@ button:focus-visible {
   grid-template-columns: minmax(14rem, 19rem) minmax(15rem, max-content);
   align-items: center;
   gap: var(--space-lg);
-}
-
-.field-hint {
-  display: block;
-  max-width: 42rem;
-  color: var(--ink-muted);
-  font-size: 0.78rem;
-  font-weight: 500;
-  line-height: 1.45;
-}
-
-/* Sits where the hint would, one weight heavier and in the danger colour, so a
-   field that has failed reads differently from one that is merely explained. */
-.field-error {
-  display: flex;
-  align-items: start;
-  gap: 0.3rem;
-  max-width: 42rem;
-  margin: 0;
-  color: var(--danger);
-  font-size: 0.78rem;
-  font-weight: 650;
-  line-height: 1.45;
-}
-
-.field-error svg {
-  flex: none;
-  margin-top: 0.12rem;
-}
-
-/* Colour alone can't carry the state (contrast, colour blindness): the icon
-   above and the label's weight change say it too. */
-.field-invalid > .field-label,
-.field-invalid > .field-label .field-label-icon {
-  color: var(--danger);
-}
-
-.field-invalid > .field-label {
-  font-weight: 850;
-}
-
-/* Plain <input> fields (department name, retirement policy) aren't Mantine
-   components, so they don't get the library's invalid styling for free. */
-.field-invalid input[aria-invalid='true'] {
-  border-color: var(--danger);
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--danger), transparent 88%);
-}
-
-/* The whole marked field lights up faintly. A background tint rather than a
-   border keeps the grid from reflowing when an error appears or clears. Applies
-   everywhere a Field can be invalid — the employee dialog, the department dialog,
-   and the retirement-policy card — so the state reads the same in all three. */
-.field-invalid {
-  border-radius: 8px;
-  background: color-mix(in oklch, var(--danger), transparent 96%);
-  box-shadow: 0 0 0 var(--space-xs) color-mix(in oklch, var(--danger), transparent 96%);
-  transition:
-    background 160ms ease,
-    box-shadow 160ms ease;
 }
 
 /* Wider than sonner's default so a two-line "what to do next" doesn't wrap into
@@ -1097,12 +919,6 @@ button:focus-visible {
   justify-content: flex-end;
 }
 
-.field > .field-label {
-  color: var(--ink-soft);
-  font-size: 0.78rem;
-  font-weight: 800;
-}
-
 @keyframes section-in {
   from {
     opacity: 0;
@@ -1128,12 +944,6 @@ button:focus-visible {
   .modal-dialog,
   .employee-form-section {
     animation: none;
-  }
-
-  /* Hidden rather than merely un-animated: a static tint sitting over the field
-     for a second reads as a highlight nobody asked for. */
-  .field-shimmer .app-input-wrapper::after {
-    content: none;
   }
 }
 
@@ -1317,7 +1127,7 @@ button:focus-visible {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .employee-field-compact .app-input-wrapper {
+  .employee-field-compact input {
     max-width: none;
   }
 
