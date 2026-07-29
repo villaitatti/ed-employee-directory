@@ -47,6 +47,19 @@ export function parseEmployeeDateInput(input: string, locale: string): string | 
   return null;
 }
 
+/**
+ * How far the month and year dropdowns reach.
+ *
+ * One range for every date field rather than a tailored one each, because these
+ * bounds also gate what the grid will navigate to: narrow them per field and a
+ * date typed outside the window becomes one the calendar refuses to show. A
+ * century back covers any birth date; seventy years forward covers a projected
+ * retirement for someone hired today.
+ */
+const THIS_YEAR = new Date().getFullYear();
+const EARLIEST_MONTH = new Date(THIS_YEAR - 100, 0);
+const LATEST_MONTH = new Date(THIS_YEAR + 70, 11);
+
 /** `2026-03-02` as a local `Date`, which is what the calendar grid works in. */
 function toCalendarDate(value: string): Date | undefined {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
@@ -204,9 +217,16 @@ export function DateField({
           month={month}
           onMonthChange={setMonth}
           weekStartsOn={1}
+          // A birth date is forty years back. Stepping there a month at a time is
+          // not navigation, so the caption is two dropdowns; the arrows stay for
+          // the short hops either side of where you land.
+          captionLayout="dropdown"
+          startMonth={EARLIEST_MONTH}
+          endMonth={LATEST_MONTH}
           formatters={{
             formatCaption: (date: Date) => dayjs(date).locale(locale).format('MMMM YYYY'),
             formatWeekdayName: (date: Date) => dayjs(date).locale(locale).format('dd'),
+            formatMonthDropdown: (date: Date) => dayjs(date).locale(locale).format('MMMM'),
           }}
           labels={{
             // The whole date, in the operator's language: a day button announced
@@ -214,6 +234,8 @@ export function DateField({
             labelDayButton: (date: Date) => dayjs(date).locale(locale).format('D MMMM YYYY'),
             labelPrevious: () => t('actions.previousMonth'),
             labelNext: () => t('actions.nextMonth'),
+            labelMonthDropdown: () => t('actions.chooseMonth'),
+            labelYearDropdown: () => t('actions.chooseYear'),
           }}
         />
       </PopoverContent>

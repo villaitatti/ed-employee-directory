@@ -36,6 +36,8 @@ export const resources = {
         clearDate: 'Cancella la data',
         previousMonth: 'Mese precedente',
         nextMonth: 'Mese successivo',
+        chooseMonth: 'Scegli il mese',
+        chooseYear: 'Scegli l’anno',
       },
       fields: {
         firstName: 'Nome',
@@ -468,6 +470,8 @@ export const resources = {
         clearDate: 'Clear the date',
         previousMonth: 'Previous month',
         nextMonth: 'Next month',
+        chooseMonth: 'Choose the month',
+        chooseYear: 'Choose the year',
       },
       fields: {
         firstName: 'First Name',
