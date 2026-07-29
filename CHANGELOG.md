@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.10.0 - 2026-07-29
+
+### Changed
+
+- The web app is rebuilt on **shadcn/ui over Base UI, with Tailwind**, replacing Mantine and the 1,500-line hand-written stylesheet. Nothing about what the app does changes: the same fields, the same rules, the same messages, verified against 0.9.0 side by side in the browser. What changes is where the styling lives — the design tokens are declared once and the components read them, instead of the brand blue being restated in a Mantine palette because the library wrote a filled button's background as an inline custom property no stylesheet could override.
+- Every date in the app now reads the same way: localized `DD MMMM YYYY`. The tables previously used a format of their own — fixed en-GB "30 Jun 2050", chosen for column width — so an Italian operator read one spelling of a date in the directory and a different one in the field they were about to edit. The directory now says "30 giugno 2050", as the field does.
+- Closed enum lists (status, preferred language, contract type, TFR) are listboxes rather than searchable dropdowns. A text box to filter three options is a step, not a shortcut, and typing still jumps to an option. Department and the two directory filters stay searchable and clearable, because those lists grow and "no filter" is a real answer.
+- Confirmation prompts are announced as alert dialogs rather than plain dialogs, which is what they are: a question that has to be answered before anything else can happen.
+- The date field now shows a single calendar button — the one that opens the picker — where the previous control drew a decorative icon as well.
+
+### Fixed
+
+- Field-level error messages are now wired to their input with `aria-describedby`. Mantine computed that attribute from its own internals and discarded anything passed in, so per-field descriptions were unavailable and a screen reader had only the live-region announcement to go on.
+- A field's caption is no longer a `<label>` wrapping the entire control. It had been read out as part of the input's accessible name, error message included.
+- The remove button on an approver chip has an accessible name. It is an icon, and there is one per chip, so unnamed they were indistinguishable.
+
+### Internal
+
+- `App.tsx`, 2,462 lines, is split into per-route and per-form modules with the draft type, the date formatting and the shared hooks extracted alongside. This also breaks an import cycle: `employee-validation.ts` imported the draft type from `App.tsx`, which imported the validator back.
+- Invalid state is reported through data attributes (`data-invalid`, `data-has-errors`, `data-ineligible`) rather than styling classes, which is both the shadcn convention and a hook that survives having no stylesheet to name. The tests that pin those marks were updated, not removed.
+- `@mantine/core`, `@mantine/dates`, `@mantine/hooks` and `@mantine/modals` are gone. The CSS bundle drops from 348 kB to 98 kB.
+
 ## 0.9.0 - 2026-07-28
 
 ### Added

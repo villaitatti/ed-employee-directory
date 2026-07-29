@@ -173,11 +173,20 @@ export function AuditPage() {
                             key={change.key}
                           >
                             <span className="font-extrabold text-ink-soft">{change.label}</span>
-                            <span className="[overflow-wrap:anywhere]" title={t('audit.oldValue')}>
+                            {/* Which side is which was a `title` tooltip, which
+                                is browser-styled, slow, and — being hover-only —
+                                said nothing to anyone not using a mouse. The
+                                column order carries it visually; this carries it
+                                everywhere else. */}
+                            <span className="[overflow-wrap:anywhere]">
+                              <span className="sr-only">{t('audit.oldValue')}: </span>
                               {change.before}
                             </span>
-                            <span className="font-extrabold text-ink-muted">-&gt;</span>
-                            <span className="[overflow-wrap:anywhere]" title={t('audit.newValue')}>
+                            <span className="font-extrabold text-ink-muted" aria-hidden="true">
+                              -&gt;
+                            </span>
+                            <span className="[overflow-wrap:anywhere]">
+                              <span className="sr-only">{t('audit.newValue')}: </span>
                               {change.after}
                             </span>
                           </div>

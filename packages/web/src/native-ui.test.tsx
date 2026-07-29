@@ -3,6 +3,7 @@ import { screen } from '@testing-library/react';
 import { emptyEmployeeDraft } from './employee-draft.js';
 import { DepartmentForm, emptyDepartmentDraft } from './routes/DepartmentForm.js';
 import { EmployeeForm } from './routes/EmployeeForm.js';
+import { AuditPage } from './routes/AuditPage.js';
 import { ImportPage } from './routes/ImportPage.js';
 import { SettingsPage } from './routes/SettingsPage.js';
 import { renderWithProviders } from './test/render.js';
@@ -74,6 +75,43 @@ describe('no native browser form UI', () => {
     expect(years).toHaveAttribute('type', 'text');
     expect(years).toHaveAttribute('inputmode', 'numeric');
     expect(container.querySelector('input[type="number"]')).toBeNull();
+    vi.unstubAllGlobals();
+  });
+
+  it('leaves no native title tooltips to hover for', async () => {
+    // `title` is the browser's tooltip: styled by the browser, a second late, and
+    // hover-only, so it says nothing at all to anyone on a keyboard. The audit
+    // table was the last place using it, to label the before/after columns.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: 'audit_1',
+                actorSub: 'auth0|1',
+                actorEmail: 'hr@itatti.harvard.edu',
+                entityType: 'EMPLOYEE',
+                entityId: 'emp_1',
+                employeeNumber: 1001,
+                action: 'UPDATE',
+                before: { firstName: 'Ada' },
+                after: { firstName: 'Adalgisa' },
+                requestId: 'req_1',
+                importBatchId: null,
+                createdAt: '2026-07-29T09:00:00.000Z',
+              },
+            ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        )
+      )
+    );
+    const { container } = renderWithProviders(<AuditPage />);
+
+    expect((await screen.findAllByText(/Adalgisa/)).length).toBeGreaterThan(0);
+    expect(container.querySelector('[title]')).toBeNull();
     vi.unstubAllGlobals();
   });
 
