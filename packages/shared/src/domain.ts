@@ -162,16 +162,39 @@ export function normalizeWorkEmail(value: string): string {
   return value.trim().toLocaleLowerCase('en-US');
 }
 
-export function validateStatusDates(input: StatusDateInput): string[] {
-  const errors: string[] = [];
+/**
+ * A cross-field date rule, tagged with the form field the operator has to fix.
+ * The field travels with the message so a rejected save can highlight the input
+ * instead of only naming it in a sentence.
+ */
+export type StatusDateError = {
+  field: 'hireDate' | 'terminationDate';
+  code: 'HIRE_DATE_REQUIRED' | 'TERMINATION_DATE_REQUIRED' | 'TERMINATION_BEFORE_HIRE';
+  message: string;
+};
+
+export function validateStatusDates(input: StatusDateInput): StatusDateError[] {
+  const errors: StatusDateError[] = [];
   if (input.status === 'ATTIVO' && !input.hireDate) {
-    errors.push('Active employees require a hire date.');
+    errors.push({
+      field: 'hireDate',
+      code: 'HIRE_DATE_REQUIRED',
+      message: 'Active employees require a hire date.',
+    });
   }
   if (input.status === 'CESSATO' && !input.terminationDate) {
-    errors.push('Terminated employees require a termination date.');
+    errors.push({
+      field: 'terminationDate',
+      code: 'TERMINATION_DATE_REQUIRED',
+      message: 'Terminated employees require a termination date.',
+    });
   }
   if (input.hireDate && input.terminationDate && input.terminationDate < input.hireDate) {
-    errors.push('Termination date cannot be before hire date.');
+    errors.push({
+      field: 'terminationDate',
+      code: 'TERMINATION_BEFORE_HIRE',
+      message: 'Termination date cannot be before hire date.',
+    });
   }
   return errors;
 }

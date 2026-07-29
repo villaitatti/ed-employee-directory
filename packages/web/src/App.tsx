@@ -20,13 +20,26 @@ import {
   Settings,
   ShieldCheck,
   Trash2,
+  TriangleAlert,
   Upload,
   UserRound,
   UserRoundPlus,
   UsersRound,
   X,
 } from 'lucide-react';
-import { ActionIcon, Button, Checkbox, MultiSelect, Pill, Select, Switch, Text, TextInput } from '@mantine/core';
+import {
+  ActionIcon,
+  Button,
+  Checkbox,
+  FileInput,
+  MultiSelect,
+  Pill,
+  Select,
+  Switch,
+  Text,
+  TextInput,
+  Tooltip,
+} from '@mantine/core';
 import { DateInput as MantineDateInput } from '@mantine/dates';
 import { modals, useModals } from '@mantine/modals';
 import dayjs from 'dayjs';
@@ -34,7 +47,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast, Toaster } from 'sonner';
+import { Toaster } from 'sonner';
 import {
   CONTRACT_TYPES,
   DEFAULT_RETIREMENT_POLICY,
@@ -67,11 +80,25 @@ import {
   type WeekdayKey,
 } from '@itatti/shared';
 import { createApiClient } from './api/client.js';
+import { describeError } from './api/error-messages.js';
+import {
+  FIELD_LABEL_KEYS,
+  FIELD_SECTIONS,
+  fieldErrorId,
+  isDecimalInteger,
+  fieldLabels,
+  firstErrorField,
+  noServerErrors,
+  orderedErrorFields,
+  validateEmployeeDraft,
+  type FieldErrors,
+  type ServerErrors,
+} from './employee-validation.js';
+import { notifyError, notifySuccess, notifyValidation } from './ui/feedback.js';
+import type { Translate } from './i18n/types.js';
 import { deriveWorkEmail } from './work-email.js';
 import { useEdAuth, wasSignedOut } from './auth/AuthProvider.js';
 import './styles/app.css';
-
-type Translate = (key: string) => string;
 
 export type EmployeeDraft = {
   id?: string;
@@ -167,6 +194,17 @@ function formatTableDate(value: string | null | undefined): string {
   if (!value) return '';
   const date = parseDateOnlyToUtc(value);
   return date ? tableDateFormatter.format(date) : value;
+}
+
+/**
+ * A date written the way the form's own inputs write it: localized, `DD MMMM
+ * YYYY`. Deliberately not `formatTableDate`, which is fixed en-GB abbreviations
+ * chosen for dense table columns — prose that quotes a date the operator is
+ * looking at in a field has to agree with that field, in their language.
+ */
+function formatFieldDate(value: string, locale: string): string {
+  const parsed = dayjs(value, 'YYYY-MM-DD', true);
+  return parsed.isValid() ? parsed.locale(locale).format(DATE_INPUT_DISPLAY_FORMAT) : value;
 }
 
 function formatTableDateTime(value: string | null | undefined): string {
@@ -324,6 +362,11 @@ function employeeDirtyFingerprint(draft: EmployeeDraft): string {
   return JSON.stringify(draft.retirementDateOverridden ? draft : { ...draft, retirementDate: '' });
 }
 
+/** "Surname Forename", the order the directory table and dialog titles use. */
+function employeeFullName(employee: Pick<Employee, 'firstName' | 'lastName'>): string {
+  return `${employee.lastName} ${employee.firstName}`.trim();
+}
+
 function approvalSummary(employee: Employee, t: Translate): string {
   if (employee.status !== 'ATTIVO') return '-';
   const responsabili = employee.approvalRoles.responsabili.length;
@@ -355,10 +398,17 @@ function useDebounced<T>(value: T, delayMs = 250): T {
  *  (including an expired session) render as a silently empty table. */
 function QueryError({ error, onRetry }: { error: unknown; onRetry: () => void }) {
   const { t } = useTranslation();
-  const message = error instanceof Error && error.message ? error.message : t('copy.loadError');
+  const described = describeError(error, t);
+  // A failed *read* has a different next step from a failed write: the catalogue
+  // description covers the codes that speak for themselves (expired session,
+  // deleted record), and the retry hint covers the rest.
+  const hint = described.reassure ? t('copy.loadErrorHint') : described.description;
   return (
     <div className="data-error" role="alert">
-      <span>{message}</span>
+      <span>
+        <strong>{described.title}</strong>
+        {hint ? <span className="data-error-hint">{hint}</span> : null}
+      </span>
       <button type="button" className="button ghost" onClick={onRetry}>
         {t('actions.retry')}
       </button>
@@ -547,7 +597,11 @@ function Shell() {
 
   return (
     <>
-      <Toaster richColors position="top-right" />
+      {/* Toasts carry a title plus a "what to do next" line, so they need room to
+          breathe and a way out that isn't waiting: hence the wider panel (see
+          .ed-toast) and the close button. Errors also override the duration —
+          see notifyError. */}
+      <Toaster richColors closeButton position="top-right" toastOptions={{ className: 'ed-toast' }} />
       <div className="app-shell">
         <header className="topbar">
           <div className="identity">
@@ -558,13 +612,32 @@ function Shell() {
             </div>
           </div>
           <div className="topbar-actions">
-            <button className="icon-button" type="button" onClick={toggleLanguage} title={t('actions.language')}>
-              <Languages size={18} />
-              <span>{i18n.language.toUpperCase()}</span>
-            </button>
-            <button className="icon-button" type="button" onClick={auth.logout} title={t('actions.signOut')}>
-              <LogOut size={18} />
-            </button>
+            {/* Mantine tooltips rather than `title`: the native one is
+                browser-styled, appears after a second-long delay, and can't be
+                made to match the rest of the chrome. `aria-label` carries the
+                accessible name that `title` used to supply — the sign-out button
+                is icon-only and would otherwise be unnamed. */}
+            <Tooltip label={t('actions.language')} withArrow position="bottom">
+              <button
+                className="icon-button"
+                type="button"
+                onClick={toggleLanguage}
+                aria-label={t('actions.language')}
+              >
+                <Languages size={18} />
+                <span>{i18n.language.toUpperCase()}</span>
+              </button>
+            </Tooltip>
+            <Tooltip label={t('actions.signOut')} withArrow position="bottom">
+              <button
+                className="icon-button"
+                type="button"
+                onClick={auth.logout}
+                aria-label={t('actions.signOut')}
+              >
+                <LogOut size={18} />
+              </button>
+            </Tooltip>
           </div>
         </header>
         <div className="workbench">
@@ -615,6 +688,11 @@ function EmployeesPage() {
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState({ q: '', status: '', departmentId: '' });
   const [draft, setDraft] = useState<EmployeeDraft | null>(null);
+  // Field errors the *server* raised on the last save. Kept here rather than in
+  // the form because only the mutation sees them; the form merges them with its
+  // own client-side findings so both kinds highlight identically. `rejectionId`
+  // counts rejections rather than describing them — see ServerErrors.
+  const [serverErrors, setServerErrors] = useState<ServerErrors>(noServerErrors);
   const departments = useDepartments(api);
   const debouncedQ = useDebounced(filters.q);
   const employeeOptions = useQuery({
@@ -633,8 +711,10 @@ function EmployeesPage() {
 
   const saveEmployee = useMutation({
     mutationFn: async (input: EmployeeDraft) => {
+      // The form validates before it calls this, so an unparseable schedule here
+      // means a bug rather than operator input — but never send it to the server.
       const weeklySchedule = parseDraftWeeklySchedule(input.weeklySchedule);
-      if (!weeklySchedule) throw new Error(t('copy.invalidWeeklySchedule'));
+      if (!weeklySchedule) throw new Error(t('validation.weeklyHours'));
       const payload = {
         employeeNumber: Number(input.employeeNumber),
         firstName: input.firstName,
@@ -660,36 +740,52 @@ function EmployeesPage() {
       };
       return input.id ? api.updateEmployee(input.id, payload) : api.createEmployee(payload);
     },
-    onSuccess: () => {
+    onSuccess: (employee, input) => {
       setDraft(null);
-      toast.success(t('copy.saved'));
+      setServerErrors(noServerErrors);
+      const name = employeeFullName(employee);
+      notifySuccess(
+        t(input.id ? 'copy.employeeUpdated' : 'copy.employeeCreated'),
+        t(input.id ? 'copy.employeeUpdatedBody' : 'copy.employeeCreatedBody', { name })
+      );
       void queryClient.invalidateQueries({ queryKey: ['employees'] });
       void queryClient.invalidateQueries({ queryKey: ['employee-options'] });
       void queryClient.invalidateQueries({ queryKey: ['audit'] });
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : t('copy.error')),
+    onError: (error) => {
+      // The toast says what went wrong; the field map makes the form show *where*.
+      // Notified outside the updater: it renders a toast, and React is free to
+      // invoke a state updater more than once.
+      const { fieldErrors } = notifyError(error, t, { unsaved: true });
+      setServerErrors((previous) => ({ fields: fieldErrors, rejectionId: previous.rejectionId + 1 }));
+    },
   });
 
   const deleteEmployee = useMutation({
-    mutationFn: api.deleteEmployee,
-    onSuccess: () => {
-      toast.success(t('copy.deleted'));
+    mutationFn: (employee: Employee) => api.deleteEmployee(employee.id),
+    onSuccess: (_result, employee) => {
+      notifySuccess(t('copy.employeeDeleted'), t('copy.employeeDeletedBody', { name: employeeFullName(employee) }));
       void queryClient.invalidateQueries({ queryKey: ['employees'] });
       void queryClient.invalidateQueries({ queryKey: ['employee-options'] });
       void queryClient.invalidateQueries({ queryKey: ['audit'] });
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : t('copy.error')),
+    onError: (error) => notifyError(error, t, { unsaved: true }),
   });
 
   const confirmDeleteEmployee = (employee: Employee) => {
     if (deleteEmployee.isPending) return;
     openConfirmation({
       title: t('copy.confirmationTitle'),
-      message: t('copy.confirmDeleteEmployee'),
+      // Name the record being destroyed: on a table of similar rows, "this
+      // employee" is not enough to catch a misclick before it is irreversible.
+      message: t('copy.confirmDeleteEmployee', {
+        name: employeeFullName(employee),
+        employeeNumber: employee.employeeNumber,
+      }),
       confirmLabel: t('actions.delete'),
       cancelLabel: t('actions.cancel'),
       destructive: true,
-      onConfirm: () => deleteEmployee.mutate(employee.id),
+      onConfirm: () => deleteEmployee.mutate(employee),
     });
   };
 
@@ -708,8 +804,11 @@ function EmployeesPage() {
       link.click();
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      // A download that starts in the background is otherwise indistinguishable
+      // from a button that did nothing.
+      notifySuccess(t('copy.exportStarted'), t('copy.exportStartedBody'));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('copy.error'));
+      notifyError(error, t);
     }
   };
 
@@ -805,16 +904,17 @@ function EmployeesPage() {
                   <button className="text-button" type="button" onClick={() => setDraft(toEmployeeDraft(employee))}>
                     {t('actions.edit')}
                   </button>
-                  <button
-                    className="icon-danger"
-                    type="button"
-                    onClick={() => confirmDeleteEmployee(employee)}
-                    disabled={deleteEmployee.isPending}
-                    title={t('actions.delete')}
-                    aria-label={t('actions.delete')}
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  <Tooltip label={t('actions.delete')} withArrow position="left">
+                    <button
+                      className="icon-danger"
+                      type="button"
+                      onClick={() => confirmDeleteEmployee(employee)}
+                      disabled={deleteEmployee.isPending}
+                      aria-label={t('actions.delete')}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </Tooltip>
                 </td>
               </tr>
             ))}
@@ -831,7 +931,11 @@ function EmployeesPage() {
           draft={draft}
           departments={departments.data ?? []}
           employeeOptions={employeeOptions.data ?? []}
-          onCancel={() => setDraft(null)}
+          serverErrors={serverErrors}
+          onCancel={() => {
+            setDraft(null);
+            setServerErrors(noServerErrors);
+          }}
           onChange={setDraft}
           onSave={() => saveEmployee.mutate(draft)}
           isSaving={saveEmployee.isPending}
@@ -845,6 +949,7 @@ export function EmployeeForm({
   draft,
   departments,
   employeeOptions,
+  serverErrors,
   onCancel,
   onChange,
   onSave,
@@ -853,12 +958,17 @@ export function EmployeeForm({
   draft: EmployeeDraft;
   departments: Department[];
   employeeOptions: EmployeeOption[];
+  /** Field errors the last save came back with; merged with the local ones. */
+  serverErrors?: ServerErrors;
   onCancel: () => void;
   onChange: (draft: EmployeeDraft) => void;
   onSave: () => void;
   isSaving: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  // Same resolution as the DateInput's, so a date quoted in prose and the same
+  // date shown in the field can never disagree.
+  const dateLocale = i18n.resolvedLanguage === 'en' ? 'en' : 'it';
   const api = useApi();
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.settings });
   const retirementPolicy = settings.data?.retirementPolicy ?? DEFAULT_RETIREMENT_POLICY;
@@ -872,7 +982,23 @@ export function EmployeeForm({
     ? draft.retirementDate
     : projectedRetirementDate;
 
+  /**
+   * A server verdict is about the value that was submitted ("this address is
+   * already taken"), so editing that field makes it obsolete. Fields touched
+   * since the rejection stop showing it; a fresh rejection resets the set.
+   */
+  const [editedSinceRejection, setEditedSinceRejection] = useState<ReadonlySet<string>>(new Set());
+  // Keyed on the rejection *count*, not on the payload or the object identity.
+  // Identity would reset the set on every render for a caller passing a fresh
+  // literal; payload equality would fail to reset when the operator edits a
+  // duplicate value, changes it back, and saves again — that second verdict is
+  // byte-identical to the first, so the field would stay silently unmarked.
+  useEffect(() => setEditedSinceRejection(new Set()), [serverErrors?.rejectionId]);
+  const markEdited = (...fields: string[]) =>
+    setEditedSinceRejection((current) => new Set([...current, ...fields]));
+
   const set = <K extends keyof EmployeeDraft>(key: K, value: EmployeeDraft[K]) => {
+    markEdited(String(key));
     onChange({ ...draft, [key]: value });
   };
 
@@ -892,9 +1018,12 @@ export function EmployeeForm({
    * on the very next render.
    */
   const setName = (key: 'firstName' | 'lastName', value: string) => {
+    markEdited(key);
     const next = { ...draft, [key]: value };
     const suggestion = deriveWorkEmail(next.firstName, next.lastName);
     if (!workEmailAuthored && suggestion && suggestion !== next.workEmail) {
+      // The suggestion rewrites the address, so a rejection about it is obsolete too.
+      markEdited('workEmail');
       next.workEmail = suggestion;
       setWorkEmailShimmer(true);
       // Deriving the address is instantaneous, so the shimmer is paced for the eye
@@ -905,15 +1034,18 @@ export function EmployeeForm({
     onChange(next);
   };
   const setWeeklySchedule = (key: WeekdayKey, value: string) => {
+    markEdited(`weekly.${key}`, 'weeklySchedule');
     onChange({ ...draft, weeklySchedule: { ...draft.weeklySchedule, [key]: value } });
   };
   const setApprovalRoleIds = (key: keyof EmployeeDraft['approvalRoleIds'], value: string[]) => {
+    markEdited(key);
     onChange({ ...draft, approvalRoleIds: { ...draft.approvalRoleIds, [key]: value } });
   };
   const setStatus = (status: EmployeeStatus) => {
     // New active employees have no cessation date yet — clear any leftover value
     // from briefly selecting Cessato during create.
     if (isCreate && status === 'ATTIVO') {
+      markEdited('status', 'terminationDate');
       onChange({ ...draft, status, terminationDate: '' });
       return;
     }
@@ -939,7 +1071,9 @@ export function EmployeeForm({
     if (draft.retirementDateOverridden && draft.retirementDate) {
       openConfirmation({
         title: t('copy.confirmationTitle'),
-        message: t('copy.confirmUnconfirmRetirement'),
+        message: t('copy.confirmUnconfirmRetirement', {
+          date: formatFieldDate(draft.retirementDate, dateLocale),
+        }),
         confirmLabel: t('actions.confirm'),
         cancelLabel: t('actions.cancel'),
         onConfirm: () => set('retirementDateOverridden', false),
@@ -956,8 +1090,10 @@ export function EmployeeForm({
   const substituteOptions = approverOptions.filter((option) => option.canBeSubstituteResponsible);
   // Active employees must have a Responsabile — except while bootstrapping, when
   // nobody is flagged as Responsabile-eligible yet and there is no one to pick.
+  // Both requirements follow the server's bootstrap exception: enforced only once
+  // somebody else is eligible to be picked for the role.
   const responsabileRequired = draft.status === 'ATTIVO' && responsabileOptions.length > 0;
-  const missingResponsabile = responsabileRequired && draft.approvalRoleIds.responsabileIds.length === 0;
+  const substituteRequired = draft.status === 'ATTIVO' && substituteOptions.length > 0;
   const weeklyScheduleMinutes = parseDraftWeeklySchedule(draft.weeklySchedule);
   const weeklyTotal = weeklyScheduleMinutes
     ? WEEKDAY_KEYS.reduce((total, key) => total + weeklyScheduleMinutes[key], 0)
@@ -992,6 +1128,73 @@ export function EmployeeForm({
     transitionProps: { transition: 'pop' as const, duration: 120 },
   };
 
+  /**
+   * Errors are silent until the first save attempt, then live: marking every
+   * empty field red the moment a blank form opens is noise, but once the operator
+   * has been told what is wrong, the marks have to clear as they fix each one.
+   */
+  const [submitted, setSubmitted] = useState(false);
+  const localErrors = submitted
+    ? validateEmployeeDraft(draft, { responsabileRequired, substituteRequired }, t)
+    : {};
+  // A server verdict outlives the local re-check (uniqueness is something only the
+  // server knows) until its field is edited, but a local error about the same
+  // field is the more specific of the two and wins.
+  const fieldErrors: FieldErrors = {
+    ...Object.fromEntries(
+      Object.entries(serverErrors?.fields ?? {}).filter(([field]) => !editedSinceRejection.has(field))
+    ),
+    ...localErrors,
+  };
+  const errorFor = (field: string) => fieldErrors[field];
+  const invalidFields = orderedErrorFields(fieldErrors);
+
+  /**
+   * Wiring a field and its input to the same error, in one place. Keeping the two
+   * halves together is what stops an input from turning red while its message
+   * lives on a different field — the kind of drift 14 hand-written pairs invite.
+   *
+   * The input only takes a boolean: Mantine renders the red border and sets
+   * `aria-invalid`, while the message stays in the Field's own slot so it looks
+   * the same next to the plain `<input>`s elsewhere in the app. Screen readers
+   * get it from the message's `role="alert"` and from the summary above the form
+   * — Mantine computes `aria-describedby` from its own internals and drops any
+   * value passed in, so per-field descriptions are not available to us here.
+   */
+  const fieldProps = (field: string) => ({ name: field, error: errorFor(field) });
+  const inputProps = (field: string) => ({ error: Boolean(errorFor(field)) });
+
+  /** Puts the caret in the first field the operator has to fix. */
+  const focusField = (field: string) => {
+    const dialog = dialogRef.current;
+    const target = dialog?.querySelector<HTMLElement>(`[data-field="${field}"] input, [data-field="${field}"] button`);
+    target?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    target?.focus({ preventScroll: true });
+  };
+
+  /** How many problems sit in each section, for the badge on its heading. */
+  const sectionErrorCount = (section: string) =>
+    invalidFields.filter((field) => FIELD_SECTIONS[field] === section).length;
+
+  const handleSubmit = () => {
+    setSubmitted(true);
+    const errors = validateEmployeeDraft(draft, { responsabileRequired, substituteRequired }, t);
+    const fields = Object.keys(errors);
+    if (fields.length > 0) {
+      notifyValidation(
+        t('validation.summaryTitle'),
+        t('validation.summaryBody', {
+          count: fields.length,
+          fields: fieldLabels(orderedErrorFields(errors), t),
+        })
+      );
+      const first = firstErrorField(errors);
+      if (first) focusField(first);
+      return;
+    }
+    onSave();
+  };
+
   return (
     <div
       className="modal-overlay"
@@ -1007,15 +1210,14 @@ export function EmployeeForm({
         role="dialog"
         aria-modal="true"
         aria-label={draft.id ? `${draft.lastName} ${draft.firstName}` : t('actions.createEmployee')}
+        // Native constraint validation is suppressed in favour of our own: the
+        // browser's bubble speaks the *browser's* language, points at one field
+        // at a time, and can't express the cross-field rules (hire date required
+        // when Active, and so on). The `required` attributes stay for a11y.
+        noValidate
         onSubmit={(event) => {
           event.preventDefault();
-          // The Responsabile field renders its own inline requirement hint; block
-          // the save so the server's RESPONSABILE_REQUIRED rule can't reject it.
-          if (missingResponsabile) {
-            toast.error(t('copy.responsabileRequired'));
-            return;
-          }
-          onSave();
+          handleSubmit();
         }}
       >
         <header className="modal-header employee-form-header">
@@ -1043,11 +1245,44 @@ export function EmployeeForm({
         </header>
 
         <div className="modal-body employee-form-body">
+          {/* A toast is gone in ten seconds and a red field six sections down is
+              invisible from here. This is the durable list: it stays until the
+              form is clean, and each entry jumps to the input it names. */}
+          {invalidFields.length > 0 ? (
+            <div className="form-error-summary" role="alert">
+              <span className="form-error-summary-icon" aria-hidden="true">
+                <TriangleAlert size={18} />
+              </span>
+              <div>
+                <strong>
+                  {t('validation.summaryHeading', { count: invalidFields.length })}
+                </strong>
+                <ul>
+                  {invalidFields.map((field) => (
+                    <li key={field}>
+                      <button
+                        type="button"
+                        onClick={() => focusField(field)}
+                        aria-label={t('validation.jumpToField', {
+                          field: t(FIELD_LABEL_KEYS[field] ?? field),
+                        })}
+                      >
+                        {t(FIELD_LABEL_KEYS[field] ?? field)}
+                      </button>
+                      <span>{fieldErrors[field]}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          ) : null}
+
           <EmployeeFormSection
             number="01"
             icon={<ContactRound />}
             title={t('sections.identity')}
             description={t('copy.identitySectionHint')}
+            errorCount={sectionErrorCount('identity')}
           >
             <div className="form-grid employee-identity-grid">
               <Field
@@ -1055,12 +1290,14 @@ export function EmployeeForm({
                 icon={<Hash />}
                 label={t('fields.employeeNumber')}
                 required
+                {...fieldProps('employeeNumber')}
               >
                 <TextInput
                   required
                   autoFocus
                   data-autofocus
                   inputMode="numeric"
+                  {...inputProps('employeeNumber')}
                   aria-label={t('fields.employeeNumber')}
                   value={draft.employeeNumber}
                   onChange={(event) => set('employeeNumber', event.currentTarget.value)}
@@ -1071,9 +1308,11 @@ export function EmployeeForm({
                 icon={<UserRound />}
                 label={t('fields.firstName')}
                 required
+                {...fieldProps('firstName')}
               >
                 <TextInput
                   required
+                  {...inputProps('firstName')}
                   aria-label={t('fields.firstName')}
                   value={draft.firstName}
                   onChange={(event) => setName('firstName', event.currentTarget.value)}
@@ -1084,9 +1323,11 @@ export function EmployeeForm({
                 icon={<UserRound />}
                 label={t('fields.lastName')}
                 required
+                {...fieldProps('lastName')}
               >
                 <TextInput
                   required
+                  {...inputProps('lastName')}
                   aria-label={t('fields.lastName')}
                   value={draft.lastName}
                   onChange={(event) => setName('lastName', event.currentTarget.value)}
@@ -1097,9 +1338,11 @@ export function EmployeeForm({
                 icon={<CalendarDays />}
                 label={t('fields.birthDate')}
                 required
+                {...fieldProps('birthDate')}
               >
                 <DateInput
                   required
+                  {...inputProps('birthDate')}
                   ariaLabel={t('fields.birthDate')}
                   value={draft.birthDate}
                   onChange={(value) => set('birthDate', value)}
@@ -1116,11 +1359,13 @@ export function EmployeeForm({
                 label={t('fields.workEmail')}
                 hint={t('copy.workEmailHint')}
                 required
+                {...fieldProps('workEmail')}
               >
                 <TextInput
                   required
                   type="email"
                   inputMode="email"
+                  {...inputProps('workEmail')}
                   aria-label={t('fields.workEmail')}
                   value={draft.workEmail}
                   onChange={(event) => {
@@ -1149,9 +1394,11 @@ export function EmployeeForm({
                 icon={<Building2 />}
                 label={t('fields.department')}
                 required
+                {...fieldProps('departmentId')}
               >
                 <Select
                   required
+                  {...inputProps('departmentId')}
                   aria-label={t('fields.department')}
                   placeholder={t('fields.select')}
                   value={draft.departmentId || null}
@@ -1172,6 +1419,7 @@ export function EmployeeForm({
             icon={<BriefcaseBusiness />}
             title={t('sections.employment')}
             description={t('copy.employmentSectionHint')}
+            errorCount={sectionErrorCount('employment')}
           >
             <div className="form-grid employee-employment-grid">
               <Field label={t('fields.status')}>
@@ -1187,8 +1435,15 @@ export function EmployeeForm({
                   comboboxProps={comboboxProps}
                 />
               </Field>
-              <Field icon={<CalendarDays />} label={t('fields.hireDate')} hint={t('copy.hireDateHint')}>
+              <Field
+                icon={<CalendarDays />}
+                label={t('fields.hireDate')}
+                hint={t('copy.hireDateHint')}
+                required={draft.status === 'ATTIVO'}
+                {...fieldProps('hireDate')}
+              >
                 <DateInput
+                  {...inputProps('hireDate')}
                   ariaLabel={t('fields.hireDate')}
                   value={draft.hireDate}
                   onChange={(value) => set('hireDate', value)}
@@ -1199,8 +1454,11 @@ export function EmployeeForm({
                   icon={<CalendarDays />}
                   label={t('fields.terminationDate')}
                   hint={t('copy.terminationDateHint')}
+                  required={draft.status === 'CESSATO'}
+                  {...fieldProps('terminationDate')}
                 >
                   <DateInput
+                    {...inputProps('terminationDate')}
                     ariaLabel={t('fields.terminationDate')}
                     value={draft.terminationDate}
                     onChange={(value) => set('terminationDate', value)}
@@ -1213,10 +1471,12 @@ export function EmployeeForm({
                 label={t('fields.fte')}
                 hint={t('copy.fteHint')}
                 required
+                {...fieldProps('fte')}
               >
                 <TextInput
                   required
                   inputMode="decimal"
+                  {...inputProps('fte')}
                   aria-label={t('fields.fte')}
                   value={draft.fte}
                   onChange={(event) => set('fte', event.currentTarget.value)}
@@ -1232,11 +1492,13 @@ export function EmployeeForm({
                 })}
                 required={draft.retirementDateOverridden}
                 full
+                {...fieldProps('retirementDate')}
               >
                 <div className="retirement-control">
                   <DateInput
                     ariaLabel={t('fields.retirementDate')}
                     required={draft.retirementDateOverridden}
+                    {...inputProps('retirementDate')}
                     disabled={!draft.retirementDateOverridden}
                     value={retirementDateValue}
                     onChange={(value) => set('retirementDate', value)}
@@ -1310,6 +1572,7 @@ export function EmployeeForm({
             icon={<ClipboardList />}
             title={t('sections.approvalWorkflow')}
             description={t('copy.approvalSectionHint')}
+            errorCount={sectionErrorCount('approval')}
           >
             <div className="form-grid employee-approval-grid">
               <Field label={t('fields.preApprovers')}>
@@ -1324,21 +1587,34 @@ export function EmployeeForm({
               <Field
                 label={t('fields.responsabili')}
                 required={responsabileRequired}
-                {...(missingResponsabile ? { hint: t('copy.responsabileRequired') } : {})}
+                // Two different jobs, so two different sentences: before a save
+                // attempt this is a standing instruction like every other field's
+                // hint, and only afterwards does it become a red complaint. Using
+                // the same words for both is what made the grey one read as an
+                // unhighlighted error.
+                {...(responsabileRequired ? { hint: t('copy.responsabileHint') } : {})}
+                {...fieldProps('responsabileIds')}
               >
                 <EmployeeMultiSelect
                   label={t('fields.responsabili')}
                   options={responsabileOptions}
                   labelOptions={employeeOptions}
+                  {...inputProps('responsabileIds')}
                   value={draft.approvalRoleIds.responsabileIds}
                   onChange={(value) => setApprovalRoleIds('responsabileIds', value)}
                 />
               </Field>
-              <Field label={t('fields.substituteResponsabili')}>
+              <Field
+                label={t('fields.substituteResponsabili')}
+                required={substituteRequired}
+                {...(substituteRequired ? { hint: t('copy.substituteHint') } : {})}
+                {...fieldProps('substituteResponsabileIds')}
+              >
                 <EmployeeMultiSelect
                   label={t('fields.substituteResponsabili')}
                   options={substituteOptions}
                   labelOptions={employeeOptions}
+                  {...inputProps('substituteResponsabileIds')}
                   value={draft.approvalRoleIds.substituteResponsabileIds}
                   onChange={(value) => setApprovalRoleIds('substituteResponsabileIds', value)}
                 />
@@ -1373,13 +1649,20 @@ export function EmployeeForm({
             icon={<Clock3 />}
             title={t('sections.weeklySchedule')}
             description={t('copy.weeklySectionHint')}
+            errorCount={sectionErrorCount('weekly')}
           >
             <div className="weekday-grid">
               {WEEKDAY_KEYS.map((key) => (
-                <Field key={key} label={t(`weekday.${key}`)} required>
+                <Field
+                  key={key}
+                  label={t(`weekday.${key}`)}
+                  required
+                  {...fieldProps(`weekly.${key}`)}
+                >
                   <TextInput
                     required
                     inputMode="decimal"
+                    {...inputProps(`weekly.${key}`)}
                     aria-label={t(`weekday.${key}`)}
                     value={draft.weeklySchedule[key]}
                     onChange={(event) => setWeeklySchedule(key, event.currentTarget.value)}
@@ -1387,7 +1670,7 @@ export function EmployeeForm({
                 </Field>
               ))}
             </div>
-            <p className={showWeeklyWarning ? 'form-warning' : 'form-note'}>
+            <p className={showWeeklyWarning ? 'form-warning' : 'form-note'} data-field="weeklySchedule">
               {weeklyTotal === null
                 ? t('copy.invalidWeeklySchedule')
                 : showWeeklyWarning && expectedWeeklyMinutes !== null
@@ -1397,6 +1680,11 @@ export function EmployeeForm({
                     })
                   : t('copy.weeklyScheduleTotal', { total: formatSessantesimiMinutes(weeklyTotal) })}
             </p>
+            {errorFor('weeklySchedule') ? (
+              <p className="field-error" role="alert">
+                {errorFor('weeklySchedule')}
+              </p>
+            ) : null}
           </EmployeeFormSection>
         </div>
 
@@ -1436,34 +1724,43 @@ function DepartmentsPage() {
   const queryClient = useQueryClient();
   const departments = useDepartments(api);
   const [draft, setDraft] = useState<DepartmentDraft | null>(null);
+  const [serverErrors, setServerErrors] = useState<ServerErrors>(noServerErrors);
+
   const saveDepartment = useMutation({
     mutationFn: async (input: DepartmentDraft) =>
       input.id ? api.updateDepartment(input.id, { name: input.name }) : api.createDepartment({ name: input.name }),
-    onSuccess: () => {
+    onSuccess: (department, input) => {
       setDraft(null);
-      toast.success(t('copy.saved'));
+      setServerErrors(noServerErrors);
+      notifySuccess(
+        t(input.id ? 'copy.departmentUpdated' : 'copy.departmentCreated'),
+        t(input.id ? 'copy.departmentUpdatedBody' : 'copy.departmentCreatedBody', { name: department.name })
+      );
       void queryClient.invalidateQueries({ queryKey: ['departments'] });
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : t('copy.error')),
+    onError: (error) => {
+      const { fieldErrors } = notifyError(error, t, { unsaved: true });
+      setServerErrors((previous) => ({ fields: fieldErrors, rejectionId: previous.rejectionId + 1 }));
+    },
   });
   const deleteDepartment = useMutation({
-    mutationFn: api.deleteDepartment,
-    onSuccess: () => {
+    mutationFn: (department: Department) => api.deleteDepartment(department.id),
+    onSuccess: (_result, department) => {
       void queryClient.invalidateQueries({ queryKey: ['departments'] });
-      toast.success(t('copy.deleted'));
+      notifySuccess(t('copy.departmentDeleted'), t('copy.departmentDeletedBody', { name: department.name }));
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : t('copy.error')),
+    onError: (error) => notifyError(error, t, { unsaved: true }),
   });
 
   const confirmDeleteDepartment = (department: Department) => {
     if (deleteDepartment.isPending) return;
     openConfirmation({
       title: t('copy.confirmationTitle'),
-      message: t('copy.confirmDeleteDepartment'),
+      message: t('copy.confirmDeleteDepartment', { name: department.name }),
       confirmLabel: t('actions.delete'),
       cancelLabel: t('actions.cancel'),
       destructive: true,
-      onConfirm: () => deleteDepartment.mutate(department.id),
+      onConfirm: () => deleteDepartment.mutate(department),
     });
   };
 
@@ -1503,16 +1800,17 @@ function DepartmentsPage() {
                   >
                     {t('actions.edit')}
                   </button>
-                  <button
-                    className="icon-danger"
-                    type="button"
-                    onClick={() => confirmDeleteDepartment(department)}
-                    disabled={deleteDepartment.isPending}
-                    title={t('actions.delete')}
-                    aria-label={t('actions.delete')}
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  <Tooltip label={t('actions.delete')} withArrow position="left">
+                    <button
+                      className="icon-danger"
+                      type="button"
+                      onClick={() => confirmDeleteDepartment(department)}
+                      disabled={deleteDepartment.isPending}
+                      aria-label={t('actions.delete')}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </Tooltip>
                 </td>
               </tr>
             ))}
@@ -1529,7 +1827,11 @@ function DepartmentsPage() {
       {draft ? (
         <DepartmentForm
           draft={draft}
-          onCancel={() => setDraft(null)}
+          serverErrors={serverErrors}
+          onCancel={() => {
+            setDraft(null);
+            setServerErrors(noServerErrors);
+          }}
           onChange={setDraft}
           onSave={() => saveDepartment.mutate(draft)}
           isSaving={saveDepartment.isPending}
@@ -1541,18 +1843,31 @@ function DepartmentsPage() {
 
 export function DepartmentForm({
   draft,
+  serverErrors,
   onCancel,
   onChange,
   onSave,
   isSaving,
 }: {
   draft: DepartmentDraft;
+  /** Field errors the last save came back with (e.g. the name is already taken). */
+  serverErrors?: ServerErrors;
   onCancel: () => void;
   onChange: (draft: DepartmentDraft) => void;
   onSave: () => void;
   isSaving: boolean;
 }) {
   const { t } = useTranslation();
+  const [submitted, setSubmitted] = useState(false);
+  // See the employee form: a "name already taken" verdict is about the submitted
+  // value, so it clears as soon as the operator types a different one — and comes
+  // back on the next rejection, even one carrying the identical message.
+  const [nameEdited, setNameEdited] = useState(false);
+  const serverNameError = serverErrors?.fields['name'];
+  useEffect(() => setNameEdited(false), [serverErrors?.rejectionId]);
+  const nameError =
+    (submitted && !draft.name.trim() ? t('validation.required') : undefined) ??
+    (nameEdited ? undefined : serverNameError);
 
   const initialDraft = useRef(draft);
   const isDirty = JSON.stringify(draft) !== JSON.stringify(initialDraft.current);
@@ -1589,8 +1904,19 @@ export function DepartmentForm({
         role="dialog"
         aria-modal="true"
         aria-label={draft.id ? draft.name : t('actions.createDepartment')}
+        // Same reasoning as the employee form: our own message, in the app's
+        // language, attached to the field. See the note on that form.
+        noValidate
         onSubmit={(event) => {
           event.preventDefault();
+          setSubmitted(true);
+          if (!draft.name.trim()) {
+            notifyValidation(
+              t('validation.summaryTitle'),
+              t('validation.summaryBody', { count: 1, fields: t('fields.department') })
+            );
+            return;
+          }
           onSave();
         }}
       >
@@ -1608,12 +1934,21 @@ export function DepartmentForm({
           <fieldset className="form-section">
             <legend>{t('sections.identity')}</legend>
             <div className="form-grid">
-              <Field label={t('fields.department')} full>
+              <Field label={t('fields.department')} required name="name" error={nameError} full>
                 <input
                   required
                   autoFocus
+                  // Named explicitly: the wrapping label now also contains the
+                  // required marker and the error text, which would otherwise be
+                  // read out as part of this input's name.
+                  aria-label={t('fields.department')}
+                  aria-invalid={Boolean(nameError)}
+                  {...(nameError ? { 'aria-describedby': fieldErrorId('name') } : {})}
                   value={draft.name}
-                  onChange={(e) => onChange({ ...draft, name: e.target.value })}
+                  onChange={(e) => {
+                    setNameEdited(true);
+                    onChange({ ...draft, name: e.target.value });
+                  }}
                 />
               </Field>
             </div>
@@ -1634,7 +1969,8 @@ export function DepartmentForm({
   );
 }
 
-function ImportPage() {
+// Exported for tests: the import flow's file picker and row-error table.
+export function ImportPage() {
   const { t } = useTranslation();
   const api = useApi();
   const queryClient = useQueryClient();
@@ -1657,22 +1993,36 @@ function ImportPage() {
 
   const previewImport = useMutation({
     mutationFn: async () => {
-      if (!file) throw new Error(t('copy.excelFileRequired'));
+      if (!file) {
+        notifyValidation(t('copy.excelFileRequired'), t('copy.excelFileRequiredBody'));
+        // Already reported with the file-specific wording; skip the generic
+        // error toast onError would otherwise add on top of it.
+        return null;
+      }
       return api.previewImport(file);
     },
     onSuccess: (data) => {
+      if (!data) return;
       setPreview(data);
       setSelectedRows(data.rows.filter((row) => row.selected).map((row) => row.rowNumber));
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : t('copy.error')),
+    onError: (error) => notifyError(error, t),
   });
   const commitImport = useMutation({
     mutationFn: async () => {
-      if (!preview) throw new Error(t('copy.previewRequired'));
+      if (!preview) {
+        notifyValidation(t('copy.previewRequired'), t('copy.previewRequiredBody'));
+        return null;
+      }
       return api.commitImport(preview.batchId, selectedRows);
     },
     onSuccess: (result) => {
-      toast.success(t('copy.rowsCommitted', { count: result.data.committed.length }));
+      if (!result) return;
+      const count = result.data.committed.length;
+      notifySuccess(
+        t('copy.importCommitted'),
+        count === 0 ? t('copy.importCommittedNone') : t('copy.importCommittedBody', { count })
+      );
       setPreview(null);
       setSelectedRows([]);
       setFile(null);
@@ -1680,7 +2030,7 @@ function ImportPage() {
       void queryClient.invalidateQueries({ queryKey: ['employee-options'] });
       void queryClient.invalidateQueries({ queryKey: ['audit'] });
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : t('copy.error')),
+    onError: (error) => notifyError(error, t, { unsaved: true }),
   });
 
   return (
@@ -1698,10 +2048,18 @@ function ImportPage() {
           previewImport.mutate();
         }}
       >
-        <input
-          type="file"
+        {/* A bare <input type="file"> renders the browser's own control, which
+            says "Choose File / No file chosen" in the *browser's* language on an
+            otherwise Italian page, and ignores the app's styling entirely. */}
+        <FileInput
+          className="import-file-input"
+          aria-label={t('copy.excelFileLabel')}
           accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          onChange={(event) => chooseFile(event.target.files?.[0] ?? null)}
+          placeholder={t('copy.excelFilePlaceholder')}
+          value={file}
+          onChange={chooseFile}
+          clearable
+          leftSection={<Upload size={16} />}
         />
         <button className="button primary" type="submit" disabled={!file || previewImport.isPending}>
           <FileCheck2 size={16} />
@@ -1867,8 +2225,36 @@ export function SettingsPage() {
   const [years, setYears] = useState('');
   const [months, setMonths] = useState('');
   const [edited, setEdited] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   const loaded = settings.data;
+
+  /**
+   * The same bounds the API enforces, phrased for the person typing. Without this
+   * the only feedback for "70 years" is a 400 whose body reads "The request did
+   * not pass validation."
+   *
+   * The grammar is checked before the conversion, not after: dropping the native
+   * `type="number"` (for its spinners and scroll-wheel hazard) also dropped the
+   * browser's refusal to accept `0x40`, which `Number()` reads as a perfectly
+   * in-range 64 and would recalculate every employee's retirement date from.
+   */
+  const policyErrors = (): FieldErrors => {
+    const bounded = (raw: string, min: number, max: number): string | undefined => {
+      const value = raw.trim();
+      if (!value) return t('validation.required');
+      if (!isDecimalInteger(value)) return t('validation.range', { min, max });
+      const parsed = Number(value);
+      return parsed < min || parsed > max ? t('validation.range', { min, max }) : undefined;
+    };
+    const errors: FieldErrors = {};
+    const yearsError = bounded(years, RETIREMENT_YEARS_MIN, RETIREMENT_YEARS_MAX);
+    const monthsError = bounded(months, RETIREMENT_MONTHS_MIN, RETIREMENT_MONTHS_MAX);
+    if (yearsError) errors['years'] = yearsError;
+    if (monthsError) errors['months'] = monthsError;
+    return errors;
+  };
+  const shownErrors = submitted ? policyErrors() : {};
 
   // Seed the inputs once the setting loads, unless the user is already editing.
   useEffect(() => {
@@ -1883,12 +2269,16 @@ export function SettingsPage() {
       api.updateRetirementPolicy({ years: Number(years), months: Number(months) }),
     onSuccess: (result) => {
       setEdited(false);
-      toast.success(t('settings.recalcDone', { count: result.recalculatedEmployees }));
+      const count = result.recalculatedEmployees;
+      notifySuccess(
+        t('settings.recalcDone'),
+        count === 0 ? t('settings.recalcDoneNone') : t('settings.recalcDoneBody', { count })
+      );
       void queryClient.invalidateQueries({ queryKey: ['settings'] });
       void queryClient.invalidateQueries({ queryKey: ['employees'] });
       void queryClient.invalidateQueries({ queryKey: ['audit'] });
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : t('copy.error')),
+    onError: (error) => notifyError(error, t, { unsaved: true }),
   });
 
   return (
@@ -1909,13 +2299,29 @@ export function SettingsPage() {
 
       <form
         className="settings-card"
+        noValidate
         onSubmit={(event) => {
           event.preventDefault();
+          setSubmitted(true);
+          const errors = policyErrors();
+          if (Object.keys(errors).length > 0) {
+            notifyValidation(
+              t('validation.summaryTitle'),
+              t('validation.summaryBody', {
+                count: Object.keys(errors).length,
+                fields: Object.keys(errors)
+                  .map((field) => t(`settings.${field}`))
+                  .join(', '),
+              })
+            );
+            return;
+          }
           // Table-wide write: confirm before recalculating every non-confirmed
-          // employee's projected retirement date.
+          // employee's projected retirement date, echoing the values being saved
+          // so the operator can catch a typo before it touches every record.
           openConfirmation({
             title: t('copy.confirmationTitle'),
-            message: t('settings.confirmRecalc'),
+            message: t('settings.confirmRecalc', { years, months }),
             confirmLabel: t('actions.confirm'),
             cancelLabel: t('actions.cancel'),
             onConfirm: () => savePolicy.mutate(),
@@ -1925,13 +2331,19 @@ export function SettingsPage() {
         <p className="settings-description">{t('settings.description')}</p>
 
         <div className="settings-fields">
-          <Field label={t('settings.years')}>
+          <Field label={t('settings.years')} required name="years" error={shownErrors['years']}>
+            {/* Deliberately not type="number": that adds the browser's spinner
+                arrows (styled differently in every browser) and makes a stray
+                scroll-wheel silently change a value that recalculates every
+                employee's retirement date. The range is enforced by
+                `policyErrors`, in the operator's language. */}
             <input
               required
-              type="number"
+              type="text"
               inputMode="numeric"
-              min={RETIREMENT_YEARS_MIN}
-              max={RETIREMENT_YEARS_MAX}
+              aria-label={t('settings.years')}
+              aria-invalid={Boolean(shownErrors['years'])}
+              {...(shownErrors['years'] ? { 'aria-describedby': fieldErrorId('years') } : {})}
               value={years}
               onChange={(e) => {
                 setEdited(true);
@@ -1939,13 +2351,19 @@ export function SettingsPage() {
               }}
             />
           </Field>
-          <Field label={t('settings.months')}>
+          <Field label={t('settings.months')} required name="months" error={shownErrors['months']}>
+            {/* Deliberately not type="number": that adds the browser's spinner
+                arrows (styled differently in every browser) and makes a stray
+                scroll-wheel silently change a value that recalculates every
+                employee's retirement date. The range is enforced by
+                `policyErrors`, in the operator's language. */}
             <input
               required
-              type="number"
+              type="text"
               inputMode="numeric"
-              min={RETIREMENT_MONTHS_MIN}
-              max={RETIREMENT_MONTHS_MAX}
+              aria-label={t('settings.months')}
+              aria-invalid={Boolean(shownErrors['months'])}
+              {...(shownErrors['months'] ? { 'aria-describedby': fieldErrorId('months') } : {})}
               value={months}
               onChange={(e) => {
                 setEdited(true);
@@ -2005,15 +2423,23 @@ function EmployeeFormSection({
   title,
   description,
   children,
+  errorCount = 0,
 }: {
   number: string;
   icon: React.ReactNode;
   title: string;
   description: string;
   children: React.ReactNode;
+  /** Problems inside this section, badged on the heading. */
+  errorCount?: number;
 }) {
+  const { t } = useTranslation();
   return (
-    <fieldset className="form-section employee-form-section">
+    <fieldset
+      className={['form-section', 'employee-form-section', errorCount > 0 && 'section-has-errors']
+        .filter(Boolean)
+        .join(' ')}
+    >
       <legend className="visually-hidden">{title}</legend>
       <div className="employee-section-heading">
         <span className="employee-section-number" aria-hidden="true">
@@ -2026,6 +2452,14 @@ function EmployeeFormSection({
           <h4>{title}</h4>
           <p>{description}</p>
         </div>
+        {/* Scrolling past a collapsed-looking section shouldn't hide the fact
+            that something in it still needs attention. */}
+        {errorCount > 0 ? (
+          <span className="section-error-badge">
+            <TriangleAlert size={13} aria-hidden="true" />
+            {t('validation.sectionErrors', { count: errorCount })}
+          </span>
+        ) : null}
       </div>
       {children}
     </fieldset>
@@ -2038,6 +2472,7 @@ function EmployeeMultiSelect({
   labelOptions,
   value,
   onChange,
+  error,
 }: {
   label: string;
   /** Selectable options for the dropdown (already filtered for eligibility). */
@@ -2047,6 +2482,8 @@ function EmployeeMultiSelect({
   labelOptions: EmployeeOption[];
   value: string[];
   onChange: (value: string[]) => void;
+  /** Draws the red border; the message lives on the surrounding Field. */
+  error?: boolean;
 }) {
   const { t } = useTranslation();
   const labelById = new Map(labelOptions.map((option) => [option.id, option]));
@@ -2070,6 +2507,7 @@ function EmployeeMultiSelect({
     <MultiSelect
       className="employee-multi-select"
       aria-label={label}
+      error={error ?? false}
       placeholder={t('actions.addApprover')}
       value={value}
       onChange={onChange}
@@ -2132,12 +2570,15 @@ function DateInput({
   onChange,
   required,
   disabled,
+  error,
 }: {
   ariaLabel: string;
   value: string;
   onChange: (value: string) => void;
   required?: boolean;
   disabled?: boolean;
+  /** Draws the red border. The message itself lives on the surrounding Field. */
+  error?: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const locale = i18n.resolvedLanguage === 'en' ? 'en' : 'it';
@@ -2147,6 +2588,7 @@ function DateInput({
       aria-label={ariaLabel}
       required={required ?? false}
       disabled={disabled ?? false}
+      error={error ?? false}
       value={value || null}
       onChange={(nextValue) => onChange(nextValue ?? '')}
       valueFormat={DATE_INPUT_DISPLAY_FORMAT}
@@ -2174,6 +2616,8 @@ function Field({
   className,
   required,
   hint,
+  error,
+  name,
 }: {
   label: string;
   icon?: React.ReactNode;
@@ -2182,9 +2626,18 @@ function Field({
   className?: string;
   required?: boolean;
   hint?: string;
+  /** When set, the field is styled as invalid and shows this instead of the hint. */
+  error?: string | undefined;
+  /** Field key, so a failed save can scroll to and focus this input. */
+  name?: string;
 }) {
   return (
-    <label className={['field', full && 'field-full', className].filter(Boolean).join(' ')}>
+    <label
+      className={['field', full && 'field-full', error && 'field-invalid', className]
+        .filter(Boolean)
+        .join(' ')}
+      {...(name ? { 'data-field': name } : {})}
+    >
       <span className="field-label">
         {icon ? (
           <span className="field-label-icon" aria-hidden="true">
@@ -2199,7 +2652,20 @@ function Field({
         ) : null}
       </span>
       {children}
-      {hint ? <span className="field-hint">{hint}</span> : null}
+      {/* The error replaces the hint rather than stacking under it: with both
+          visible the instruction and the complaint compete, and the row grows
+          enough to push the next field out of view. `role="alert"` so a screen
+          reader hears it when it appears after a rejected save; the id is what a
+          native input's `aria-describedby` points at (Mantine's own inputs
+          overwrite that attribute, so they rely on the alert instead). */}
+      {error ? (
+        <span className="field-error" role="alert" {...(name ? { id: fieldErrorId(name) } : {})}>
+          <TriangleAlert size={13} aria-hidden="true" />
+          {error}
+        </span>
+      ) : hint ? (
+        <span className="field-hint">{hint}</span>
+      ) : null}
     </label>
   );
 }

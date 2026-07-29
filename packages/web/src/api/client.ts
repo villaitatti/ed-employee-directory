@@ -13,11 +13,19 @@ import type {
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
-/** Error carrying the HTTP status so callers can react to 401/403 vs 5xx. */
+/**
+ * Error carrying the HTTP status so callers can react to 401/403 vs 5xx, plus the
+ * server's machine-readable `code` and `details`. The `message` is the server's
+ * English sentence and is only a last-resort fallback for display: the UI looks
+ * the `code` up in the translation catalogue and interpolates `details`, so the
+ * operator reads the failure in the language they picked.
+ */
 export class ApiError extends Error {
   constructor(
     message: string,
-    public status: number
+    public status: number,
+    public code?: string,
+    public details?: unknown
   ) {
     super(message);
     this.name = 'ApiError';
@@ -25,6 +33,8 @@ export class ApiError extends Error {
 }
 
 type TokenGetter = () => Promise<string | null>;
+
+type ErrorPayload = { error?: { code?: string; message?: string; details?: unknown } } | null;
 
 type ListEmployeeParams = {
   q?: string | undefined;
@@ -56,8 +66,13 @@ export function createApiClient(getToken: TokenGetter) {
   async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const response = await authorizedFetch(path, init);
     if (!response.ok) {
-      const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
-      throw new ApiError(payload?.error?.message ?? `Request failed with ${response.status}`, response.status);
+      const payload = (await response.json().catch(() => null)) as ErrorPayload;
+      throw new ApiError(
+        payload?.error?.message ?? `Request failed with ${response.status}`,
+        response.status,
+        payload?.error?.code,
+        payload?.error?.details
+      );
     }
     if (response.status === 204) return undefined as T;
     return (await response.json()) as T;
@@ -123,8 +138,13 @@ export function createApiClient(getToken: TokenGetter) {
     exportEmployeesExcel: async (params: ListEmployeeParams = {}) => {
       const response = await authorizedFetch(`/api/admin/employees/export.xlsx${queryString(params)}`);
       if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
-        throw new Error(payload?.error?.message ?? `Request failed with ${response.status}`);
+        const payload = (await response.json().catch(() => null)) as ErrorPayload;
+        throw new ApiError(
+          payload?.error?.message ?? `Request failed with ${response.status}`,
+          response.status,
+          payload?.error?.code,
+          payload?.error?.details
+        );
       }
       return response.blob();
     },

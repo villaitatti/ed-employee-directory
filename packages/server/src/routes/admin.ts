@@ -29,7 +29,7 @@ import {
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../middleware/async-handler.js';
 import { AuthenticatedRequest, requireAuth, requireStaff } from '../middleware/auth.js';
-import { HttpError } from '../middleware/error.js';
+import { HttpError, MAX_UPLOAD_MB } from '../middleware/error.js';
 import { writeAuditLog } from '../services/audit.js';
 import {
   csvEscape,
@@ -92,7 +92,7 @@ type UploadRecord = {
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 8 * 1024 * 1024 },
+  limits: { fileSize: MAX_UPLOAD_MB * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const lowerName = file.originalname.toLowerCase();
     const hasCsvExtension = lowerName.endsWith('.csv');
@@ -1091,7 +1091,8 @@ adminRouter.post(
       throw new HttpError(
         400,
         'IMPORT_TOO_MANY_ROWS',
-        `The import file has ${records.length} rows; the maximum is ${MAX_IMPORT_ROWS}.`
+        `The import file has ${records.length} rows; the maximum is ${MAX_IMPORT_ROWS}.`,
+        { rows: records.length, max: MAX_IMPORT_ROWS }
       );
     }
 
@@ -1529,7 +1530,8 @@ adminRouter.post(
         throw new HttpError(
           409,
           'DUPLICATE_IMPORT_EMPLOYEE_NUMBER',
-          `Employee Number ${employeeNumber} appears more than once in selected rows (${rowNumbers.join(', ')}).`
+          `Employee Number ${employeeNumber} appears more than once in selected rows (${rowNumbers.join(', ')}).`,
+          { employeeNumber, rowNumbers: rowNumbers.join(', ') }
         );
       }
 
@@ -1549,7 +1551,8 @@ adminRouter.post(
           throw new HttpError(
             409,
             'IMPORT_ACTION_DRIFT',
-            `Employee Number ${parsed.employeeNumber} changed since preview (previewed ${row.proposedAction}, now ${liveAction}). Re-run the import preview.`
+            `Employee Number ${parsed.employeeNumber} changed since preview (previewed ${row.proposedAction}, now ${liveAction}). Re-run the import preview.`,
+            { employeeNumber: parsed.employeeNumber }
           );
         }
 
@@ -1607,8 +1610,11 @@ adminRouter.post(
         if (missingApproverNumber !== undefined) {
           throw new HttpError(
             409,
-            'APPROVER_NOT_FOUND',
-            `Approver Employee Number ${missingApproverNumber} does not exist in ED or the selected import rows.`
+            // Distinct from the id-based APPROVER_NOT_FOUND: this one can name the
+            // Employee Number the operator has to fix in the spreadsheet.
+            'IMPORT_APPROVER_NOT_FOUND',
+            `Approver Employee Number ${missingApproverNumber} does not exist in ED or the selected import rows.`,
+            { employeeNumber: missingApproverNumber }
           );
         }
         const roleIds =
