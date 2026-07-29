@@ -301,7 +301,24 @@ export function EmployeesPage() {
                 <td>
                   <ApprovalWorkflow employee={employee} />
                 </td>
-                <td>{formatDate(employee.retirementDate, dateLocale)}</td>
+                <td>
+                  {employee.retirementDate ? (
+                    <div className="grid gap-0.5">
+                      <span>{formatDate(employee.retirementDate, dateLocale)}</span>
+                      {/* A projected date moves when the birth date or the
+                          retirement age does; a confirmed one was chosen and
+                          stays. Same column, so the difference has to be on the
+                          row rather than left to whoever opens the card. */}
+                      <span className="text-[0.72rem] text-ink-muted">
+                        {t(
+                          employee.retirementDateOverridden
+                            ? 'copy.retirementConfirmed'
+                            : 'copy.retirementProjected'
+                        )}
+                      </span>
+                    </div>
+                  ) : null}
+                </td>
                 <td>
                   <div className="flex items-center gap-1">
                     <Button

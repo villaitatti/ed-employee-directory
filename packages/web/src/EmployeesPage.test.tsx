@@ -81,6 +81,8 @@ const roster = [
   }),
   employee(1003, 'Carla', 'Verdi', {
     retirementDate: '2057-05-20',
+    // Chosen by hand rather than calculated from the birth date.
+    retirementDateOverridden: true,
     approvalRoles: {
       preApprovers: [],
       responsabili: [approver(1001, 'Ada', 'Rossi'), approver(1002, 'Bruno', 'Bianchi')],
@@ -155,6 +157,16 @@ describe('the directory table', () => {
     // An Active employee needs both roles, so the empty half is a problem to
     // see, not an absence to skim past.
     expect((await rowFor('Bruno Bianchi')).cells[7]).toHaveTextContent('Da assegnare');
+  });
+
+  it('says whether a retirement date is projected or confirmed', async () => {
+    renderWithProviders(<EmployeesPage />);
+
+    // Two dates that look identical in the column behave differently: the
+    // projected one moves if the birth date or the retirement age changes, the
+    // confirmed one does not. Reading the row should not require opening the card.
+    expect((await rowFor('Ada Rossi')).cells[8]).toHaveTextContent('12 luglio 2045(prevista)');
+    expect((await rowFor('Carla Verdi')).cells[8]).toHaveTextContent('20 maggio 2057(confermata)');
   });
 
   it('starts ordered by surname and reorders on a column heading', async () => {

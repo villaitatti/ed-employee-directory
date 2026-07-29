@@ -197,6 +197,8 @@ export const resources = {
         signInUnavailable: 'Impossibile avviare l’accesso. Controlla la connessione e riprova.',
         incompleteApproval: 'Incompleto',
         approverMissing: 'Da assegnare',
+        retirementProjected: '(prevista)',
+        retirementConfirmed: '(confermata)',
         ineligibleApprover:
           'Non più idoneo a questo ruolo: rimuovilo, oppure riabilitalo nella sua scheda (Ruoli e abilitazioni)',
         invalidWeeklySchedule: 'Inserisci l’orario nel formato 7,30.',
@@ -636,6 +638,8 @@ export const resources = {
         signInUnavailable: 'Could not start sign-in. Check your connection and try again.',
         incompleteApproval: 'Incomplete',
         approverMissing: 'Not assigned',
+        retirementProjected: '(projected)',
+        retirementConfirmed: '(confirmed)',
         ineligibleApprover:
           'No longer eligible for this role: remove them, or re-enable the role on their own record (Roles & Capabilities)',
         invalidWeeklySchedule: 'Enter hours in 7,30 format.',
