@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Search } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronsUpDown, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 
@@ -90,6 +90,50 @@ export function DataSurface({ children, className }: { children: ReactNode; clas
     >
       {children}
     </div>
+  );
+}
+
+export type SortDirection = 'asc' | 'desc';
+
+/**
+ * A column heading you can order the table by.
+ *
+ * `aria-sort` on the cell is what tells a screen reader which column the table
+ * is ordered by and which way; the arrow says the same thing to everyone else,
+ * and stays visible-but-faint on the other columns so it is discoverable that
+ * they can be sorted at all.
+ */
+export function SortableHeader({
+  label,
+  sorted,
+  direction,
+  onSort,
+}: {
+  label: string;
+  /** Whether the table is currently ordered by this column. */
+  sorted: boolean;
+  direction: SortDirection;
+  onSort: () => void;
+}) {
+  const Arrow = !sorted ? ChevronsUpDown : direction === 'asc' ? ChevronUp : ChevronDown;
+  return (
+    <th aria-sort={sorted ? (direction === 'asc' ? 'ascending' : 'descending') : 'none'} className="p-0!">
+      <button
+        type="button"
+        onClick={onSort}
+        className={cn(
+          'group/sort flex w-full cursor-pointer items-center gap-1 px-[0.85rem] py-3 text-left',
+          'text-xs font-bold text-ink-soft uppercase hover:text-brand',
+          sorted && 'text-brand'
+        )}
+      >
+        {label}
+        <Arrow
+          aria-hidden="true"
+          className={cn('size-3.5 shrink-0', sorted ? 'opacity-100' : 'opacity-30 group-hover/sort:opacity-70')}
+        />
+      </button>
+    </th>
   );
 }
 

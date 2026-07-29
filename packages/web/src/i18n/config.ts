@@ -73,6 +73,13 @@ export const resources = {
         action: 'Azione',
         errors: 'Errori',
       },
+      // Column-width abbreviations for the directory's workflow cell; the full
+      // role names are still read out to a screen reader.
+      roleShort: {
+        responsabile: 'Resp.',
+        substitute: 'Sost.',
+        preApprover: 'Pre.',
+      },
       weekday: {
         monday: 'LU',
         tuesday: 'MA',
@@ -189,6 +196,7 @@ export const resources = {
         signInError: 'Accesso non riuscito. Riprova ad accedere.',
         signInUnavailable: 'Impossibile avviare l’accesso. Controlla la connessione e riprova.',
         incompleteApproval: 'Incompleto',
+        approverMissing: 'Da assegnare',
         ineligibleApprover:
           'Non più idoneo a questo ruolo: rimuovilo, oppure riabilitalo nella sua scheda (Ruoli e abilitazioni)',
         invalidWeeklySchedule: 'Inserisci l’orario nel formato 7,30.',
@@ -507,6 +515,11 @@ export const resources = {
         action: 'Action',
         errors: 'Errors',
       },
+      roleShort: {
+        responsabile: 'Resp.',
+        substitute: 'Sub.',
+        preApprover: 'Pre.',
+      },
       weekday: {
         monday: 'Mon',
         tuesday: 'Tue',
@@ -622,6 +635,7 @@ export const resources = {
         signInError: 'Sign-in failed. Please try signing in again.',
         signInUnavailable: 'Could not start sign-in. Check your connection and try again.',
         incompleteApproval: 'Incomplete',
+        approverMissing: 'Not assigned',
         ineligibleApprover:
           'No longer eligible for this role: remove them, or re-enable the role on their own record (Roles & Capabilities)',
         invalidWeeklySchedule: 'Enter hours in 7,30 format.',

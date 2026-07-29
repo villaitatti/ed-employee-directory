@@ -1,5 +1,5 @@
 import { Download, Plus, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { EMPLOYEE_STATUSES, type Employee } from '@itatti/shared';
@@ -14,7 +14,7 @@ import {
 } from '../employee-draft.js';
 import { formatDate, useDateLocale } from '../format.js';
 import { useApi, useDebounced, useDepartments } from '../hooks.js';
-import type { Translate } from '../i18n/types.js';
+import { ApprovalWorkflow } from '../ui/ApprovalWorkflow.js';
 import { ActionTooltip } from '../ui/ActionTooltip.js';
 import { ComboboxField } from '../ui/ComboboxField.js';
 import { QueryError } from '../ui/QueryError.js';
@@ -26,17 +26,38 @@ import {
   PageHeading,
   PageSection,
   SearchField,
+  SortableHeader,
   StatusPill,
   Toolbar,
+  type SortDirection,
 } from '../ui/layout.js';
 import { EmployeeForm } from './EmployeeForm.js';
 
-function approvalSummary(employee: Employee, t: Translate): string {
-  if (employee.status !== 'ATTIVO') return '-';
-  const responsabili = employee.approvalRoles.responsabili.length;
-  const substitutes = employee.approvalRoles.substituteResponsabili.length;
-  if (responsabili > 0 && substitutes > 0) return `R ${responsabili} / S ${substitutes}`;
-  return t('copy.incompleteApproval');
+/**
+ * What each sortable column compares on, which is not always what it displays:
+ * the weekly total sorts on minutes rather than "37,30", and the name sorts on
+ * the surname even though it reads forename-first. Dates are `YYYY-MM-DD`, so
+ * comparing them as text is comparing them as dates.
+ */
+const SORT_VALUES = {
+  employeeNumber: (employee: Employee) => employee.employeeNumber,
+  name: (employee: Employee) => `${employee.lastName} ${employee.firstName}`,
+  department: (employee: Employee) => employee.department?.name ?? '',
+  status: (employee: Employee) => employee.status,
+  fte: (employee: Employee) => employee.fte,
+  tfr: (employee: Employee) => employee.tfr,
+  weeklyTotal: (employee: Employee) => employee.weeklySchedule.total.minutes,
+  retirementDate: (employee: Employee) => employee.retirementDate,
+} satisfies Record<string, (employee: Employee) => string | number>;
+
+type SortKey = keyof typeof SORT_VALUES;
+
+function compareEmployees(left: Employee, right: Employee, key: SortKey): number {
+  const a = SORT_VALUES[key](left);
+  const b = SORT_VALUES[key](right);
+  if (typeof a === 'number' && typeof b === 'number') return a - b;
+  // `localeCompare` so Àbate sorts next to Abate rather than after Zurlo.
+  return String(a).localeCompare(String(b));
 }
 
 export function EmployeesPage() {
@@ -46,6 +67,14 @@ export function EmployeesPage() {
   const api = useApi();
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState({ q: '', status: '', departmentId: '' });
+  // Surname-ascending to begin with, which is the order the API returns and the
+  // order a directory is read in. Sorting is done here rather than by the server
+  // because the table already holds every matching row — `allEmployees` follows
+  // the cursor to the end — so a round trip would only add latency.
+  const [sort, setSort] = useState<{ key: SortKey; direction: SortDirection }>({
+    key: 'name',
+    direction: 'asc',
+  });
   const [draft, setDraft] = useState<EmployeeDraft | null>(null);
   // Field errors the *server* raised on the last save. Kept here rather than in
   // the form because only the mutation sees them; the form merges them with its
@@ -67,6 +96,29 @@ export function EmployeesPage() {
         departmentId: filters.departmentId || undefined,
       }),
   });
+
+  const rows = useMemo(() => {
+    const sorted = [...(employees.data ?? [])].sort((left, right) =>
+      compareEmployees(left, right, sort.key)
+    );
+    return sort.direction === 'asc' ? sorted : sorted.reverse();
+  }, [employees.data, sort]);
+
+  /** Clicking the column you are already sorted by turns it around. */
+  const sortBy = (key: SortKey) =>
+    setSort((current) =>
+      current.key === key
+        ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' }
+        : { key, direction: 'asc' }
+    );
+  const sortableHeader = (key: SortKey, label: string) => (
+    <SortableHeader
+      label={label}
+      sorted={sort.key === key}
+      direction={sort.direction}
+      onSort={() => sortBy(key)}
+    />
+  );
 
   const saveEmployee = useMutation({
     mutationFn: async (input: EmployeeDraft) => {
@@ -221,20 +273,21 @@ export function EmployeesPage() {
         <table>
           <thead>
             <tr>
-              <th>{t('fields.employeeNumber')}</th>
-              <th>{t('fields.fullName')}</th>
-              <th>{t('fields.department')}</th>
-              <th>{t('fields.status')}</th>
-              <th>{t('fields.fte')}</th>
-              <th>{t('fields.tfr')}</th>
-              <th>{t('fields.weeklyTotal')}</th>
+              {sortableHeader('employeeNumber', t('fields.employeeNumber'))}
+              {sortableHeader('name', t('fields.fullName'))}
+              {sortableHeader('department', t('fields.department'))}
+              {sortableHeader('status', t('fields.status'))}
+              {sortableHeader('fte', t('fields.fte'))}
+              {sortableHeader('tfr', t('fields.tfr'))}
+              {sortableHeader('weeklyTotal', t('fields.weeklyTotal'))}
+              {/* Not sortable: a column of names has no order worth asking for. */}
               <th>{t('fields.approvalWorkflow')}</th>
-              <th>{t('fields.retirementDate')}</th>
+              {sortableHeader('retirementDate', t('fields.retirementDate'))}
               <th aria-label={t('fields.actions')} />
             </tr>
           </thead>
           <tbody>
-            {employees.data?.map((employee) => (
+            {rows.map((employee) => (
               <tr key={employee.id}>
                 <td>{employee.employeeNumber}</td>
                 <td>{employeeFullName(employee)}</td>
@@ -245,7 +298,9 @@ export function EmployeesPage() {
                 <td>{employee.fte}</td>
                 <td>{t(`tfr.${employee.tfr}`)}</td>
                 <td>{employee.weeklySchedule.total.display}</td>
-                <td>{approvalSummary(employee, t)}</td>
+                <td>
+                  <ApprovalWorkflow employee={employee} />
+                </td>
                 <td>{formatDate(employee.retirementDate, dateLocale)}</td>
                 <td>
                   <div className="flex items-center gap-1">
