@@ -54,7 +54,7 @@ import {
   emptyApprovalRoleIds,
   existingApprovalRoleIds,
   assertEmployeeHasNoApprovalReferences,
-  findApprovalReferenceEmployeeNumbers,
+  findApprovalReferences,
   missingRequiredApprovers,
   REQUIRED_APPROVER_MESSAGES,
   replaceApprovalAssignments,
@@ -860,8 +860,8 @@ adminRouter.delete(
       await assertEmployeeHasNoApprovalReferences(tx, {
         approverId: employeeId,
         code: 'APPROVER_IN_USE',
-        message: (employeeNumbers) =>
-          `This employee is used in approval workflows by Employee Numbers ${employeeNumbers}. Remove those approval assignments before deleting the employee.`,
+        message: (employees) =>
+          `This employee is used in approval workflows by ${employees}. Remove those approval assignments before deleting the employee.`,
       });
       await writeAuditLog({
         tx,
@@ -1417,7 +1417,7 @@ adminRouter.post(
       const employeeNumber = existing.employeeNumber;
 
       if (existing.status === 'ATTIVO' && nextStatus !== 'ATTIVO') {
-        const dbRefs = await findApprovalReferenceEmployeeNumbers(prisma, {
+        const dbRefs = await findApprovalReferences(prisma, {
           approverId: existing.id,
           ignoreSubjectEmployeeNumbers: rewrittenSubjectNumbers,
         });
@@ -1430,7 +1430,7 @@ adminRouter.post(
       }
 
       if (existing.canBeResponsible && !nextCanBeResponsible) {
-        const dbRefs = await findApprovalReferenceEmployeeNumbers(prisma, {
+        const dbRefs = await findApprovalReferences(prisma, {
           approverId: existing.id,
           roles: ['RESPONSABILE'],
           ignoreSubjectEmployeeNumbers: rewrittenSubjectNumbers,
@@ -1444,7 +1444,7 @@ adminRouter.post(
       }
 
       if (existing.canBeSubstituteResponsible && !nextCanBeSubstitute) {
-        const dbRefs = await findApprovalReferenceEmployeeNumbers(prisma, {
+        const dbRefs = await findApprovalReferences(prisma, {
           approverId: existing.id,
           roles: ['SUBSTITUTE_RESPONSABILE'],
           ignoreSubjectEmployeeNumbers: rewrittenSubjectNumbers,

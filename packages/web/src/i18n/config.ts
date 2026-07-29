@@ -413,15 +413,15 @@ export const resources = {
         },
         APPROVER_IN_USE: {
           title: 'Questo dipendente è responsabile di altre persone',
-          body: 'Compare nel workflow dei Numeri Matricola {{employeeNumbers}}. Rimuovi quegli incarichi, poi riprova.',
+          body: 'Compare nel workflow di {{employees}}. Rimuovi quegli incarichi, poi riprova.',
         },
         RESPONSABILE_APPROVER_IN_USE: {
           title: 'Questo dipendente è Responsabile di altre persone',
-          body: 'È Responsabile dei Numeri Matricola {{employeeNumbers}}. Rimuovi quegli incarichi prima di disattivare "Può essere Responsabile".',
+          body: 'È Responsabile di {{employees}}. Rimuovi quegli incarichi prima di disattivare "Può essere Responsabile".',
         },
         SUBSTITUTE_APPROVER_IN_USE: {
           title: 'Questo dipendente è Sostituto-Responsabile di altre persone',
-          body: 'È Sostituto-Responsabile dei Numeri Matricola {{employeeNumbers}}. Rimuovi quegli incarichi prima di disattivare "Può essere Sostituto-Responsabile".',
+          body: 'È Sostituto-Responsabile di {{employees}}. Rimuovi quegli incarichi prima di disattivare "Può essere Sostituto-Responsabile".',
         },
         RESPONSABILE_REQUIRED: {
           title: 'Manca il Responsabile',
@@ -841,15 +841,15 @@ export const resources = {
         },
         APPROVER_IN_USE: {
           title: 'This employee is an approver for other people',
-          body: 'They appear in the workflow of employee numbers {{employeeNumbers}}. Remove those assignments, then try again.',
+          body: 'They appear in the workflow of {{employees}}. Remove those assignments, then try again.',
         },
         RESPONSABILE_APPROVER_IN_USE: {
           title: 'This employee is Responsible for other people',
-          body: 'They are Responsible for employee numbers {{employeeNumbers}}. Remove those assignments before switching "Can be Responsible" off.',
+          body: 'They are Responsible for {{employees}}. Remove those assignments before switching "Can be Responsible" off.',
         },
         SUBSTITUTE_APPROVER_IN_USE: {
           title: 'This employee is Substitute-Responsible for other people',
-          body: 'They are Substitute-Responsible for employee numbers {{employeeNumbers}}. Remove those assignments before switching "Can be Substitute-Responsible" off.',
+          body: 'They are Substitute-Responsible for {{employees}}. Remove those assignments before switching "Can be Substitute-Responsible" off.',
         },
         RESPONSABILE_REQUIRED: {
           title: 'Responsible is missing',
@@ -881,6 +881,11 @@ void i18n.use(initReactI18next).init({
   lng: storedLanguage(),
   fallbackLng: 'it',
   interpolation: { escapeValue: false },
+  // A value the caller didn't supply leaves `{{employees}}` sitting in the
+  // sentence by default. A gap in a line of prose is bad; showing the operator
+  // the template is worse, and reads as the app being broken rather than the
+  // data being thin.
+  missingInterpolationHandler: () => '',
 });
 
 // Persist the choice so a reload keeps the selected language rather than
