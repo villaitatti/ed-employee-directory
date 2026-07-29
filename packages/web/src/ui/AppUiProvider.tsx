@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
-import { Button, createTheme, Input, MantineProvider, Pill, Switch, type MantineColorsTuple } from '@mantine/core';
+import { createTheme, Input, MantineProvider, Pill, type MantineColorsTuple } from '@mantine/core';
 import { DatesProvider } from '@mantine/dates';
 import { ModalsProvider } from '@mantine/modals';
 import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
 import 'dayjs/locale/it';
 import { useTranslation } from 'react-i18next';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 dayjs.extend(customParseFormat);
 
@@ -52,8 +53,6 @@ const theme = createTheme({
       classNames: { wrapper: 'app-input-wrapper', input: 'app-input', section: 'app-input-section' },
     }),
     Pill: Pill.extend({ classNames: { root: 'app-pill' } }),
-    Switch: Switch.extend({ classNames: { label: 'app-switch-label' } }),
-    Button: Button.extend({ classNames: { root: 'app-button' } }),
   },
 });
 
@@ -64,7 +63,12 @@ export function AppUiProvider({ children }: { children: ReactNode }) {
   return (
     <MantineProvider theme={theme} env={import.meta.env.MODE === 'test' ? 'test' : 'default'}>
       <DatesProvider settings={{ locale, firstDayOfWeek: 1, weekendDays: [0, 6] }}>
-        <ModalsProvider>{children}</ModalsProvider>
+        <ModalsProvider>
+          {/* `delay={0}`: every tooltip here names an icon-only control, and a
+              second of hesitation before saying what a button does is the exact
+              failing that ruled out the native `title` attribute. */}
+          <TooltipProvider delay={0}>{children}</TooltipProvider>
+        </ModalsProvider>
       </DatesProvider>
     </MantineProvider>
   );

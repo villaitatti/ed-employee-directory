@@ -1012,12 +1012,6 @@ button:focus-visible {
   background: var(--surface-raised);
 }
 
-.employee-form-dialog .app-switch-label {
-  color: var(--ink-soft);
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-
 .employee-form-footer {
   justify-content: space-between;
   gap: var(--space-lg);
@@ -1038,28 +1032,6 @@ button:focus-visible {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-}
-
-.employee-form-footer .app-button {
-  min-height: 2.75rem;
-  padding-inline: var(--space-md);
-  transition:
-    transform 120ms ease,
-    box-shadow 150ms ease;
-}
-
-.employee-form-footer .app-button:hover:not(:disabled) {
-  transform: translateY(-1px);
-}
-
-.employee-form-footer .app-button:active:not(:disabled) {
-  transform: translateY(0) scale(0.98);
-}
-
-/* The fill colour itself comes from the theme's `brand` palette, not from here:
-   Mantine sets --button-bg inline, which a stylesheet rule cannot override. */
-.employee-form-footer .app-button[data-variant="filled"] {
-  box-shadow: 0 5px 14px color-mix(in oklch, var(--brand), transparent 80%);
 }
 
 .visually-hidden {
@@ -1430,7 +1402,7 @@ button:focus-visible {
   }
 
   .modal-actions,
-  .modal-actions .app-button {
+  .modal-actions [data-slot="button"] {
     width: 100%;
   }
 

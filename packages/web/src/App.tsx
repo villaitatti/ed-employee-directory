@@ -12,6 +12,7 @@ import {
   Hash,
   History,
   Languages,
+  Loader2,
   LogOut,
   Mail,
   Plus,
@@ -27,19 +28,7 @@ import {
   UsersRound,
   X,
 } from 'lucide-react';
-import {
-  ActionIcon,
-  Button,
-  Checkbox,
-  FileInput,
-  MultiSelect,
-  Pill,
-  Select,
-  Switch,
-  Text,
-  TextInput,
-  Tooltip,
-} from '@mantine/core';
+import { FileInput, MultiSelect, Pill, Select, TextInput } from '@mantine/core';
 import { DateInput as MantineDateInput } from '@mantine/dates';
 import { modals, useModals } from '@mantine/modals';
 import dayjs from 'dayjs';
@@ -94,6 +83,10 @@ import {
   type FieldErrors,
   type ServerErrors,
 } from './employee-validation.js';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ActionTooltip } from './ui/ActionTooltip.js';
+import { SwitchField } from './ui/SwitchField.js';
 import { notifyError, notifySuccess, notifyValidation } from './ui/feedback.js';
 import type { Translate } from './i18n/types.js';
 import { deriveWorkEmail } from './work-email.js';
@@ -437,7 +430,7 @@ function openConfirmation({
     radius: 'lg',
     overlayProps: { backgroundOpacity: 0.55, blur: 4 },
     transitionProps: { transition: 'pop', duration: 160 },
-    children: <Text size="sm">{message}</Text>,
+    children: <p className="m-0 text-sm">{message}</p>,
     labels: { confirm: confirmLabel, cancel: cancelLabel },
     ...(destructive ? { confirmProps: { color: 'red' } } : {}),
     onConfirm,
@@ -612,12 +605,10 @@ function Shell() {
             </div>
           </div>
           <div className="topbar-actions">
-            {/* Mantine tooltips rather than `title`: the native one is
-                browser-styled, appears after a second-long delay, and can't be
-                made to match the rest of the chrome. `aria-label` carries the
-                accessible name that `title` used to supply — the sign-out button
-                is icon-only and would otherwise be unnamed. */}
-            <Tooltip label={t('actions.language')} withArrow position="bottom">
+            {/* `aria-label` carries the accessible name — the sign-out button is
+                icon-only and would otherwise be unnamed. See ActionTooltip for
+                why these are not native `title` tooltips. */}
+            <ActionTooltip label={t('actions.language')} side="bottom">
               <button
                 className="icon-button"
                 type="button"
@@ -627,8 +618,8 @@ function Shell() {
                 <Languages size={18} />
                 <span>{i18n.language.toUpperCase()}</span>
               </button>
-            </Tooltip>
-            <Tooltip label={t('actions.signOut')} withArrow position="bottom">
+            </ActionTooltip>
+            <ActionTooltip label={t('actions.signOut')} side="bottom">
               <button
                 className="icon-button"
                 type="button"
@@ -637,7 +628,7 @@ function Shell() {
               >
                 <LogOut size={18} />
               </button>
-            </Tooltip>
+            </ActionTooltip>
           </div>
         </header>
         <div className="workbench">
@@ -904,7 +895,7 @@ function EmployeesPage() {
                   <button className="text-button" type="button" onClick={() => setDraft(toEmployeeDraft(employee))}>
                     {t('actions.edit')}
                   </button>
-                  <Tooltip label={t('actions.delete')} withArrow position="left">
+                  <ActionTooltip label={t('actions.delete')} side="left">
                     <button
                       className="icon-danger"
                       type="button"
@@ -914,7 +905,7 @@ function EmployeesPage() {
                     >
                       <Trash2 size={16} />
                     </button>
-                  </Tooltip>
+                  </ActionTooltip>
                 </td>
               </tr>
             ))}
@@ -1231,17 +1222,16 @@ export function EmployeeForm({
               <p className="modal-description">{t('copy.employeeFormSubtitle')}</p>
             </div>
           </div>
-          <ActionIcon
+          <Button
             className="employee-modal-close"
-            variant="subtle"
-            color="gray"
-            size="lg"
-            radius="md"
+            type="button"
+            variant="ghost"
+            size="icon-sm"
             onClick={requestClose}
             aria-label={t('actions.close')}
           >
             <X size={18} />
-          </ActionIcon>
+          </Button>
         </header>
 
         <div className="modal-body employee-form-body">
@@ -1503,11 +1493,10 @@ export function EmployeeForm({
                     value={retirementDateValue}
                     onChange={(value) => set('retirementDate', value)}
                   />
-                  <Switch
+                  <SwitchField
                     checked={draft.retirementDateOverridden}
-                    onChange={(event) => toggleRetirementOverride(event.currentTarget.checked)}
+                    onCheckedChange={toggleRetirementOverride}
                     label={t('actions.confirmRetirementDate')}
-                    color="indigo"
                   />
                 </div>
               </Field>
@@ -1629,17 +1618,15 @@ export function EmployeeForm({
             description={t('copy.roleCapabilitiesSectionHint')}
           >
             <div className="approval-switch approval-capabilities">
-              <Switch
+              <SwitchField
                 checked={draft.canBeResponsible}
-                onChange={(event) => set('canBeResponsible', event.currentTarget.checked)}
+                onCheckedChange={(checked) => set('canBeResponsible', checked)}
                 label={t('fields.canBeResponsible')}
-                color="indigo"
               />
-              <Switch
+              <SwitchField
                 checked={draft.canBeSubstituteResponsible}
-                onChange={(event) => set('canBeSubstituteResponsible', event.currentTarget.checked)}
+                onCheckedChange={(checked) => set('canBeSubstituteResponsible', checked)}
                 label={t('fields.canBeSubstituteResponsible')}
-                color="indigo"
               />
             </div>
           </EmployeeFormSection>
@@ -1693,13 +1680,26 @@ export function EmployeeForm({
             <span aria-hidden="true">*</span> {t('copy.requiredFields')}
           </p>
           <div className="modal-actions">
-            <Button variant="default" type="button" onClick={requestClose}>
-            {t('actions.cancel')}
+            <Button
+              variant="outline"
+              size="lg"
+              type="button"
+              className="transition-transform hover:not-disabled:-translate-y-px"
+              onClick={requestClose}
+            >
+              {t('actions.cancel')}
             </Button>
-            {/* `filled` is Mantine's default, but stating it makes the element carry
-                data-variant="filled" — which app.css needs to give this button the
-                brand blue and drop shadow the rest of the app's primary buttons use. */}
-            <Button variant="filled" type="submit" loading={isSaving} leftSection={<Save size={17} />}>
+            <Button
+              size="lg"
+              type="submit"
+              className="shadow-[0_5px_14px_color-mix(in_oklch,var(--brand),transparent_80%)] transition-[transform,box-shadow] hover:not-disabled:-translate-y-px"
+              disabled={isSaving}
+            >
+              {isSaving ? (
+                <Loader2 className="animate-spin" aria-hidden="true" />
+              ) : (
+                <Save size={17} aria-hidden="true" />
+              )}
               {t('actions.save')}
             </Button>
           </div>
@@ -1800,7 +1800,7 @@ function DepartmentsPage() {
                   >
                     {t('actions.edit')}
                   </button>
-                  <Tooltip label={t('actions.delete')} withArrow position="left">
+                  <ActionTooltip label={t('actions.delete')} side="left">
                     <button
                       className="icon-danger"
                       type="button"
@@ -1810,7 +1810,7 @@ function DepartmentsPage() {
                     >
                       <Trash2 size={16} />
                     </button>
-                  </Tooltip>
+                  </ActionTooltip>
                 </td>
               </tr>
             ))}
@@ -2100,9 +2100,9 @@ export function ImportPage() {
                       aria-label={`${t('fields.select')} ${row.rowNumber}`}
                       disabled={row.errors.length > 0}
                       checked={selectedRows.includes(row.rowNumber)}
-                      onChange={(event) => {
+                      onCheckedChange={(checked) => {
                         setSelectedRows((current) =>
-                          event.currentTarget.checked
+                          checked
                             ? [...current, row.rowNumber]
                             : current.filter((rowNumber) => rowNumber !== row.rowNumber)
                         );
