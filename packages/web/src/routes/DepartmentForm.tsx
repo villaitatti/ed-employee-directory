@@ -57,7 +57,7 @@ export function DepartmentForm({
       return;
     }
     confirm({
-      title: t('copy.confirmationTitle'),
+      title: t('copy.discardChangesTitle'),
       message: t('copy.discardChanges'),
       confirmLabel: t('actions.discard'),
       cancelLabel: t('actions.cancel'),

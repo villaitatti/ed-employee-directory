@@ -66,6 +66,7 @@ export const resources = {
         substituteResponsabili: 'Sostituto-Responsabile',
         weeklyTotal: 'Totale orario',
         approvalWorkflow: 'Workflow',
+        onlyIncompleteApproval: 'Solo workflow incompleto',
         actions: 'Azioni',
         select: 'Seleziona',
         updated: 'Aggiornato',
@@ -112,8 +113,9 @@ export const resources = {
           'Ricalcolate le date di pensionamento previste di {{count}} dipendenti. Le date confermate non sono state toccate.',
         recalcDoneNone:
           'Nessuna data da ricalcolare: nessun dipendente ha una data di pensionamento prevista.',
+        confirmRecalcTitle: 'Ricalcolare tutte le date di pensionamento?',
         confirmRecalc:
-          'Salvando {{years}} anni e {{months}} mesi, la data di pensionamento prevista viene ricalcolata per tutti i dipendenti che non hanno una data confermata. Continuare?',
+          'Salvando {{years}} anni e {{months}} mesi, la data prevista viene ricalcolata per tutti i dipendenti che non hanno una data confermata.',
         corruptWarning:
           'Il valore salvato non è valido; viene mostrato il valore predefinito di legge. Salva per ripristinarlo.',
       },
@@ -186,10 +188,12 @@ export const resources = {
         weeklySectionHint: 'Ore giornaliere in formato sessantesimi, per esempio 7,30 per sette ore e trenta minuti.',
         requiredFields: 'Campi obbligatori',
         noOptionsFound: 'Nessun risultato',
-        confirmationTitle: 'Conferma richiesta',
+        confirmDeleteEmployeeTitle: 'Eliminare {{name}}?',
+        confirmDeleteDepartmentTitle: 'Eliminare il dipartimento {{name}}?',
+        discardChangesTitle: 'Scartare le modifiche?',
+        confirmUnconfirmRetirementTitle: 'Ricalcolare la data di pensionamento?',
         departmentsSubtitle: 'Gestisci i dipartimenti.',
-        discardChanges:
-          'Ci sono modifiche non salvate in questa scheda. Chiudendo ora andranno perse. Vuoi chiudere senza salvare?',
+        discardChanges: 'Ci sono modifiche non salvate in questa scheda. Chiudendo ora andranno perse.',
         emptyEmployees: 'Nessun dipendente corrisponde ai filtri. Svuota la ricerca o crea un nuovo dipendente.',
         emptyDepartments: 'Aggiungi i dipartimenti prima di importare il file Excel.',
         importInstructions: 'Carica un file Excel con intestazioni italiane o inglesi. I dipartimenti sconosciuti rimangono errori di riga.',
@@ -206,11 +210,11 @@ export const resources = {
         weeklyScheduleMismatch: 'Totale settimanale {{total}}; atteso da FTE {{expected}}.',
         loadErrorHint: 'Premi Riprova. Se l’errore si ripete, ricarica la pagina.',
         confirmDeleteEmployee:
-          'Stai per eliminare definitivamente {{name}} (matricola {{employeeNumber}}) e il suo storico di approvazioni. L’operazione non è reversibile.',
+          'La matricola {{employeeNumber}} e tutto il suo storico di approvazioni verranno eliminati definitivamente. L’operazione non è reversibile.',
         confirmDeleteDepartment:
-          'Stai per eliminare definitivamente il dipartimento {{name}}. L’operazione non è reversibile e riesce solo se nessun dipendente è assegnato a questo dipartimento.',
+          'L’operazione non è reversibile e riesce solo se nessun dipendente è assegnato a questo dipartimento.',
         confirmUnconfirmRetirement:
-          'Al salvataggio la data confermata ({{date}}) sarà sostituita da quella calcolata dalla data di nascita. Continuare?',
+          'Al salvataggio la data confermata ({{date}}) sarà sostituita da quella calcolata dalla data di nascita.',
         workEmailHint:
           'Indirizzo di lavoro ufficiale, univoco per dipendente. Usato dal portale Ferie per le notifiche.',
         preferredLanguageHint:
@@ -510,6 +514,7 @@ export const resources = {
         substituteResponsabili: 'Substitute-Responsible',
         weeklyTotal: 'Weekly Hours',
         approvalWorkflow: 'Workflow',
+        onlyIncompleteApproval: 'Incomplete workflow only',
         actions: 'Actions',
         select: 'Select',
         updated: 'Updated',
@@ -553,8 +558,9 @@ export const resources = {
         recalcDoneBody_other:
           'Recalculated the projected retirement date for {{count}} employees. Confirmed dates were left untouched.',
         recalcDoneNone: 'Nothing to recalculate: no employee has a projected retirement date.',
+        confirmRecalcTitle: 'Recalculate every retirement date?',
         confirmRecalc:
-          'Saving {{years}} years and {{months}} months recalculates the projected retirement date for every employee without a confirmed date. Continue?',
+          'Saving {{years}} years and {{months}} months recalculates the projected date for every employee without a confirmed one.',
         corruptWarning:
           'The saved value is invalid; the statutory default is shown. Save to reset it.',
       },
@@ -627,10 +633,12 @@ export const resources = {
         weeklySectionHint: 'Daily hours in payroll sixtieths format, for example 7,30 for seven hours and thirty minutes.',
         requiredFields: 'Required fields',
         noOptionsFound: 'No results found',
-        confirmationTitle: 'Confirmation required',
+        confirmDeleteEmployeeTitle: 'Delete {{name}}?',
+        confirmDeleteDepartmentTitle: 'Delete the {{name}} department?',
+        discardChangesTitle: 'Discard changes?',
+        confirmUnconfirmRetirementTitle: 'Recalculate the retirement date?',
         departmentsSubtitle: 'Manage departments.',
-        discardChanges:
-          'This record has unsaved changes. Closing now discards them. Close without saving?',
+        discardChanges: 'This record has unsaved changes. Closing now discards them.',
         emptyEmployees: 'No employee matches the filters. Clear the search or create a new employee.',
         emptyDepartments: 'Add departments before importing Excel data.',
         importInstructions: 'Upload an Excel file with Italian or English headers. Unknown departments remain row errors.',
@@ -647,11 +655,11 @@ export const resources = {
         weeklyScheduleMismatch: 'Weekly total {{total}}; expected from FTE {{expected}}.',
         loadErrorHint: 'Press Retry. If the error keeps happening, reload the page.',
         confirmDeleteEmployee:
-          'You are about to permanently delete {{name}} (employee number {{employeeNumber}}) and their approval history. This cannot be undone.',
+          'Employee number {{employeeNumber}} and their whole approval history will be permanently deleted. This cannot be undone.',
         confirmDeleteDepartment:
-          'You are about to permanently delete the {{name}} department. This cannot be undone, and only works if no employee is assigned to it.',
+          'This cannot be undone, and only works if no employee is assigned to it.',
         confirmUnconfirmRetirement:
-          'On save, the confirmed date ({{date}}) will be replaced by the one calculated from the birth date. Continue?',
+          'On save, the confirmed date ({{date}}) will be replaced by the one calculated from the birth date.',
         workEmailHint:
           'Official work address, unique per employee. The Ferie portal uses it for notifications.',
         preferredLanguageHint:

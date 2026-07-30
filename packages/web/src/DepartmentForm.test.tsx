@@ -145,7 +145,7 @@ describe('DepartmentForm modal', () => {
 
     // Cancelling the confirmation keeps the form open.
     await user.keyboard('{Escape}');
-    const confirmation = await screen.findByRole('alertdialog', { name: 'Conferma richiesta' });
+    const confirmation = await screen.findByRole('alertdialog', { name: 'Scartare le modifiche?' });
     await user.click(within(confirmation).getByRole('button', { name: 'Annulla' }));
     expect(onCancel).not.toHaveBeenCalled();
 

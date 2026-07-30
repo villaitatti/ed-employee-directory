@@ -105,7 +105,15 @@ beforeEach(() => {
       const url = String(input);
       if (url.includes('/api/admin/departments')) return json({ data: [department] });
       if (url.includes('/api/admin/employee-options')) return json({ data: [] });
-      if (url.includes('/api/admin/employees')) return json({ data: roster, nextCursor: null });
+      if (url.includes('/api/admin/employees')) {
+        // The search term is a server filter in the real API, so the stub applies
+        // it here rather than letting the page appear to filter on it.
+        const q = new URL(url, 'http://localhost').searchParams.get('q')?.toLowerCase();
+        const data = q
+          ? roster.filter((e) => `${e.firstName} ${e.lastName}`.toLowerCase().includes(q))
+          : roster;
+        return json({ data, nextCursor: null });
+      }
       return json({ data: [] });
     })
   );
@@ -157,6 +165,43 @@ describe('the directory table', () => {
     // An Active employee needs both roles, so the empty half is a problem to
     // see, not an absence to skim past.
     expect((await rowFor('Bruno Bianchi')).cells[7]).toHaveTextContent('Da assegnare');
+  });
+
+  it('can narrow the list to the people missing an approver', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<EmployeesPage />);
+
+    expect(await names()).toHaveLength(3);
+
+    // Only Bruno is short of a role — the point of the filter is finding the
+    // gaps rather than reading every row's workflow cell.
+    await user.click(screen.getByRole('checkbox', { name: /Solo workflow incompleto/i }));
+    expect(
+      screen
+        .getAllByRole('row')
+        .slice(1)
+        .map((row) => (row as HTMLTableRowElement).cells[1]?.textContent?.trim())
+    ).toEqual(['Bruno Bianchi']);
+
+    await user.click(screen.getByRole('checkbox', { name: /Solo workflow incompleto/i }));
+    expect(await names()).toHaveLength(3);
+  });
+
+  it('explains an empty table rather than just showing nothing', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<EmployeesPage />);
+    await screen.findByRole('cell', { name: 'Ada Rossi' });
+
+    // Filtering everything out leaves a blank table, which reads as a page that
+    // failed to load unless it says otherwise.
+    await user.click(screen.getByRole('checkbox', { name: /Solo workflow incompleto/i }));
+    await user.click(screen.getByRole('button', { name: /Numero Matricola/i }));
+    expect(screen.queryByText(/Nessun dipendente corrisponde ai filtri/)).not.toBeInTheDocument();
+
+    // Now narrow to nobody: Bruno is the only incomplete one, and searching for
+    // Ada excludes him.
+    await user.type(screen.getByRole('textbox', { name: 'Cerca' }), 'Ada');
+    expect(await screen.findByText(/Nessun dipendente corrisponde ai filtri/)).toBeInTheDocument();
   });
 
   it('says whether a retirement date is projected or confirmed', async () => {

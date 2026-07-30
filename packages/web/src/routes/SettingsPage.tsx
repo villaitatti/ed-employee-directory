@@ -120,7 +120,7 @@ export function SettingsPage() {
           // employee's projected retirement date, echoing the values being saved
           // so the operator can catch a typo before it touches every record.
           confirm({
-            title: t('copy.confirmationTitle'),
+            title: t('settings.confirmRecalcTitle'),
             message: t('settings.confirmRecalc', { years, months }),
             confirmLabel: t('actions.confirm'),
             cancelLabel: t('actions.cancel'),

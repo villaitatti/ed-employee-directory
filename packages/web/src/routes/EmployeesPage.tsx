@@ -14,7 +14,8 @@ import {
 } from '../employee-draft.js';
 import { formatDate, useDateLocale } from '../format.js';
 import { useApi, useDebounced, useDepartments } from '../hooks.js';
-import { ApprovalWorkflow } from '../ui/ApprovalWorkflow.js';
+import { ApprovalWorkflow, hasIncompleteApproval } from '../ui/ApprovalWorkflow.js';
+import { CheckboxField } from '../ui/CheckboxField.js';
 import { ActionTooltip } from '../ui/ActionTooltip.js';
 import { ComboboxField } from '../ui/ComboboxField.js';
 import { QueryError } from '../ui/QueryError.js';
@@ -67,6 +68,10 @@ export function EmployeesPage() {
   const api = useApi();
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState({ q: '', status: '', departmentId: '' });
+  // Not a server filter like the other three: the workflow rule is about what is
+  // *missing*, which the API has no query for, and every matching row is already
+  // here to check.
+  const [onlyIncompleteApproval, setOnlyIncompleteApproval] = useState(false);
   // Surname-ascending to begin with, which is the order the API returns and the
   // order a directory is read in. Sorting is done here rather than by the server
   // because the table already holds every matching row — `allEmployees` follows
@@ -98,11 +103,12 @@ export function EmployeesPage() {
   });
 
   const rows = useMemo(() => {
-    const sorted = [...(employees.data ?? [])].sort((left, right) =>
-      compareEmployees(left, right, sort.key)
+    const matching = (employees.data ?? []).filter(
+      (employee) => !onlyIncompleteApproval || hasIncompleteApproval(employee)
     );
+    const sorted = matching.sort((left, right) => compareEmployees(left, right, sort.key));
     return sort.direction === 'asc' ? sorted : sorted.reverse();
-  }, [employees.data, sort]);
+  }, [employees.data, sort, onlyIncompleteApproval]);
 
   /** Clicking the column you are already sorted by turns it around. */
   const sortBy = (key: SortKey) =>
@@ -186,13 +192,11 @@ export function EmployeesPage() {
   const confirmDeleteEmployee = (employee: Employee) => {
     if (deleteEmployee.isPending) return;
     confirm({
-      title: t('copy.confirmationTitle'),
-      // Name the record being destroyed: on a table of similar rows, "this
-      // employee" is not enough to catch a misclick before it is irreversible.
-      message: t('copy.confirmDeleteEmployee', {
-        name: employeeFullName(employee),
-        employeeNumber: employee.employeeNumber,
-      }),
+      // Name the record being destroyed, in the question itself: on a table of
+      // similar rows, "delete this employee?" is not enough to catch a misclick
+      // before it is irreversible.
+      title: t('copy.confirmDeleteEmployeeTitle', { name: employeeFullName(employee) }),
+      message: t('copy.confirmDeleteEmployee', { employeeNumber: employee.employeeNumber }),
       confirmLabel: t('actions.delete'),
       cancelLabel: t('actions.cancel'),
       destructive: true,
@@ -242,7 +246,7 @@ export function EmployeesPage() {
         }
       />
 
-      <Toolbar>
+      <Toolbar className="desktop:grid-cols-[minmax(14rem,1fr)_minmax(9rem,12rem)_minmax(10rem,15rem)_auto]">
         <SearchField
           value={filters.q}
           onChange={(q) => setFilters((current) => ({ ...current, q }))}
@@ -266,6 +270,11 @@ export function EmployeesPage() {
             value: department.id,
             label: department.name,
           }))}
+        />
+        <CheckboxField
+          label={t('fields.onlyIncompleteApproval')}
+          checked={onlyIncompleteApproval}
+          onCheckedChange={setOnlyIncompleteApproval}
         />
       </Toolbar>
 
@@ -350,7 +359,10 @@ export function EmployeesPage() {
           </tbody>
         </table>
         {employees.isError ? <QueryError error={employees.error} onRetry={() => void employees.refetch()} /> : null}
-        {!employees.isLoading && !employees.isError && employees.data?.length === 0 ? (
+        {/* Counted on the rows actually shown, not on what the API returned:
+            the workflow filter narrows the list here, and a blank table with no
+            explanation reads as a page that failed to load. */}
+        {!employees.isLoading && !employees.isError && rows.length === 0 ? (
           <EmptyState>{t('copy.emptyEmployees')}</EmptyState>
         ) : null}
       </DataSurface>

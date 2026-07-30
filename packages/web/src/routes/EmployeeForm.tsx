@@ -200,7 +200,7 @@ export function EmployeeForm({
     // discarding a date that was previously confirmed.
     if (draft.retirementDateOverridden && draft.retirementDate) {
       confirm({
-        title: t('copy.confirmationTitle'),
+        title: t('copy.confirmUnconfirmRetirementTitle'),
         message: t('copy.confirmUnconfirmRetirement', {
           date: formatDate(draft.retirementDate, dateLocale),
         }),
@@ -242,7 +242,7 @@ export function EmployeeForm({
       return;
     }
     confirm({
-      title: t('copy.confirmationTitle'),
+      title: t('copy.discardChangesTitle'),
       message: t('copy.discardChanges'),
       confirmLabel: t('actions.discard'),
       cancelLabel: t('actions.cancel'),

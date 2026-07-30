@@ -53,8 +53,8 @@ export function DepartmentsPage() {
   const confirmDeleteDepartment = (department: Department) => {
     if (deleteDepartment.isPending) return;
     confirm({
-      title: t('copy.confirmationTitle'),
-      message: t('copy.confirmDeleteDepartment', { name: department.name }),
+      title: t('copy.confirmDeleteDepartmentTitle', { name: department.name }),
+      message: t('copy.confirmDeleteDepartment'),
       confirmLabel: t('actions.delete'),
       cancelLabel: t('actions.cancel'),
       destructive: true,
