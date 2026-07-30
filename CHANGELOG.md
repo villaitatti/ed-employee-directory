@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.11.0 - 2026-07-30
+## 0.11.0 - 30 July 2026
 
 ### Added
 
@@ -30,7 +30,7 @@
 - Toasts are now actually the 25rem the code has claimed since 0.10.0. The width was written as a Tailwind `w-100` utility, which never took — sonner sizes the panel from its own `--width` custom property, so every toast was the default 356px. Set as `--width` now, and a nine-field validation summary reads in three lines instead of four.
 - The directory column and the filter that names an employee's approvers no longer call them a "workflow". The word arrived with the approval-role master data in 0.5.0, borrowed from the downstream time-off system, where a request really does flow through people. In ED there is no flow: three role slots holding lists of names, no sequence, no states, no transitions — `APPROVER_ROLE_ORDER` exists only so a resync payload is byte-stable, not to say who approves first. The column header promised a process and delivered a roster. It now says **"Approvatori" / "Approvers"**, the filter says **"Solo approvatori mancanti" / "Missing approvers only"** — what is missing is a person, not an unfinished procedure — and the "still an approver" errors read "È approvatore di Carla Verdi (1003)" rather than "Compare nel workflow di Carla Verdi (1003)". The employee card's section keeps its more specific "Responsabili del dipendente", which was already saying the true thing while the column next to it did not. The `sections.approvalWorkflow` and `fields.approvalWorkflow` translation keys become `sections.approvers` and `fields.approvers`, and `ui/ApprovalWorkflow.tsx` becomes `ui/Approvers.tsx`, so the code reads the way the screen does. Three server messages change wording only; no API shape, field or rule is touched.
 
-## 0.10.0 - 2026-07-29
+## 0.10.0 - 29 July 2026
 
 ### Changed
 
@@ -66,7 +66,7 @@
 - Invalid state is reported through data attributes (`data-invalid`, `data-has-errors`, `data-ineligible`) rather than styling classes, which is both the shadcn convention and a hook that survives having no stylesheet to name. The tests that pin those marks were updated, not removed.
 - `@mantine/core`, `@mantine/dates`, `@mantine/hooks` and `@mantine/modals` are gone. The CSS bundle drops from 348 kB to 98 kB.
 
-## 0.9.0 - 2026-07-28
+## 0.9.0 - 28 July 2026
 
 ### Added
 
@@ -93,7 +93,7 @@
 - The retirement age and Employee Number fields accepted values that only look like numbers to JavaScript. `0x40`, `0b1000000`, and `6.4e1` were each read as 64 and submitted, so a typo in the retirement age could recalculate every employee's projected date from a figure nobody typed. Both fields now require plain decimal digits before any conversion happens.
 - The prompt shown when un-confirming a retirement date quoted the date in fixed English abbreviations (`30 Jun 2050`) even in Italian, disagreeing with the field directly above it. It now uses the same localized `DD MMMM YYYY` the field does.
 
-## 0.8.0 - 2026-07-28
+## 0.8.0 - 28 July 2026
 
 ### Added
 
@@ -120,7 +120,7 @@
 - Spreadsheets exported before 0.8.0 have no "Work Email" column. Because the field is required, importing such a file reports "Work Email is required." on every row — export a fresh file first. Preferred Language may be omitted safely: an existing employee keeps their stored value and a new one defaults to Italiano.
 - The Ferie portal needs a client granted `write:time-off-directory` in Auth0 for the language write; the read sync continues to use `AUTH0_READ_SCOPE`.
 
-## 0.7.1 - 2026-07-27
+## 0.7.1 - 27 July 2026
 
 ### Added
 
@@ -131,7 +131,7 @@
 - The FTE hint now states the accepted input format: both `0,5` and `0.5` are read, with at most three decimals.
 - The weekly schedule hint now shows a worked example of the sessantesimi format, `7,30` for seven hours and thirty minutes, instead of only naming it.
 
-## 0.7.0 - 2026-07-27
+## 0.7.0 - 27 July 2026
 
 ### Added
 
@@ -154,7 +154,7 @@
 
 - Spreadsheets exported before 0.7.0 have no "Responsabile Abilitato" column. Re-importing one keeps the flag as it stands for employees who already exist, but any *new* employee it creates starts out not eligible — export a fresh file first if the import is meant to establish Responsabili.
 
-## 0.6.0 - 2026-07-20
+## 0.6.0 - 20 July 2026
 
 ### Fixed
 
@@ -180,7 +180,7 @@
 - The local development database now listens on loopback only.
 - Added a modal focus trap with keyboard focus management, a top-level error boundary, and a cap on the client-supplied request id.
 
-## 0.5.0 - 2026-06-25
+## 0.5.0 - 25 June 2026
 
 ### Added
 
@@ -199,7 +199,7 @@
 - Kept already-selected approvers visible and removable in the employee form even after they lose eligibility, instead of dropping them silently while still submitting them.
 - Refreshed employee picker options after employee saves, deletes, and imports so approval selectors do not use stale eligibility data.
 
-## 0.4.0 - 2026-06-15
+## 0.4.0 - 15 June 2026
 
 ### Added
 
@@ -213,7 +213,7 @@
 - Employee date fields now use `dd/mm/yyyy` entry, while tables and audit history display dates as `20 Jun 2026`.
 - The retirement-date checkbox now means "confirmed retirement date"; confirmed dates are preserved when the pension-age setting changes.
 
-## 0.3.0 - 2026-06-08
+## 0.3.0 - 8 June 2026
 
 ### Changed
 
@@ -223,7 +223,7 @@
 
 - Dropped the unused `.department-form` styles left over from the old inline department bar.
 
-## 0.2.1 - 2026-06-08
+## 0.2.1 - 8 June 2026
 
 ### Changed
 
@@ -234,7 +234,7 @@
 - Signing out now keeps you signed out. Previously the app could immediately send you back into Auth0 and silently sign you back in, making it impossible to log out or switch accounts.
 - A failed or denied sign-in no longer traps you in an endless redirect. The app now shows the sign-in screen with a clear message and a button to try again, instead of looping back to Auth0 or hanging on a blank loading screen.
 
-## 0.2.0 - 2026-06-05
+## 0.2.0 - 5 June 2026
 
 ### Added
 
@@ -249,7 +249,7 @@
 
 - Settings save skips the table-wide recalculation when the retirement age is unchanged, and a malformed stored policy now logs an error before falling back to the statutory default instead of failing silently.
 
-## 0.1.0 - 2026-06-04
+## 0.1.0 - 4 June 2026
 
 ### Added
 
