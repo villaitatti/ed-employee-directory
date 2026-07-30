@@ -55,7 +55,7 @@ export const FIELD_LABEL_KEYS: Record<string, string> = {
   responsabileIds: 'fields.responsabili',
   substituteResponsabileIds: 'fields.substituteResponsabili',
   weeklySchedule: 'sections.weeklySchedule',
-  approvalRoleIds: 'sections.approvalWorkflow',
+  approvalRoleIds: 'sections.approvers',
   ...Object.fromEntries(WEEKDAY_KEYS.map((key) => [`weekly.${key}`, `weekday.${key}`])),
 };
 

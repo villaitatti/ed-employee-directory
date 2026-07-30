@@ -75,7 +75,7 @@ describe('EmployeeForm modal', () => {
     expect(birthDate).toHaveValue('02 marzo 2026');
   });
 
-  it('puts status first and hides termination date for new active employees', async () => {
+  it('puts status first and offers termination date to a new active employee', async () => {
     const user = userEvent.setup();
     let draft = { ...emptyEmployeeDraft };
     const onChange = vi.fn((next) => {
@@ -97,7 +97,10 @@ describe('EmployeeForm modal', () => {
     const status = screen.getByRole('combobox', { name: 'Stato' });
     const hireDate = screen.getByLabelText('Data assunzione');
     expect(status.compareDocumentPosition(hireDate) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.queryByLabelText('Data cessazione')).not.toBeInTheDocument();
+
+    // A fixed-term hire's last day is known on the day they are taken on, so the
+    // field is there from the start rather than only once the status says Cessato.
+    expect(screen.getByLabelText('Data cessazione')).toBeInTheDocument();
 
     await user.click(status);
     await user.click(await screen.findByRole('option', { name: 'Cessato' }));
@@ -113,6 +116,34 @@ describe('EmployeeForm modal', () => {
       />
     );
     expect(screen.getByLabelText('Data cessazione')).toBeInTheDocument();
+  });
+
+  it('keeps a cessation date typed while Active when the status changes', async () => {
+    const user = userEvent.setup();
+    // The old form cleared this on the way to Attivo, which would now throw away
+    // the one thing the operator opened the field to record.
+    let draft = { ...emptyEmployeeDraft, status: 'CESSATO' as const, terminationDate: '2027-06-30' };
+    const onChange = vi.fn((next) => {
+      draft = next;
+    });
+
+    renderWithProviders(
+      <EmployeeForm
+        draft={draft}
+        departments={departments}
+        employeeOptions={employeeOptions}
+        onCancel={vi.fn()}
+        onChange={onChange}
+        onSave={vi.fn()}
+        isSaving={false}
+      />
+    );
+
+    await user.click(screen.getByRole('combobox', { name: 'Stato' }));
+    await user.click(await screen.findByRole('option', { name: 'Attivo' }));
+
+    expect(draft.status).toBe('ATTIVO');
+    expect(draft.terminationDate).toBe('2027-06-30');
   });
 
   it('shows termination date when editing an active employee', () => {
@@ -843,6 +874,29 @@ describe('EmployeeForm validation feedback', () => {
     const { onSave } = renderForm(validDraft);
     await user.click(screen.getByRole('button', { name: /Salva/i }));
     expect(onSave).toHaveBeenCalledOnce();
+  });
+
+  it('accepts a fixed-term hire: Active, with the end of the contract already known', async () => {
+    const user = userEvent.setup();
+    const { container, onSave } = renderForm({ ...validDraft, terminationDate: '2027-06-30' });
+
+    await user.click(screen.getByRole('button', { name: /Salva/i }));
+
+    expect(onSave).toHaveBeenCalledOnce();
+    expect(container.querySelector('[data-invalid="true"]')).toBeNull();
+  });
+
+  it('still rejects a cessation date before the hire date on an Active employee', async () => {
+    vi.spyOn(toast, 'error').mockImplementation(() => 'id');
+    const user = userEvent.setup();
+    // Optional is not unchecked: the hire/termination ordering rule applies
+    // whatever the status is.
+    const { container, onSave } = renderForm({ ...validDraft, terminationDate: '2019-12-31' });
+
+    await user.click(screen.getByRole('button', { name: /Salva/i }));
+
+    expect(onSave).not.toHaveBeenCalled();
+    expect(container.querySelector('[data-field="terminationDate"]')).toHaveAttribute('data-invalid', 'true');
   });
 
   it('blocks an incomplete draft, highlights the fields, and names them in the toast', async () => {

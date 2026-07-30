@@ -38,7 +38,7 @@ describe('describeError', () => {
     // The API sends them structured so the name order stays this app's decision.
     // "Remove the assignment on 1003" makes the operator go and look up who 1003
     // is before they can act on it.
-    const error = new ApiError('This employee is used in approval workflows.', 409, 'APPROVER_IN_USE', {
+    const error = new ApiError('This employee is an approver for other people.', 409, 'APPROVER_IN_USE', {
       employees: [
         { employeeNumber: 1003, firstName: 'Carla', lastName: 'Verdi' },
         { employeeNumber: 1002, firstName: 'Bruno', lastName: 'Bianchi' },
@@ -60,7 +60,7 @@ describe('describeError', () => {
     // The server always names them, so this is the belt to that braces: a detail
     // that goes missing should thin the sentence, not print the template at
     // someone and make the app look broken.
-    const error = new ApiError('This employee is used in approval workflows.', 409, 'APPROVER_IN_USE', {});
+    const error = new ApiError('This employee is an approver for other people.', 409, 'APPROVER_IN_USE', {});
 
     await withLanguage('it', () => {
       const described = describeError(error, t);

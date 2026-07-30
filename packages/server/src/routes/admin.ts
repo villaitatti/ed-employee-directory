@@ -11,6 +11,7 @@ import {
   employeeApprovalRoleNumbersSchema,
   employeeListQuerySchema,
   employeeWriteSchema,
+  EMPLOYEE_STATUSES,
   entityTypeSchema,
   importCommitSchema,
   isValidEmployeeNumber,
@@ -19,7 +20,10 @@ import {
   normalizeWorkEmail,
   retirementPolicySchema,
   WEEKDAY_KEYS,
+  type DepartmentEmployeeCounts,
+  type DepartmentMember,
   type EmployeeApprovalRoleIds,
+  type EmployeeStatus,
   type Language,
   type EmployeeApprovalRoleNumbers,
   type EmployeeWriteInput,
@@ -46,6 +50,7 @@ import {
   readFirst,
 } from '../services/csv.js';
 import { toEmployeeData } from '../services/employee-input.js';
+import { buildImportTemplate } from '../services/import-template.js';
 import { serializeAuditLog, serializeDepartment, serializeEmployee } from '../services/serializers.js';
 import { getRetirementPolicy, getRetirementSetting, RETIREMENT_POLICY_KEY } from '../services/settings.js';
 import {
@@ -596,11 +601,48 @@ adminRouter.put(
   })
 );
 
+/** A fresh all-zero tally, so every status is a number rather than a missing key. */
+function emptyDepartmentCounts(): DepartmentEmployeeCounts {
+  return {
+    total: 0,
+    byStatus: Object.fromEntries(EMPLOYEE_STATUSES.map((status) => [status, 0])) as Record<EmployeeStatus, number>,
+  };
+}
+
 adminRouter.get(
   '/departments',
   asyncHandler(async (_req, res) => {
-    const departments = await prisma.department.findMany({ orderBy: { name: 'asc' } });
-    res.json({ data: departments.map(serializeDepartment) });
+    // Two queries for the whole table, not two per row: the page needs a headcount
+    // and a roster on every line, and N+1 selects to print N of each is a cost that
+    // grows with the org chart. The members double as the tally — counting rows the
+    // response already carries is cheaper than asking the database to count them
+    // again, and it makes the two numbers incapable of disagreeing.
+    const [departments, members] = await Promise.all([
+      prisma.department.findMany({ orderBy: { name: 'asc' } }),
+      prisma.employee.findMany({
+        select: { id: true, employeeNumber: true, firstName: true, lastName: true, status: true, departmentId: true },
+        // Surname order, like every other list of people here.
+        orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }, { employeeNumber: 'asc' }],
+      }),
+    ]);
+
+    const byDepartment = new Map<string, DepartmentMember[]>();
+    for (const { departmentId, ...member } of members) {
+      const existing = byDepartment.get(departmentId);
+      if (existing) existing.push(member);
+      else byDepartment.set(departmentId, [member]);
+    }
+
+    res.json({
+      data: departments.map((department) => {
+        // A department nobody is in has no rows at all, rather than zeroed ones.
+        const employees = byDepartment.get(department.id) ?? [];
+        const counts = emptyDepartmentCounts();
+        counts.total = employees.length;
+        for (const employee of employees) counts.byStatus[employee.status] += 1;
+        return { ...serializeDepartment(department), employeeCounts: counts, employees };
+      }),
+    });
   })
 );
 
@@ -876,7 +918,7 @@ adminRouter.delete(
         approverId: employeeId,
         code: 'APPROVER_IN_USE',
         message: (employees) =>
-          `This employee is used in approval workflows by ${employees}. Remove those approval assignments before deleting the employee.`,
+          `This employee is an approver for ${employees}. Remove those approval assignments before deleting the employee.`,
       });
       await writeAuditLog({
         tx,
@@ -1066,14 +1108,78 @@ adminRouter.get(
   })
 );
 
+/**
+ * The Employee Numbers of everyone whose name matches `term`.
+ *
+ * Read out of the audit log's own snapshots first, not only out of the Employee
+ * table, and that is the point: the rows most worth searching for by name belong to
+ * people who are no longer in that table. "Who deleted Ada Rossi, and when?" is
+ * unanswerable if the only index of names is the list Ada was deleted from.
+ *
+ * Both sides of a change are searched, so a rename is findable under the old name
+ * as well as the new one. The Employee table is unioned in as a belt to that
+ * braces — a current employee is found by name even if their own snapshots somehow
+ * carry none.
+ *
+ * Raw SQL because the names live inside `jsonb` and this needs `ILIKE` on extracted
+ * text; the audit query itself stays a typed Prisma `where`. Both halves are one
+ * statement rather than two so a single escaping rule covers them: Prisma's
+ * `contains` passes `%` and `_` through to LIKE unescaped, which turned a search
+ * for "%" into a search for everybody.
+ */
+async function employeeNumbersMatchingName(term: string): Promise<number[]> {
+  // Escaped so a name containing % or _ is searched for literally. Backslash first,
+  // or it would double the escapes it just added.
+  const pattern = `%${term.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+
+  const rows = await prisma.$queryRaw<Array<{ employeeNumber: number }>>`
+    SELECT DISTINCT "employeeNumber"
+    FROM "AuditLog"
+    WHERE "employeeNumber" IS NOT NULL
+      AND (
+        "before"->>'firstName' ILIKE ${pattern} ESCAPE '\'
+        OR "before"->>'lastName' ILIKE ${pattern} ESCAPE '\'
+        OR "after"->>'firstName' ILIKE ${pattern} ESCAPE '\'
+        OR "after"->>'lastName' ILIKE ${pattern} ESCAPE '\'
+        -- Forename-first, so "Susan Bates" finds her the way the app writes her.
+        OR concat_ws(' ', "before"->>'firstName', "before"->>'lastName') ILIKE ${pattern} ESCAPE '\'
+        OR concat_ws(' ', "after"->>'firstName', "after"->>'lastName') ILIKE ${pattern} ESCAPE '\'
+      )
+    UNION
+    SELECT "employeeNumber"
+    FROM "Employee"
+    WHERE "firstName" ILIKE ${pattern} ESCAPE '\'
+      OR "lastName" ILIKE ${pattern} ESCAPE '\'
+      OR concat_ws(' ', "firstName", "lastName") ILIKE ${pattern} ESCAPE '\'
+  `;
+
+  return [...new Set(rows.map((row) => Number(row.employeeNumber)))];
+}
+
 adminRouter.get(
   '/audit-logs',
   asyncHandler(async (req, res) => {
-    const employeeNumber =
-      typeof req.query.employeeNumber === 'string' ? Number(req.query.employeeNumber) : undefined;
     const where: Prisma.AuditLogWhereInput = {};
-    if (typeof employeeNumber === 'number' && isValidEmployeeNumber(employeeNumber)) {
-      where.employeeNumber = employeeNumber;
+
+    // `q` takes a name or an Employee Number; `employeeNumber` is the older,
+    // number-only parameter and still works.
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    const legacyNumber =
+      typeof req.query.employeeNumber === 'string' ? Number(req.query.employeeNumber) : undefined;
+
+    if (typeof legacyNumber === 'number' && isValidEmployeeNumber(legacyNumber)) {
+      where.employeeNumber = legacyNumber;
+    } else if (q) {
+      const asNumber = Number(q);
+      if (/^\d+$/.test(q) && isValidEmployeeNumber(asNumber)) {
+        where.employeeNumber = asNumber;
+      } else {
+        const numbers = await employeeNumbersMatchingName(q);
+        // An explicit empty list, not an absent filter: a search that matches
+        // nobody has to return nothing, or "no such person" would silently read as
+        // the entire log.
+        where.employeeNumber = { in: numbers };
+      }
     }
     if (typeof req.query.entityType === 'string') {
       const entityType = entityTypeSchema.safeParse(req.query.entityType);
@@ -1091,6 +1197,16 @@ adminRouter.get(
       take: 100,
     });
     res.json({ data: auditLogs.map(serializeAuditLog) });
+  })
+);
+
+adminRouter.get(
+  '/imports/template',
+  asyncHandler(async (_req, res) => {
+    const buffer = await buildImportTemplate();
+    res.setHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('content-disposition', 'attachment; filename="ed-modello-dipendenti.xlsx"');
+    res.send(buffer);
   })
 );
 
@@ -1439,7 +1555,7 @@ adminRouter.post(
         const reaffirmed = (reaffirmedRoles.get(employeeNumber)?.size ?? 0) > 0;
         if (dbRefs.length > 0 || reaffirmed) {
           row.errors.push(
-            'This employee is still used in approval workflows and cannot be made inactive in this import. Remove those approval assignments first.'
+            'This employee is still an approver for other people and cannot be made inactive in this import. Remove those approval assignments first.'
           );
         }
       }

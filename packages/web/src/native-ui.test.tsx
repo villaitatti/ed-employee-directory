@@ -4,7 +4,7 @@ import { emptyEmployeeDraft } from './employee-draft.js';
 import { DepartmentForm, emptyDepartmentDraft } from './routes/DepartmentForm.js';
 import { EmployeeForm } from './routes/EmployeeForm.js';
 import { AuditPage } from './routes/AuditPage.js';
-import { ImportPage } from './routes/ImportPage.js';
+import { ImportDialog } from './ui/ImportDialog.js';
 import { SettingsPage } from './routes/SettingsPage.js';
 import { renderWithProviders } from './test/render.js';
 
@@ -125,13 +125,15 @@ describe('no native browser form UI', () => {
         })
       )
     );
-    const { container } = renderWithProviders(<ImportPage />);
+    const { baseElement } = renderWithProviders(<ImportDialog open onOpenChange={() => {}} />);
 
     // A bare <input type="file"> renders the browser's own control, which reads
     // "Choose File / No file chosen" in the browser's language and ignores the
     // app's styling. FilePicker keeps a real file input to open the picker but
     // hides it, exposing a styled button with our own placeholder instead.
-    const nativeInput = container.querySelector('input[type="file"]');
+    // Queried off `baseElement`: the dialog renders through a portal, so it is not
+    // inside the container the render call returns.
+    const nativeInput = baseElement.querySelector('input[type="file"]');
     expect(nativeInput).toHaveStyle({ display: 'none' });
     expect(screen.getByRole('button', { name: 'File Excel da importare' })).toBeInTheDocument();
     expect(screen.getByText('Scegli un file .xlsx…')).toBeInTheDocument();

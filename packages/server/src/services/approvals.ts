@@ -234,7 +234,7 @@ export async function replaceApprovalAssignments(
   }
 }
 
-/** Someone who has this approver in their workflow, named well enough to find. */
+/** Someone this person approves for, named well enough to find. */
 export type ApprovalReference = {
   employeeNumber: number;
   firstName: string;
@@ -346,7 +346,7 @@ export async function validateEmployeeCanLoseApprovalEligibility(
       throw new HttpError(
         409,
         'APPROVER_IN_USE',
-        `This employee is used in approval workflows by ${describeApprovalReferences(references)}. Remove those approval assignments before making the employee inactive.`,
+        `This employee is an approver for ${describeApprovalReferences(references)}. Remove those approval assignments before making the employee inactive.`,
         { employees: references }
       );
     }

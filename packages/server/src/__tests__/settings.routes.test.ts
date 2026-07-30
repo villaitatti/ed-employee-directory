@@ -527,7 +527,7 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
 
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('APPROVER_IN_USE');
-    // The web app builds "Compare nel workflow di Marco Bianchi (2002)" out of
+    // The web app builds "È approvatore di Marco Bianchi (2002)" out of
     // this, and formats the name in its own order — so the contract is the
     // structured list, not a sentence the server pre-joined.
     expect(res.body.error.details.employees).toEqual([

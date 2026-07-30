@@ -1,14 +1,10 @@
 import type { ReactNode } from 'react';
-import dayjs from 'dayjs';
-import customParseFormat from 'dayjs/plugin/customParseFormat';
-import 'dayjs/locale/it';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { ConfirmationProvider } from './confirmation.js';
 
-// The date field parses nine day-first formats explicitly rather than letting
-// dayjs guess, which is what this plugin is for; the Italian locale is what
-// turns 1990-03-15 into "15 marzo 1990".
-dayjs.extend(customParseFormat);
+// The dayjs setup that used to sit here — the day-first parser and the Italian
+// locale — now lives in `format.ts`, next to the functions that need it, so those
+// functions work when imported directly rather than only once this has rendered.
 
 /**
  * The cross-cutting UI context: tooltips and the one confirmation dialog.

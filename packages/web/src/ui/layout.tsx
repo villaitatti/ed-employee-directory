@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { ChevronDown, ChevronUp, ChevronsUpDown, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
 /** The column every page is laid out in: one stack, centred, capped in width. */
@@ -16,10 +17,13 @@ export function Eyebrow({ children }: { children: ReactNode }) {
 export function PageHeading({
   eyebrow,
   title,
+  description,
   actions,
 }: {
   eyebrow: string;
   title: string;
+  /** A sentence saying what the page is for, where the title alone won't do it. */
+  description?: string;
   actions?: ReactNode;
 }) {
   return (
@@ -27,6 +31,7 @@ export function PageHeading({
       <div>
         <Eyebrow>{eyebrow}</Eyebrow>
         <h2 className="m-0 max-w-[62ch] text-[1.15rem] font-semibold text-ink">{title}</h2>
+        {description ? <p className="m-0 mt-1 max-w-[70ch] text-[0.85rem] text-ink-soft">{description}</p> : null}
       </div>
       {actions ? <div className="flex items-center gap-3">{actions}</div> : null}
     </div>
@@ -141,11 +146,93 @@ export function EmptyState({ children }: { children: ReactNode }) {
   return <p className="m-0 p-8 text-ink-muted">{children}</p>;
 }
 
+/**
+ * Placeholder rows in the shape of the table that is coming.
+ *
+ * Before this, a loading table rendered its headings above an empty `<tbody>` and
+ * nothing else — the empty-state message is deliberately suppressed while the
+ * query is in flight, so "still loading" and "nothing here" looked identical, and
+ * the first looked like a page that had failed.
+ *
+ * Rendered as the `<tbody>` itself so the browser's table layout still applies and
+ * the columns land where the real ones will. The cells are `aria-hidden` and the
+ * announcement is left to one live region, because fifty grey rectangles are not
+ * fifty pieces of news.
+ */
+export function TableSkeleton({
+  columns,
+  rows = 5,
+  label,
+}: {
+  columns: number;
+  rows?: number;
+  /** What is loading, for the screen reader that gets no grey boxes. */
+  label: string;
+}) {
+  return (
+    <tbody data-slot="table-skeleton">
+      <tr>
+        <td colSpan={columns} className="border-0! p-0!">
+          <span role="status" className="sr-only">
+            {label}
+          </span>
+        </td>
+      </tr>
+      {Array.from({ length: rows }, (_, row) => (
+        <tr key={row} aria-hidden="true">
+          {Array.from({ length: columns }, (_, column) => (
+            <td key={column}>
+              {/* Widths cycle rather than randomise: a stable pattern reads as a
+                  table of text, and a random one would change on every render. */}
+              <Skeleton className={cn('h-4', SKELETON_WIDTHS[(row + column) % SKELETON_WIDTHS.length])} />
+            </td>
+          ))}
+        </tr>
+      ))}
+    </tbody>
+  );
+}
+
+const SKELETON_WIDTHS = ['w-full', 'w-3/4', 'w-1/2', 'w-5/6', 'w-2/3'];
+
+/**
+ * How many records the table below is showing, with the breakdown that makes the
+ * number mean something.
+ *
+ * A live region: on the directory this sits above a table the toolbar filters, and
+ * "how many did that leave?" is the question a filter raises. Sighted operators
+ * read the answer off the line; everyone else is told it changed.
+ */
+export function RecordCount({
+  total,
+  breakdown,
+  isLoading,
+}: {
+  total: string;
+  /** Optional detail — status pills on the directory, nothing on smaller tables. */
+  breakdown?: ReactNode;
+  isLoading?: boolean;
+}) {
+  if (isLoading) return <Skeleton className="h-5 w-48" />;
+  return (
+    <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[0.82rem] text-ink-soft">
+      <span className="font-bold text-ink">{total}</span>
+      {breakdown}
+    </div>
+  );
+}
+
 /** Employment status, as a coloured pill wide enough that the column doesn't jitter. */
 const STATUS_PILL_CLASSES: Record<string, string> = {
   ATTIVO: 'text-[oklch(0.31_0.08_146)] bg-[oklch(0.92_0.06_146)]',
   CESSATO: 'text-[oklch(0.37_0.09_25)] bg-[oklch(0.94_0.045_25)]',
   DA_ASSUMERE: 'text-[oklch(0.35_0.08_251)] bg-[oklch(0.92_0.045_251)]',
+  // What a row of an Excel import will do. Green for a new record and blue for a
+  // change to one that exists, matching the reading the status column already
+  // teaches; red where the row cannot be used at all.
+  IMPORT_CREATE: 'text-[oklch(0.31_0.08_146)] bg-[oklch(0.92_0.06_146)]',
+  IMPORT_UPDATE: 'text-[oklch(0.35_0.08_251)] bg-[oklch(0.92_0.045_251)]',
+  IMPORT_BLOCKED: 'text-[oklch(0.37_0.09_25)] bg-[oklch(0.94_0.045_25)]',
 };
 
 export function StatusPill({ status, children }: { status: string; children: ReactNode }) {
