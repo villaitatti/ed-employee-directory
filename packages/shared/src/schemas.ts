@@ -15,6 +15,7 @@ import {
   TFR_OPTIONS,
   USA_CATEGORIES,
   WEEKDAY_KEYS,
+  type EmployeeStatus,
   type WeekdayKey,
 } from './constants.js';
 import {
@@ -158,6 +159,57 @@ export const departmentCreateSchema = z.object({
   name: z.string().trim().min(1).max(160),
 });
 export type DepartmentCreateInput = z.infer<typeof departmentCreateSchema>;
+
+/**
+ * How many people a department holds, split the way the directory's Stato column
+ * splits them. Both numbers are needed: the total is what a department is sized
+ * by, but "12 people" reads very differently once you know eleven of them have
+ * left.
+ *
+ * Every status is present with an explicit zero rather than omitted, so a caller
+ * can render the breakdown without deciding what a missing key means.
+ */
+export const departmentEmployeeCountsSchema = z.object({
+  total: z.number().int().min(0),
+  byStatus: z.object(
+    Object.fromEntries(EMPLOYEE_STATUSES.map((status) => [status, z.number().int().min(0)])) as Record<
+      EmployeeStatus,
+      z.ZodNumber
+    >
+  ),
+});
+export type DepartmentEmployeeCounts = z.infer<typeof departmentEmployeeCountsSchema>;
+
+/**
+ * One person in a department, as the departments page needs them: enough to name
+ * them and to say whether they still work here. Not a full employee — the page
+ * lists who is in a department, it does not edit them.
+ */
+export const departmentMemberSchema = z.object({
+  id: z.string(),
+  employeeNumber: z.number().int().positive(),
+  firstName: z.string(),
+  lastName: z.string(),
+  status: employeeStatusSchema,
+});
+export type DepartmentMember = z.infer<typeof departmentMemberSchema>;
+
+/**
+ * A department as the admin list returns it. Kept separate from
+ * `departmentSchema` because that one is the shape `/api/v1/departments` promises
+ * to a machine-to-machine caller, and neither a headcount nor a roster is
+ * something the Ferie portal asked for.
+ *
+ * `employees` carries the names, ordered by surname like every other list of
+ * people here. It is the whole membership rather than a page of it: a department
+ * is tens of people, the directory route already downloads far more than this on
+ * every visit, and a truncated list would make the count and the names disagree.
+ */
+export const departmentWithCountsSchema = departmentSchema.extend({
+  employeeCounts: departmentEmployeeCountsSchema,
+  employees: z.array(departmentMemberSchema),
+});
+export type DepartmentWithCounts = z.infer<typeof departmentWithCountsSchema>;
 
 export const employeeApprovalReferenceSchema = z.object({
   id: z.string(),

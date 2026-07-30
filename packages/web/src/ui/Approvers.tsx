@@ -3,7 +3,9 @@ import type { Employee, EmployeeApprovalReference } from '@itatti/shared';
 import { employeeFullName } from '../employee-draft.js';
 
 /**
- * Who approves this person's leave.
+ * Who approves this person's leave. Named for the people it lists rather than
+ * for the downstream time-off system's routing — ED holds three role slots, with
+ * no sequence or states to make a "workflow" of.
  *
  * This column used to read "R 1 / S 2" — a count of approvers, which answers a
  * question nobody has. The one thing worth knowing from the directory is *who*
@@ -11,7 +13,7 @@ import { employeeFullName } from '../employee-draft.js';
  * both a Responsabile and a Sostituto, the missing half is called out rather
  * than simply left blank, which would read as "nothing to see here".
  */
-export function ApprovalWorkflow({ employee }: { employee: Employee }) {
+export function Approvers({ employee }: { employee: Employee }) {
   const { t } = useTranslation();
 
   // The rule only binds Active employees, so for anyone else there is nothing
@@ -66,7 +68,12 @@ function ApprovalRole({
       {people.length > 0 ? (
         <span>{people.map(employeeFullName).join(', ')}</span>
       ) : (
-        <span className={optional ? 'text-ink-muted' : 'font-semibold text-warning'}>
+        // Red, not amber. An Active employee without a Responsabile has nobody to
+        // approve their leave, which is a broken record rather than something to
+        // look at eventually — and `--warning-ink` is a dark khaki that reads as
+        // ordinary text in a column of names. An absent pre-approver stays muted:
+        // that one is optional, so it is not a gap at all.
+        <span className={optional ? 'text-ink-muted' : 'font-semibold text-danger'}>
           {t('copy.approverMissing')}
         </span>
       )}

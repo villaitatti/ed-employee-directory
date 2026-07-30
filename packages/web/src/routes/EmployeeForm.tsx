@@ -102,8 +102,6 @@ export function EmployeeForm({
   const api = useApi();
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.settings });
   const retirementPolicy = settings.data?.retirementPolicy ?? DEFAULT_RETIREMENT_POLICY;
-  const isCreate = !draft.id;
-  const showTerminationDate = !isCreate || draft.status !== 'ATTIVO';
   const projectedRetirementDate =
     draft.birthDate && isValidDateString(draft.birthDate)
       ? calculateRetirementDate(draft.birthDate, retirementPolicy)
@@ -170,16 +168,6 @@ export function EmployeeForm({
   const setApprovalRoleIds = (key: keyof EmployeeDraft['approvalRoleIds'], value: string[]) => {
     markEdited(key);
     onChange({ ...draft, approvalRoleIds: { ...draft.approvalRoleIds, [key]: value } });
-  };
-  const setStatus = (status: EmployeeStatus) => {
-    // New active employees have no cessation date yet — clear any leftover value
-    // from briefly selecting Cessato during create.
-    if (isCreate && status === 'ATTIVO') {
-      markEdited('status', 'terminationDate');
-      onChange({ ...draft, status, terminationDate: '' });
-      return;
-    }
-    set('status', status);
   };
   const toggleRetirementOverride = (checked: boolean) => {
     // Switching the override on has to seed the field, because from here on the
@@ -559,10 +547,15 @@ export function EmployeeForm({
           >
             <div className="grid grid-cols-1 gap-6 desktop:gap-x-6 desktop:grid-cols-[repeat(4,minmax(10rem,1fr))]">
               <Field label={t('fields.status')}>
+                {/* Changing the status leaves the cessation date alone. It used to
+                    clear it on a new Active employee, because the field was hidden
+                    there and a leftover value would have been submitted invisibly;
+                    the field is always on screen now, so a date the operator typed
+                    on purpose is theirs to keep or clear. */}
                 <SelectField
                   label={t('fields.status')}
                   value={draft.status}
-                  onChange={(value) => setStatus(value as EmployeeStatus)}
+                  onChange={(value) => set('status', value as EmployeeStatus)}
                   options={EMPLOYEE_STATUSES.map((option) => ({ value: option, label: t(`status.${option}`) }))}
                 />
               </Field>
@@ -580,22 +573,26 @@ export function EmployeeForm({
                   onChange={(value) => set('hireDate', value)}
                 />
               </Field>
-              {showTerminationDate ? (
-                <Field
-                  icon={<CalendarDays />}
-                  label={t('fields.terminationDate')}
-                  hint={t('copy.terminationDateHint')}
-                  required={draft.status === 'CESSATO'}
-                  {...fieldProps('terminationDate')}
-                >
-                  <DateField
-                    {...inputProps('terminationDate')}
-                    ariaLabel={t('fields.terminationDate')}
-                    value={draft.terminationDate}
-                    onChange={(value) => set('terminationDate', value)}
-                  />
-                </Field>
-              ) : null}
+              {/* Always offered, including on a new Active employee: a fixed-term
+                  hire's last day is often known on the day they are taken on, and
+                  hiding the field until the status says Cessato meant the only way
+                  to record it was to come back and edit the record later. Required
+                  only for Cessato — see validateStatusDates, which has always
+                  allowed the pair. */}
+              <Field
+                icon={<CalendarDays />}
+                label={t('fields.terminationDate')}
+                hint={t('copy.terminationDateHint')}
+                required={draft.status === 'CESSATO'}
+                {...fieldProps('terminationDate')}
+              >
+                <DateField
+                  {...inputProps('terminationDate')}
+                  ariaLabel={t('fields.terminationDate')}
+                  value={draft.terminationDate}
+                  onChange={(value) => set('terminationDate', value)}
+                />
+              </Field>
               <Field
                 className="desktop:[&_input]:max-w-40"
                 icon={<Gauge />}
@@ -684,7 +681,7 @@ export function EmployeeForm({
           <FormSection
             number="04"
             icon={<ClipboardList />}
-            title={t('sections.approvalWorkflow')}
+            title={t('sections.approvers')}
             description={t('copy.approvalSectionHint')}
             errorCount={sectionErrorCount('approval')}
           >

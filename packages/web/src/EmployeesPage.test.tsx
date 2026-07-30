@@ -10,6 +10,9 @@ const department = {
   normalizedName: 'amministrazione',
   createdAt: '',
   updatedAt: '',
+  // As the admin list returns it: the headcount is what the directory's "3 of 4"
+  // reading is summed from, so a fixture without it is not the payload.
+  employeeCounts: { total: 4, byStatus: { ATTIVO: 3, CESSATO: 1, DA_ASSUMERE: 0 } },
 };
 
 function approver(employeeNumber: number, firstName: string, lastName: string) {
@@ -107,8 +110,8 @@ beforeEach(() => {
       if (url.includes('/api/admin/employee-options')) return json({ data: [] });
       if (url.includes('/api/admin/employees')) {
         // Every filter is a server filter in the real API — including the
-        // workflow one, so that the table and the Excel export can never be
-        // asked for different sets. The stub honours them for the same reason.
+        // missing-approvers one, so that the table and the Excel export can never
+        // be asked for different sets. The stub honours them for the same reason.
         const params = new URL(url, 'http://localhost').searchParams;
         const q = params.get('q')?.toLowerCase();
         const incompleteOnly = params.get('incompleteApproval') === 'true';
@@ -149,31 +152,68 @@ async function rowFor(name: string) {
   return cell.closest('tr') as HTMLTableRowElement;
 }
 
+describe('the directory count', () => {
+  it('says how many people are listed, split by status', async () => {
+    renderWithProviders(<EmployeesPage />);
+    await screen.findByRole('cell', { name: 'Ada Rossi' });
+
+    // Three in the roster, all Attivo — the breakdown reuses the Stato column's
+    // pills so the summary and the rows are read in the same vocabulary.
+    const count = screen.getByRole('status');
+    expect(count).toHaveTextContent('3 dipendenti');
+    expect(count).toHaveTextContent('Attivo 3');
+    // Statuses nobody has are left out rather than shown as zero.
+    expect(count).not.toHaveTextContent('Cessato');
+  });
+
+  it('says how much of the directory a filter is hiding', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<EmployeesPage />);
+    await screen.findByRole('cell', { name: 'Ada Rossi' });
+
+    // The unfiltered total is summed from the department headcounts, which the
+    // page already holds for its department filter — 4 in the fixture, one of
+    // whom the roster does not include.
+    await user.click(screen.getByRole('checkbox', { name: /Solo approvatori mancanti/i }));
+    expect(await screen.findByText('1 dipendente su 4')).toBeInTheDocument();
+
+    // Unfiltered, the "of N" clause goes away rather than reading "3 of 4" about
+    // a list nobody narrowed.
+    await user.click(screen.getByRole('checkbox', { name: /Solo approvatori mancanti/i }));
+    expect(await screen.findByText('3 dipendenti')).toBeInTheDocument();
+  });
+});
+
 describe('the directory table', () => {
   it('names the approvers rather than counting them', async () => {
     renderWithProviders(<EmployeesPage />);
 
-    const workflow = (await rowFor('Ada Rossi')).cells[7]!;
+    const approvers = (await rowFor('Ada Rossi')).cells[7]!;
 
     // Who to go to, not how many there are — "R 1 / S 1" answered a question
     // nobody has.
-    expect(workflow).toHaveTextContent('Bruno Bianchi');
-    expect(workflow).toHaveTextContent('Carla Verdi');
-    expect(workflow.textContent).not.toMatch(/R \d/);
+    expect(approvers).toHaveTextContent('Bruno Bianchi');
+    expect(approvers).toHaveTextContent('Carla Verdi');
+    expect(approvers.textContent).not.toMatch(/R \d/);
 
     // The role is abbreviated on screen ("Resp.", which is not a word when read
     // aloud) but spelled out for a screen reader.
-    expect(within(workflow).getByText('Resp.')).toBeInTheDocument();
-    expect(within(workflow).getByText('Responsabile:')).toBeInTheDocument();
-    expect(within(workflow).getByText('Sostituto-Responsabile:')).toBeInTheDocument();
+    expect(within(approvers).getByText('Resp.')).toBeInTheDocument();
+    expect(within(approvers).getByText('Responsabile:')).toBeInTheDocument();
+    expect(within(approvers).getByText('Sostituto-Responsabile:')).toBeInTheDocument();
   });
 
-  it('calls out a missing Sostituto rather than leaving a blank', async () => {
+  it('calls out a missing Sostituto in red rather than leaving a blank', async () => {
     renderWithProviders(<EmployeesPage />);
 
     // An Active employee needs both roles, so the empty half is a problem to
     // see, not an absence to skim past.
-    expect((await rowFor('Bruno Bianchi')).cells[7]).toHaveTextContent('Da assegnare');
+    const cell = (await rowFor('Bruno Bianchi')).cells[7]!;
+    expect(cell).toHaveTextContent('Da assegnare');
+
+    // And red, because the record is broken rather than merely worth a look: this
+    // person has nobody to approve their leave.
+    expect(within(cell).getByText('Da assegnare')).toHaveClass('text-danger');
   });
 
   it('can narrow the list to the people missing an approver', async () => {
@@ -183,8 +223,8 @@ describe('the directory table', () => {
     expect(await names()).toHaveLength(3);
 
     // Only Bruno is short of a role — the point of the filter is finding the
-    // gaps rather than reading every row's workflow cell.
-    await user.click(screen.getByRole('checkbox', { name: /Solo workflow incompleto/i }));
+    // gaps rather than reading every row's approvers cell.
+    await user.click(screen.getByRole('checkbox', { name: /Solo approvatori mancanti/i }));
     expect(
       screen
         .getAllByRole('row')
@@ -192,7 +232,7 @@ describe('the directory table', () => {
         .map((row) => (row as HTMLTableRowElement).cells[1]?.textContent?.trim())
     ).toEqual(['Bruno Bianchi']);
 
-    await user.click(screen.getByRole('checkbox', { name: /Solo workflow incompleto/i }));
+    await user.click(screen.getByRole('checkbox', { name: /Solo approvatori mancanti/i }));
     expect(await names()).toHaveLength(3);
   });
 
@@ -203,7 +243,7 @@ describe('the directory table', () => {
 
     // Filtering everything out leaves a blank table, which reads as a page that
     // failed to load unless it says otherwise.
-    await user.click(screen.getByRole('checkbox', { name: /Solo workflow incompleto/i }));
+    await user.click(screen.getByRole('checkbox', { name: /Solo approvatori mancanti/i }));
     await user.click(screen.getByRole('button', { name: /Numero Matricola/i }));
     expect(screen.queryByText(/Nessun dipendente corrisponde ai filtri/)).not.toBeInTheDocument();
 
@@ -265,10 +305,10 @@ describe('the directory table', () => {
     expect(await names()).toEqual(['Ada Rossi', 'Bruno Bianchi', 'Carla Verdi']);
   });
 
-  it('leaves the workflow column unsorted — a list of names has no useful order', async () => {
+  it('leaves the approvers column unsorted — a list of names has no useful order', async () => {
     renderWithProviders(<EmployeesPage />);
     await screen.findByRole('cell', { name: 'Ada Rossi' });
 
-    expect(screen.getByRole('columnheader', { name: /Workflow/i })).not.toHaveAttribute('aria-sort');
+    expect(screen.getByRole('columnheader', { name: /Approvatori/i })).not.toHaveAttribute('aria-sort');
   });
 });

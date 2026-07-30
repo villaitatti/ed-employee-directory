@@ -1,6 +1,36 @@
 # Changelog
 
-## 0.10.0 - 2026-07-29
+## 0.11.0 - 30 July 2026
+
+### Added
+
+- The directory says **how many people it is showing**, above the table where the filters leave off: "4 dipendenti", with the count broken down into the same status pills the Stato column uses, so the summary and the rows are read in one vocabulary. Filter the list and it becomes "1 dipendente su 42" — the second number is what says how much of the directory the filter just hid. Neither count costs a request: `allEmployees` already follows the cursor to the end, so the browser holds every matching row, and the unfiltered total is summed from the department headcounts the page already fetches for its department filter.
+- The departments table has a **Dipendenti column**, and hovering the number **names the people**. "Who is in Amministrazione?" is the question a headcount raises, and answering it used to mean going to the directory and filtering by department. Names are ordered by surname and written forename-first, as everywhere else; a status is tagged only on the people who are not Attivo, because marking every current employee "Attivo" is noise while a name that is no longer current is the thing worth saying. Past twelve names the tail reads "e altri 3" — a tooltip is not a table. A department nobody is in reads "Nessun dipendente" rather than a bare zero, and the list is also rendered for screen readers in the cell itself, since a tooltip needs a pointer or focus and reading down a column of numbers is neither. **API addition:** `/api/admin/departments` items now carry `employeeCounts: { total, byStatus }` and `employees: [{ id, employeeNumber, firstName, lastName, status }]`, built from one query whose rows are counted rather than counted again by the database — so the tally and the roster cannot disagree, and a test asserts they never do. `/api/v1/departments` is deliberately untouched, with a test pinning it to its original five keys: neither a headcount nor a roster is something the Ferie portal asked for.
+- **Skeleton rows while a table loads.** Every data table — the directory, the departments, the audit log — used to render its headings above an empty `<tbody>` and nothing else, because the empty-state message is suppressed while a query is in flight. "Still loading" and "nothing here" were indistinguishable, and the first looked like a page that had failed. The placeholders take the shape of the table that is coming, pulse only for operators who have not asked for less motion, and are hidden from screen readers in favour of one live region that says what is loading.
+- **Data cessazione** is offered on a new employee whose status is Attivo, where the form used to hide it until the status said Cessato. A fixed-term hire's last day is usually known on the day they are taken on, and the old form gave nowhere to put it: the only route was to save the record and come back to edit it. Optional there — the asterisk still appears only for Cessato — and the ordering rule is unchanged, so a cessation date before the hire date is refused whatever the status is. No API or schema change was needed: `validateStatusDates` has always required the date for Cessato and merely permitted it otherwise, so the field was available all along and only the form was hiding it. Changing the status no longer wipes the field either; it used to, to stop a value left over from briefly selecting Cessato being submitted from a hidden input, which is not a hazard now that the field is always on screen.
+
+### Changed
+
+- The two toolbar buttons take a preposition each: **"Importa da Excel"** and **"Esporta in Excel"** ("Import from Excel", "Export to Excel"). "Importa Excel" reads as though Excel itself were the thing being imported, and side by side the pair is where the direction of the data has to be legible.
+- **The Excel import is a dialog on the employee list, not a page in the sidebar**, and it explains itself before asking for anything. "Importa Excel" was a fifth nav entry at the same level as the four things this app is about, saying neither what it imported nor that it writes *into* the directory. It is now a button beside Esporta Excel, on the page whose records it changes — which also makes it obvious that it imports employees and not departments. A bookmark to `/import` redirects to the employee list rather than 404ing.
+  - **A downloadable template**, from a new `GET /api/admin/imports/template`. Its headings are exactly the ones the *export* writes, so "export, edit, import back" needs no renaming, and a second sheet documents all 26 columns: whether each one has to be filled, the accepted format, and the closed lists spelled out — Attivo/Cessato/Da Assumere, Exempt/Non Exempt/Other, Indeterminato/Determinato/Contratto USA/Collaboratore. Two example rows show the shapes most easily got wrong: `7,30` sessantesimi, `0,8` with a comma, `12/04/1985`, and approvers named by matricola rather than by name. There is a test that fills the template in and imports it, so a template whose headings drift out of step with the parser fails the build rather than producing a preview of blank rows that looks like the operator's mistake.
+  - The dialog is three numbered steps — prepare, upload, check — and says up front what an operator hesitating over an import button actually wants to know: nothing is saved by uploading, only by confirming. The preview's outcome column says "Nuovo" and "Aggiornato" instead of printing `CREATE` and `UPDATE`; a row that cannot be used says "Da correggere", is coloured red, cannot be ticked, and lists its problems one per line instead of running them into a single sentence. A count above the table says how many rows are ticked out of how many were read, and how many are broken.
+  - Found while writing the round-trip test: the template's own example rows named row 1 as its own Responsabile. Self-approval is forbidden, so the first person to trust the file would have had it rejected. The two examples now cross-reference each other.
+- **Every timestamp now reads on the Florence clock, whoever is looking.** Storage was never the problem: Postgres holds `timestamp without time zone` containing UTC instants, and the API serializes them with a `Z`, so the moment itself is unambiguous. The display was — `dayjs(value)` renders in *the reader's* zone, so the page showed office time only by the accident of the laptop being in Italy. Open the audit log from Cambridge and a change made at 14:41 read 08:41, with nothing on screen to say which; two people looking at one row would disagree about when it happened, which is the one thing an audit log cannot do. `formatDateTime` is now pinned to the `Europe/Rome` IANA zone. Pinned to the zone, not to `+01:00`: the zone database is what makes ora legale correct by itself, and a fixed offset would be an hour wrong for seven months a year. Date-only fields — birth, hire, cessation, retirement — are untouched and deliberately so; a calendar date has no zone to convert, and shifting one is how somebody born on the 1st gets displayed as the 30th. There is a test that runs with the machine set to `America/New_York` and asserts Florence time on both sides of both 2026 changeovers; removing the fix fails four of its cases.
+- The dayjs setup — the day-first parser and the Italian locale — moved from `AppUiProvider` into `format.ts`, next to the functions that need it. Importing `formatDate` on its own previously gave you English month names and a parser that would guess at `1/5/1990`, because the module that owns every date convention in the app depended on a component having rendered first.
+- **The change history searches by name.** It took an Employee Number and nothing else, which is not what anybody has in mind — "what happened to Susan?" is the question, not "what happened to 110?". One box now takes either: all digits are read as a matricola, anything else as a name, matched case-insensitively on part of a forename, part of a surname, or the full "Susan Bates" written forename-first. Searching a name returns that person's whole history rather than only the rows their name was spelled in. Two things it does deliberately: it reads the names out of the audit log's **own snapshots** rather than only the Employee table, because the rows most worth finding by name belong to people who are no longer in that table — "who deleted Ada Rossi?" is unanswerable if the only index of names is the list Ada was deleted from — and it searches **both sides** of every change, so a renamed employee is found under the old name as well as the new. A search matching nobody returns nothing and says so, naming the term; an empty box still returns the whole log. **API:** `/api/admin/audit-logs` takes `?q=`; the older number-only `?employeeNumber=` still works.
+  - Found while verifying it: searching `%` returned every row. The employee-name half of the lookup went through Prisma's `contains`, which passes `%` and `_` to LIKE unescaped, so one character became a wildcard for everybody. Both halves are now a single statement under one escaping rule, and the test that missed it seeds data on both sides so it cannot miss it again.
+- **The change history is written for the person who has to read it**, which it was not. The worst of it: a change of one Responsabile printed six hundred characters of raw JSON into the cell — database ids, the whole nested department record, the normalized slug — because `approvalRoles` is an object and the formatter fell through to `JSON.stringify`. It now reads "Responsabile: (nessuno) → Susan Bates (110)", one line per role, and only for the roles that moved — matricola included, because on this page a name alone cannot be trusted to be one person: swapping an approver for a namesake would otherwise compare equal as text and vanish into "Nessun campo modificato". The weekly schedule had the same fault and now names the day: "Mercoledì: 7,30 → 4,00". The rest of the pass:
+  - A creation used to report "Nessuna modifica ai campi" — no fields changed — which is the reverse of the truth, since every field was set. Creations, deletions and imports now say what they were: "Scheda creata", "Scheda eliminata", "Importate 12 righe dal file Excel".
+  - The "Entità" column is gone. It was a word from a data model, and it sat beside a "Dipendente" column that was a dash on every row that was not about an employee — so a department rename said "Dipartimento" and never said *which*. The kind of record now labels the name of the record, in one column, and every row names its subject.
+  - Booleans read Sì/No instead of true/false, the retirement age reads "67 anni e 3 mesi" instead of "67y 3m", an absent value reads "(vuoto)" instead of a dash that could itself be a value, and `normalizedName` — the internal uniqueness slug nobody chose — is no longer reported as a second rename underneath the real one.
+  - Headings in plain questions: Quando, Chi, Che cosa, Operazione, Che cosa è cambiato. The old value is struck through and the new one bold, so the direction is legible without reading the arrow. The page carries a sentence saying what it is and that it is read-only; the nav calls it "Cronologia" rather than "Audit"; the search box says it wants a matricola, since typing a name returned an empty table that read as "nothing happened"; and an empty history explains itself instead of showing a blank table.
+- "Da assegnare" in the Approvatori column is red rather than amber. An Active employee with no Responsabile has nobody who can approve their leave — that is a broken record, not something to get to eventually — and `--warning-ink` is a dark khaki that reads as ordinary text in a column of names, so the one cell that needed to stand out was the one that didn't. A missing pre-approver stays muted grey: that role is optional, so its absence is not a gap.
+- Toasts moved from the top-right to the bottom-right, which is where the eye already is: Save sits in the bottom-right of the employee form's footer, so the confirmation appears next to the button that earned it. They are raised 6.5rem off the floor rather than sonner's default 24px, because at the default a toast sat directly on top of that Save button — and the one time the form stays open behind a toast is the one time the save failed, so the button the operator needs next would have spent ten seconds underneath the message telling them to use it. Verified clear of Save, Cancel and the close X at 1440×900, 1728×1080 and 900×700.
+- Toasts are now actually the 25rem the code has claimed since 0.10.0. The width was written as a Tailwind `w-100` utility, which never took — sonner sizes the panel from its own `--width` custom property, so every toast was the default 356px. Set as `--width` now, and a nine-field validation summary reads in three lines instead of four.
+- The directory column and the filter that names an employee's approvers no longer call them a "workflow". The word arrived with the approval-role master data in 0.5.0, borrowed from the downstream time-off system, where a request really does flow through people. In ED there is no flow: three role slots holding lists of names, no sequence, no states, no transitions — `APPROVER_ROLE_ORDER` exists only so a resync payload is byte-stable, not to say who approves first. The column header promised a process and delivered a roster. It now says **"Approvatori" / "Approvers"**, the filter says **"Solo approvatori mancanti" / "Missing approvers only"** — what is missing is a person, not an unfinished procedure — and the "still an approver" errors read "È approvatore di Carla Verdi (1003)" rather than "Compare nel workflow di Carla Verdi (1003)". The employee card's section keeps its more specific "Responsabili del dipendente", which was already saying the true thing while the column next to it did not. The `sections.approvalWorkflow` and `fields.approvalWorkflow` translation keys become `sections.approvers` and `fields.approvers`, and `ui/ApprovalWorkflow.tsx` becomes `ui/Approvers.tsx`, so the code reads the way the screen does. Three server messages change wording only; no API shape, field or rule is touched.
+
+## 0.10.0 - 29 July 2026
 
 ### Changed
 
@@ -36,7 +66,7 @@
 - Invalid state is reported through data attributes (`data-invalid`, `data-has-errors`, `data-ineligible`) rather than styling classes, which is both the shadcn convention and a hook that survives having no stylesheet to name. The tests that pin those marks were updated, not removed.
 - `@mantine/core`, `@mantine/dates`, `@mantine/hooks` and `@mantine/modals` are gone. The CSS bundle drops from 348 kB to 98 kB.
 
-## 0.9.0 - 2026-07-28
+## 0.9.0 - 28 July 2026
 
 ### Added
 
@@ -63,7 +93,7 @@
 - The retirement age and Employee Number fields accepted values that only look like numbers to JavaScript. `0x40`, `0b1000000`, and `6.4e1` were each read as 64 and submitted, so a typo in the retirement age could recalculate every employee's projected date from a figure nobody typed. Both fields now require plain decimal digits before any conversion happens.
 - The prompt shown when un-confirming a retirement date quoted the date in fixed English abbreviations (`30 Jun 2050`) even in Italian, disagreeing with the field directly above it. It now uses the same localized `DD MMMM YYYY` the field does.
 
-## 0.8.0 - 2026-07-28
+## 0.8.0 - 28 July 2026
 
 ### Added
 
@@ -90,7 +120,7 @@
 - Spreadsheets exported before 0.8.0 have no "Work Email" column. Because the field is required, importing such a file reports "Work Email is required." on every row — export a fresh file first. Preferred Language may be omitted safely: an existing employee keeps their stored value and a new one defaults to Italiano.
 - The Ferie portal needs a client granted `write:time-off-directory` in Auth0 for the language write; the read sync continues to use `AUTH0_READ_SCOPE`.
 
-## 0.7.1 - 2026-07-27
+## 0.7.1 - 27 July 2026
 
 ### Added
 
@@ -101,7 +131,7 @@
 - The FTE hint now states the accepted input format: both `0,5` and `0.5` are read, with at most three decimals.
 - The weekly schedule hint now shows a worked example of the sessantesimi format, `7,30` for seven hours and thirty minutes, instead of only naming it.
 
-## 0.7.0 - 2026-07-27
+## 0.7.0 - 27 July 2026
 
 ### Added
 
@@ -124,7 +154,7 @@
 
 - Spreadsheets exported before 0.7.0 have no "Responsabile Abilitato" column. Re-importing one keeps the flag as it stands for employees who already exist, but any *new* employee it creates starts out not eligible — export a fresh file first if the import is meant to establish Responsabili.
 
-## 0.6.0 - 2026-07-20
+## 0.6.0 - 20 July 2026
 
 ### Fixed
 
@@ -150,7 +180,7 @@
 - The local development database now listens on loopback only.
 - Added a modal focus trap with keyboard focus management, a top-level error boundary, and a cap on the client-supplied request id.
 
-## 0.5.0 - 2026-06-25
+## 0.5.0 - 25 June 2026
 
 ### Added
 
@@ -169,7 +199,7 @@
 - Kept already-selected approvers visible and removable in the employee form even after they lose eligibility, instead of dropping them silently while still submitting them.
 - Refreshed employee picker options after employee saves, deletes, and imports so approval selectors do not use stale eligibility data.
 
-## 0.4.0 - 2026-06-15
+## 0.4.0 - 15 June 2026
 
 ### Added
 
@@ -183,7 +213,7 @@
 - Employee date fields now use `dd/mm/yyyy` entry, while tables and audit history display dates as `20 Jun 2026`.
 - The retirement-date checkbox now means "confirmed retirement date"; confirmed dates are preserved when the pension-age setting changes.
 
-## 0.3.0 - 2026-06-08
+## 0.3.0 - 8 June 2026
 
 ### Changed
 
@@ -193,7 +223,7 @@
 
 - Dropped the unused `.department-form` styles left over from the old inline department bar.
 
-## 0.2.1 - 2026-06-08
+## 0.2.1 - 8 June 2026
 
 ### Changed
 
@@ -204,7 +234,7 @@
 - Signing out now keeps you signed out. Previously the app could immediately send you back into Auth0 and silently sign you back in, making it impossible to log out or switch accounts.
 - A failed or denied sign-in no longer traps you in an endless redirect. The app now shows the sign-in screen with a clear message and a button to try again, instead of looping back to Auth0 or hanging on a blank loading screen.
 
-## 0.2.0 - 2026-06-05
+## 0.2.0 - 5 June 2026
 
 ### Added
 
@@ -219,7 +249,7 @@
 
 - Settings save skips the table-wide recalculation when the retirement age is unchanged, and a malformed stored policy now logs an error before falling back to the statutory default instead of failing silently.
 
-## 0.1.0 - 2026-06-04
+## 0.1.0 - 4 June 2026
 
 ### Added
 

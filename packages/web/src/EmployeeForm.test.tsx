@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
-import { screen, within } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { toast } from 'sonner';
 import { emptyEmployeeDraft, type EmployeeDraft } from './employee-draft.js';
@@ -75,7 +75,7 @@ describe('EmployeeForm modal', () => {
     expect(birthDate).toHaveValue('02 marzo 2026');
   });
 
-  it('puts status first and hides termination date for new active employees', async () => {
+  it('puts status first and offers termination date to a new active employee', async () => {
     const user = userEvent.setup();
     let draft = { ...emptyEmployeeDraft };
     const onChange = vi.fn((next) => {
@@ -97,7 +97,10 @@ describe('EmployeeForm modal', () => {
     const status = screen.getByRole('combobox', { name: 'Stato' });
     const hireDate = screen.getByLabelText('Data assunzione');
     expect(status.compareDocumentPosition(hireDate) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.queryByLabelText('Data cessazione')).not.toBeInTheDocument();
+
+    // A fixed-term hire's last day is known on the day they are taken on, so the
+    // field is there from the start rather than only once the status says Cessato.
+    expect(screen.getByLabelText('Data cessazione')).toBeInTheDocument();
 
     await user.click(status);
     await user.click(await screen.findByRole('option', { name: 'Cessato' }));
@@ -113,6 +116,34 @@ describe('EmployeeForm modal', () => {
       />
     );
     expect(screen.getByLabelText('Data cessazione')).toBeInTheDocument();
+  });
+
+  it('keeps a cessation date typed while Active when the status changes', async () => {
+    const user = userEvent.setup();
+    // The old form cleared this on the way to Attivo, which would now throw away
+    // the one thing the operator opened the field to record.
+    let draft = { ...emptyEmployeeDraft, status: 'CESSATO' as const, terminationDate: '2027-06-30' };
+    const onChange = vi.fn((next) => {
+      draft = next;
+    });
+
+    renderWithProviders(
+      <EmployeeForm
+        draft={draft}
+        departments={departments}
+        employeeOptions={employeeOptions}
+        onCancel={vi.fn()}
+        onChange={onChange}
+        onSave={vi.fn()}
+        isSaving={false}
+      />
+    );
+
+    await user.click(screen.getByRole('combobox', { name: 'Stato' }));
+    await user.click(await screen.findByRole('option', { name: 'Attivo' }));
+
+    expect(draft.status).toBe('ATTIVO');
+    expect(draft.terminationDate).toBe('2027-06-30');
   });
 
   it('shows termination date when editing an active employee', () => {
@@ -762,6 +793,57 @@ describe('EmployeeForm modal', () => {
     expect(latestDraft.workEmail).toBe('andrea.caselli@itatti.harvard.edu');
   });
 
+  it('keeps focus in the address field when the suggestion sweep ends', async () => {
+    // The sweep's wrapper used to mount only while shimmering, so when its
+    // one-second timer expired the input moved in the tree, React remounted it,
+    // and an operator who had started correcting the suggested address lost
+    // their caret mid-word. This waits the timer out mid-edit on purpose — on a
+    // slow machine the previous test tripped over this by accident.
+    const user = userEvent.setup();
+    let latestDraft = { ...emptyEmployeeDraft };
+
+    function Controlled() {
+      const [draft, setDraft] = useState({ ...emptyEmployeeDraft });
+      return (
+        <EmployeeForm
+          draft={draft}
+          departments={departments}
+          employeeOptions={employeeOptions}
+          onCancel={() => undefined}
+          onChange={(next) => {
+            latestDraft = next;
+            setDraft(next);
+          }}
+          onSave={vi.fn()}
+          isSaving={false}
+        />
+      );
+    }
+
+    renderWithProviders(<Controlled />);
+
+    await user.type(screen.getByLabelText('Nome'), 'Andrea');
+    // The suggestion fires here, and with it the sweep's one-second timer.
+    await user.type(screen.getByLabelText('Cognome'), 'Caselli');
+
+    const email = screen.getByLabelText('Email di lavoro');
+    await user.clear(email);
+    await user.type(email, 'andrea.caselli@itatti.harvard');
+
+    // The sweep ends while the operator is mid-correction — inside act, since
+    // it is the timer's own state update we are waiting for.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1_100));
+    });
+
+    // The input survived it: same element, still focused, and the remaining
+    // keystrokes land where the operator left off.
+    expect(screen.getByLabelText('Email di lavoro')).toBe(email);
+    expect(document.activeElement).toBe(email);
+    await user.type(email, '.edu');
+    expect(latestDraft.workEmail).toBe('andrea.caselli@itatti.harvard.edu');
+  });
+
   it('leaves an existing employee\'s address alone when their name is corrected', async () => {
     const user = userEvent.setup();
     const existing = {
@@ -843,6 +925,29 @@ describe('EmployeeForm validation feedback', () => {
     const { onSave } = renderForm(validDraft);
     await user.click(screen.getByRole('button', { name: /Salva/i }));
     expect(onSave).toHaveBeenCalledOnce();
+  });
+
+  it('accepts a fixed-term hire: Active, with the end of the contract already known', async () => {
+    const user = userEvent.setup();
+    const { container, onSave } = renderForm({ ...validDraft, terminationDate: '2027-06-30' });
+
+    await user.click(screen.getByRole('button', { name: /Salva/i }));
+
+    expect(onSave).toHaveBeenCalledOnce();
+    expect(container.querySelector('[data-invalid="true"]')).toBeNull();
+  });
+
+  it('still rejects a cessation date before the hire date on an Active employee', async () => {
+    vi.spyOn(toast, 'error').mockImplementation(() => 'id');
+    const user = userEvent.setup();
+    // Optional is not unchecked: the hire/termination ordering rule applies
+    // whatever the status is.
+    const { container, onSave } = renderForm({ ...validDraft, terminationDate: '2019-12-31' });
+
+    await user.click(screen.getByRole('button', { name: /Salva/i }));
+
+    expect(onSave).not.toHaveBeenCalled();
+    expect(container.querySelector('[data-field="terminationDate"]')).toHaveAttribute('data-invalid', 'true');
   });
 
   it('blocks an incomplete draft, highlights the fields, and names them in the toast', async () => {

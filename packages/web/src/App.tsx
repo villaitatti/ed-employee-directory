@@ -1,5 +1,5 @@
-import { Building2, History, Languages, LogOut, Settings, Upload, UsersRound } from 'lucide-react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Building2, History, Languages, LogOut, Settings, UsersRound } from 'lucide-react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { Toaster } from 'sonner';
@@ -8,7 +8,6 @@ import { useEdAuth, wasSignedOut } from './auth/AuthProvider.js';
 import { AuditPage } from './routes/AuditPage.js';
 import { DepartmentsPage } from './routes/DepartmentsPage.js';
 import { EmployeesPage } from './routes/EmployeesPage.js';
-import { ImportPage } from './routes/ImportPage.js';
 import { SettingsPage } from './routes/SettingsPage.js';
 import { ActionTooltip } from './ui/ActionTooltip.js';
 import { Eyebrow } from './ui/layout.js';
@@ -125,13 +124,34 @@ function Shell() {
       {/* Toasts carry a title plus a "what to do next" line, so they need room to
           breathe and a way out that isn't waiting: hence the wider-than-default
           panel and the close button. Errors also override the duration — see
-          notifyError. */}
+          notifyError.
+
+          Bottom-right, out of the reading path: a toast here confirms something
+          that already happened, and the durable channels — the form's error
+          summary, the red fields — are what make a problem unmissable. It also
+          lands where the eye already is, since Save sits in the bottom-right of
+          the employee form's footer.
+
+          Which is the same reason for the raised offset. A toast at the default
+          24px would sit *on top of* that Save button, and the one time the form
+          stays open behind a toast is the one time the save failed — so the
+          button the operator needs next would spend ten seconds under the
+          message telling them to use it. 6.5rem clears the footer (h-11 button +
+          py-4 + border, 16px above the viewport floor) on both breakpoints.
+
+          The width is set as sonner's own `--width` rather than a `w-` class.
+          Sonner sizes the panel with `width: var(--width)` and the Tailwind
+          utility that used to be here never took, so the "wider than default"
+          this comment claimed was 356px all along. */}
       <Toaster
         richColors
         closeButton
-        position="top-right"
+        position="bottom-right"
+        offset={{ bottom: '6.5rem', right: '1.5rem' }}
+        mobileOffset={{ bottom: '6.5rem', right: '1rem', left: '1rem' }}
+        style={{ '--width': '25rem' } as CSSProperties}
         toastOptions={{
-          className: 'w-100 [&_[data-description]]:leading-relaxed [&_[data-description]]:opacity-90',
+          className: '[&_[data-description]]:leading-relaxed [&_[data-description]]:opacity-90',
         }}
       />
       <div className="grid h-screen min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
@@ -179,9 +199,11 @@ function Shell() {
             className="flex min-h-0 flex-col gap-1 overflow-y-auto border-r border-line bg-surface-raised p-3 tablet:px-4 tablet:py-6"
             aria-label={t('nav.primary')}
           >
+            {/* No "Importa Excel" entry: importing is something you do *to* the
+                employee list, not a fifth part of the app, so it is a button on
+                that page. */}
             <NavItem to="/employees" icon={<UsersRound size={18} />} label={t('nav.employees')} />
             <NavItem to="/departments" icon={<Building2 size={18} />} label={t('nav.departments')} />
-            <NavItem to="/import" icon={<Upload size={18} />} label={t('nav.import')} />
             <NavItem to="/audit" icon={<History size={18} />} label={t('nav.audit')} />
             <NavItem to="/settings" icon={<Settings size={18} />} label={t('nav.settings')} />
             <div
@@ -196,7 +218,9 @@ function Shell() {
               <Route path="/" element={<Navigate to="/employees" replace />} />
               <Route path="/employees" element={<EmployeesPage />} />
               <Route path="/departments" element={<DepartmentsPage />} />
-              <Route path="/import" element={<ImportPage />} />
+              {/* The import page became a dialog on the employee list; a bookmark
+                  to it lands where the button is rather than on nothing. */}
+              <Route path="/import" element={<Navigate to="/employees" replace />} />
               <Route path="/audit" element={<AuditPage />} />
               <Route path="/settings" element={<SettingsPage />} />
             </Routes>

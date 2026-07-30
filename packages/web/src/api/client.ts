@@ -2,6 +2,7 @@ import type {
   AuditLog,
   Department,
   DepartmentCreateInput,
+  DepartmentWithCounts,
   Employee,
   EmployeeOption,
   EmployeeWriteInput,
@@ -88,7 +89,9 @@ export function createApiClient(getToken: TokenGetter) {
         { method: 'PUT', body: JSON.stringify(input) }
       )).data,
 
-    departments: async () => (await request<{ data: Department[] }>('/api/admin/departments')).data,
+    // The admin list carries a headcount per department; `/api/v1/departments` does
+    // not, which is why the two have separate types.
+    departments: async () => (await request<{ data: DepartmentWithCounts[] }>('/api/admin/departments')).data,
     createDepartment: async (input: DepartmentCreateInput) =>
       (await request<{ data: Department }>('/api/admin/departments', {
         method: 'POST',
@@ -151,6 +154,21 @@ export function createApiClient(getToken: TokenGetter) {
       return response.blob();
     },
 
+    /** The blank workbook, with a sheet explaining every column. */
+    importTemplateExcel: async () => {
+      const response = await authorizedFetch('/api/admin/imports/template');
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as ErrorPayload;
+        throw new ApiError(
+          payload?.error?.message ?? `Request failed with ${response.status}`,
+          response.status,
+          payload?.error?.code,
+          payload?.error?.details
+        );
+      }
+      return response.blob();
+    },
+
     previewImport: async (file: File) => {
       const form = new FormData();
       form.append('file', file);
@@ -164,9 +182,8 @@ export function createApiClient(getToken: TokenGetter) {
         method: 'POST',
         body: JSON.stringify({ selectedRows }),
       }),
-    auditLogs: async (employeeNumber?: string) =>
-      (await request<{ data: AuditLog[] }>(
-        `/api/admin/audit-logs${queryString({ employeeNumber })}`
-      )).data,
+    /** `q` is a name or an Employee Number; the server decides which it got. */
+    auditLogs: async (q?: string) =>
+      (await request<{ data: AuditLog[] }>(`/api/admin/audit-logs${queryString({ q })}`)).data,
   };
 }

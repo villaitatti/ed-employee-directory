@@ -1,4 +1,4 @@
-import { Download, Plus, Trash2 } from 'lucide-react';
+import { Download, Plus, Trash2, Upload } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -14,10 +14,11 @@ import {
 } from '../employee-draft.js';
 import { formatDate, useDateLocale } from '../format.js';
 import { useApi, useDebounced, useDepartments } from '../hooks.js';
-import { ApprovalWorkflow } from '../ui/ApprovalWorkflow.js';
+import { Approvers } from '../ui/Approvers.js';
 import { CheckboxField } from '../ui/CheckboxField.js';
 import { ActionTooltip } from '../ui/ActionTooltip.js';
 import { ComboboxField } from '../ui/ComboboxField.js';
+import { ImportDialog } from '../ui/ImportDialog.js';
 import { QueryError } from '../ui/QueryError.js';
 import { useConfirmation } from '../ui/confirmation.js';
 import { notifyError, notifySuccess } from '../ui/feedback.js';
@@ -26,13 +27,18 @@ import {
   EmptyState,
   PageHeading,
   PageSection,
+  RecordCount,
   SearchField,
   SortableHeader,
   StatusPill,
+  TableSkeleton,
   Toolbar,
   type SortDirection,
 } from '../ui/layout.js';
 import { EmployeeForm } from './EmployeeForm.js';
+
+/** Kept next to the header row it counts, so the skeleton can't drift out of step. */
+const EMPLOYEE_COLUMN_COUNT = 10;
 
 /**
  * What each sortable column compares on, which is not always what it displays:
@@ -82,6 +88,7 @@ export function EmployeesPage() {
     direction: 'asc',
   });
   const [draft, setDraft] = useState<EmployeeDraft | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   // Field errors the *server* raised on the last save. Kept here rather than in
   // the form because only the mutation sees them; the form merges them with its
   // own client-side findings so both kinds highlight identically. `rejectionId`
@@ -95,7 +102,7 @@ export function EmployeesPage() {
   });
   /**
    * Every filter in one object, and the same one for the table and the export.
-   * The workflow filter used to run in the browser, which meant the download
+   * The missing-approvers filter used to run in the browser, which meant the download
    * quietly contained the people the table was hiding.
    */
   const employeeQuery = {
@@ -115,6 +122,40 @@ export function EmployeesPage() {
     );
     return sort.direction === 'asc' ? sorted : sorted.reverse();
   }, [employees.data, sort]);
+
+  /**
+   * How many people the table is showing, split by status.
+   *
+   * Counted off the rows rather than asked of the server: `allEmployees` follows
+   * the cursor to the end, so the browser already holds every matching record and
+   * a count query would only tell it what it has.
+   */
+  const statusCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const employee of rows) counts.set(employee.status, (counts.get(employee.status) ?? 0) + 1);
+    return EMPLOYEE_STATUSES.filter((status) => counts.has(status)).map((status) => ({
+      status,
+      count: counts.get(status)!,
+    }));
+  }, [rows]);
+
+  /**
+   * The whole headcount, for the "3 of 42" reading that tells an operator how much
+   * of the directory a filter just hid. Summed from the department counts, which
+   * this page already has for its department filter — every employee belongs to
+   * exactly one department, so the sum is the total. Undefined until that query
+   * lands, which is what makes the unfiltered wording the fallback.
+   */
+  const totalEmployees = departments.data?.reduce(
+    // Tolerant of a department that arrives without the tally: this number only
+    // decorates a count line, and a directory that refuses to render because a
+    // caption is missing a summand is the wrong trade.
+    (sum, department) => sum + (department.employeeCounts?.total ?? 0),
+    0
+  );
+  const isFiltered = Boolean(
+    debouncedQ || filters.status || filters.departmentId || filters.incompleteApproval
+  );
 
   /** Clicking the column you are already sorted by turns it around. */
   const sortBy = (key: SortKey) =>
@@ -174,6 +215,10 @@ export function EmployeesPage() {
       void queryClient.invalidateQueries({ queryKey: ['employees'] });
       void queryClient.invalidateQueries({ queryKey: ['employee-options'] });
       void queryClient.invalidateQueries({ queryKey: ['audit'] });
+      // The departments response carries headcounts and rosters built from the
+      // employees — and this page's own "su {{total}}" is summed from them — so
+      // an employee write leaves them stale too.
+      void queryClient.invalidateQueries({ queryKey: ['departments'] });
     },
     onError: (error) => {
       // The toast says what went wrong; the field map makes the form show *where*.
@@ -191,6 +236,8 @@ export function EmployeesPage() {
       void queryClient.invalidateQueries({ queryKey: ['employees'] });
       void queryClient.invalidateQueries({ queryKey: ['employee-options'] });
       void queryClient.invalidateQueries({ queryKey: ['audit'] });
+      // See the save mutation: department headcounts count this person too.
+      void queryClient.invalidateQueries({ queryKey: ['departments'] });
     },
     onError: (error) => notifyError(error, t, { unsaved: true }),
   });
@@ -238,6 +285,13 @@ export function EmployeesPage() {
         title={t('copy.subtitle')}
         actions={
           <>
+            {/* Import sits beside export, on the page whose records it writes. It
+                used to be a fifth entry in the sidebar, at the same level as the
+                four things this app is about. */}
+            <Button variant="outline" className="text-brand" type="button" onClick={() => setImportOpen(true)}>
+              <Upload size={16} />
+              {t('actions.import')}
+            </Button>
             <Button variant="outline" className="text-brand" type="button" onClick={exportEmployees}>
               <Download size={16} />
               {t('actions.export')}
@@ -284,6 +338,22 @@ export function EmployeesPage() {
         />
       </Toolbar>
 
+      {/* Between the filters and the table, where the answer to "how many did that
+          leave?" belongs. */}
+      <RecordCount
+        isLoading={employees.isLoading}
+        total={
+          isFiltered && totalEmployees !== undefined
+            ? t('copy.employeeCountFiltered', { count: rows.length, total: totalEmployees })
+            : t('copy.employeeCount', { count: rows.length })
+        }
+        breakdown={statusCounts.map(({ status, count }) => (
+          <StatusPill key={status} status={status}>
+            {t(`status.${status}`)} {count}
+          </StatusPill>
+        ))}
+      />
+
       <DataSurface>
         <table>
           <thead>
@@ -296,11 +366,14 @@ export function EmployeesPage() {
               {sortableHeader('tfr', t('fields.tfr'))}
               {sortableHeader('weeklyTotal', t('fields.weeklyTotal'))}
               {/* Not sortable: a column of names has no order worth asking for. */}
-              <th>{t('fields.approvalWorkflow')}</th>
+              <th>{t('fields.approvers')}</th>
               {sortableHeader('retirementDate', t('fields.retirementDate'))}
               <th aria-label={t('fields.actions')} />
             </tr>
           </thead>
+          {employees.isLoading ? (
+            <TableSkeleton columns={EMPLOYEE_COLUMN_COUNT} label={t('copy.loadingEmployees')} />
+          ) : (
           <tbody>
             {rows.map((employee) => (
               <tr key={employee.id}>
@@ -314,7 +387,7 @@ export function EmployeesPage() {
                 <td>{t(`tfr.${employee.tfr}`)}</td>
                 <td>{employee.weeklySchedule.total.display}</td>
                 <td>
-                  <ApprovalWorkflow employee={employee} />
+                  <Approvers employee={employee} />
                 </td>
                 <td>
                   {employee.retirementDate ? (
@@ -363,10 +436,11 @@ export function EmployeesPage() {
               </tr>
             ))}
           </tbody>
+          )}
         </table>
         {employees.isError ? <QueryError error={employees.error} onRetry={() => void employees.refetch()} /> : null}
         {/* Counted on the rows actually shown, not on what the API returned:
-            the workflow filter narrows the list here, and a blank table with no
+            the missing-approvers filter narrows the list here, and a blank table with no
             explanation reads as a page that failed to load. */}
         {!employees.isLoading && !employees.isError && rows.length === 0 ? (
           <EmptyState>{t('copy.emptyEmployees')}</EmptyState>
@@ -388,6 +462,8 @@ export function EmployeesPage() {
           isSaving={saveEmployee.isPending}
         />
       ) : null}
+
+      <ImportDialog open={importOpen} onOpenChange={setImportOpen} />
     </PageSection>
   );
 }
