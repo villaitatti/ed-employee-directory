@@ -234,21 +234,31 @@ export async function replaceApprovalAssignments(
   }
 }
 
+/** Someone who has this approver in their workflow, named well enough to find. */
+export type ApprovalReference = {
+  employeeNumber: number;
+  firstName: string;
+  lastName: string;
+};
+
 /**
- * Returns the Employee Numbers of employees that reference `approverId` as an
- * approver, sorted ascending and de-duplicated. Subjects whose Employee Number
- * is in `ignoreSubjectEmployeeNumbers` are excluded — used by the import preview
- * to ignore subjects whose assignments the same import will authoritatively
- * rewrite.
+ * Returns the employees that reference `approverId` as an approver, ordered by
+ * surname like every other list of people here, and de-duplicated. Subjects whose
+ * Employee Number is in `ignoreSubjectEmployeeNumbers` are excluded — used by the
+ * import preview to ignore subjects whose assignments the same import will
+ * authoritatively rewrite.
+ *
+ * Names, not just numbers: "remove this assignment from 1003" sends the operator
+ * to the directory to find out who 1003 is before they can act on it.
  */
-export async function findApprovalReferenceEmployeeNumbers(
+export async function findApprovalReferences(
   tx: Prisma.TransactionClient,
   input: {
     approverId: string;
     roles?: ApprovalRole[] | undefined;
     ignoreSubjectEmployeeNumbers?: ReadonlySet<number> | undefined;
   }
-): Promise<number[]> {
+): Promise<ApprovalReference[]> {
   const references = await tx.employeeApprovalAssignment.findMany({
     where: {
       approverId: input.approverId,
@@ -258,14 +268,34 @@ export async function findApprovalReferenceEmployeeNumbers(
       employee: {
         select: {
           employeeNumber: true,
+          firstName: true,
+          lastName: true,
         },
       },
     },
   });
-  const numbers = references
-    .map((reference) => reference.employee.employeeNumber)
-    .filter((employeeNumber) => !input.ignoreSubjectEmployeeNumbers?.has(employeeNumber));
-  return [...new Set(numbers)].sort((left, right) => left - right);
+  const byNumber = new Map<number, ApprovalReference>();
+  for (const { employee } of references) {
+    if (input.ignoreSubjectEmployeeNumbers?.has(employee.employeeNumber)) continue;
+    byNumber.set(employee.employeeNumber, employee);
+  }
+  return [...byNumber.values()].sort(
+    (left, right) =>
+      left.lastName.localeCompare(right.lastName) ||
+      left.firstName.localeCompare(right.firstName) ||
+      left.employeeNumber - right.employeeNumber
+  );
+}
+
+/**
+ * The people in an error's `message`, which is the plain-English fallback a
+ * non-web client shows. The web app formats the structured `details` instead, so
+ * that the order a name is written in stays a decision the UI makes.
+ */
+export function describeApprovalReferences(references: ApprovalReference[]): string {
+  return references
+    .map((reference) => `${reference.firstName} ${reference.lastName} (${reference.employeeNumber})`)
+    .join(', ');
 }
 
 export async function assertEmployeeHasNoApprovalReferences(
@@ -274,17 +304,17 @@ export async function assertEmployeeHasNoApprovalReferences(
     approverId: string;
     roles?: ApprovalRole[] | undefined;
     code: string;
-    message: (employeeNumbers: string) => string;
+    message: (employees: string) => string;
   }
 ): Promise<void> {
-  const numbers = await findApprovalReferenceEmployeeNumbers(tx, {
+  const references = await findApprovalReferences(tx, {
     approverId: input.approverId,
     roles: input.roles,
   });
-  if (numbers.length === 0) return;
+  if (references.length === 0) return;
 
-  throw new HttpError(409, input.code, input.message(numbers.join(', ')), {
-    employeeNumbers: numbers.join(', '),
+  throw new HttpError(409, input.code, input.message(describeApprovalReferences(references)), {
+    employees: references,
   });
 }
 
@@ -308,48 +338,48 @@ export async function validateEmployeeCanLoseApprovalEligibility(
   }
 ): Promise<void> {
   if (input.currentStatus === 'ATTIVO' && input.nextStatus !== 'ATTIVO') {
-    const numbers = await findApprovalReferenceEmployeeNumbers(tx, {
+    const references = await findApprovalReferences(tx, {
       approverId: input.employeeId,
       ignoreSubjectEmployeeNumbers: input.ignoreSubjectEmployeeNumbers,
     });
-    if (numbers.length > 0) {
+    if (references.length > 0) {
       throw new HttpError(
         409,
         'APPROVER_IN_USE',
-        `This employee is used in approval workflows by Employee Numbers ${numbers.join(', ')}. Remove those approval assignments before making the employee inactive.`,
-        { employeeNumbers: numbers.join(', ') }
+        `This employee is used in approval workflows by ${describeApprovalReferences(references)}. Remove those approval assignments before making the employee inactive.`,
+        { employees: references }
       );
     }
   }
 
   if (input.currentCanBeResponsible && !input.nextCanBeResponsible) {
-    const numbers = await findApprovalReferenceEmployeeNumbers(tx, {
+    const references = await findApprovalReferences(tx, {
       approverId: input.employeeId,
       roles: ['RESPONSABILE'],
       ignoreSubjectEmployeeNumbers: input.ignoreSubjectEmployeeNumbers,
     });
-    if (numbers.length > 0) {
+    if (references.length > 0) {
       throw new HttpError(
         409,
         'RESPONSABILE_APPROVER_IN_USE',
-        `This employee is used as Responsabile by Employee Numbers ${numbers.join(', ')}. Remove those assignments before disabling Responsabile eligibility.`,
-        { employeeNumbers: numbers.join(', ') }
+        `This employee is used as Responsabile by ${describeApprovalReferences(references)}. Remove those assignments before disabling Responsabile eligibility.`,
+        { employees: references }
       );
     }
   }
 
   if (input.currentCanBeSubstituteResponsible && !input.nextCanBeSubstituteResponsible) {
-    const numbers = await findApprovalReferenceEmployeeNumbers(tx, {
+    const references = await findApprovalReferences(tx, {
       approverId: input.employeeId,
       roles: ['SUBSTITUTE_RESPONSABILE'],
       ignoreSubjectEmployeeNumbers: input.ignoreSubjectEmployeeNumbers,
     });
-    if (numbers.length > 0) {
+    if (references.length > 0) {
       throw new HttpError(
         409,
         'SUBSTITUTE_APPROVER_IN_USE',
-        `This employee is used as Sostituto-Responsabile by Employee Numbers ${numbers.join(', ')}. Remove those assignments before disabling substitute eligibility.`,
-        { employeeNumbers: numbers.join(', ') }
+        `This employee is used as Sostituto-Responsabile by ${describeApprovalReferences(references)}. Remove those assignments before disabling substitute eligibility.`,
+        { employees: references }
       );
     }
   }

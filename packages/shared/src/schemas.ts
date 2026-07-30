@@ -285,6 +285,15 @@ export const employeeListQuerySchema = z.object({
   q: z.string().trim().optional(),
   status: employeeStatusSchema.optional(),
   departmentId: z.string().optional(),
+  /**
+   * Only Active employees short of a Responsabile or a Sostituto.
+   *
+   * A filter for what is *absent*, which is why it lives on the server with the
+   * others rather than in the browser: the directory and the Excel export share
+   * one where-clause, and a filter applied only to the table would silently
+   * export a different set of people than the one on screen.
+   */
+  incompleteApproval: z.enum(['true']).optional(),
   updatedSince: z.string().datetime().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
   cursor: z.string().optional(),

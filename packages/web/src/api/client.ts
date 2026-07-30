@@ -40,6 +40,8 @@ type ListEmployeeParams = {
   q?: string | undefined;
   status?: string | undefined;
   departmentId?: string | undefined;
+  /** 'true' for only the Active employees short of an approver. */
+  incompleteApproval?: string | undefined;
 };
 
 function queryString(params: Record<string, string | undefined>): string {

@@ -32,10 +32,17 @@ export const resources = {
         language: 'Lingua',
         confirm: 'Conferma',
         discard: 'Scarta modifiche',
+        openCalendar: 'Apri il calendario',
+        clearDate: 'Cancella la data',
+        previousMonth: 'Mese precedente',
+        nextMonth: 'Mese successivo',
+        chooseMonth: 'Scegli il mese',
+        chooseYear: 'Scegli l’anno',
       },
       fields: {
         firstName: 'Nome',
         lastName: 'Cognome',
+        fullName: 'Nome e cognome',
         workEmail: 'Email di lavoro',
         preferredLanguage: 'Lingua preferita',
         department: 'Dipartimento',
@@ -59,12 +66,20 @@ export const resources = {
         substituteResponsabili: 'Sostituto-Responsabile',
         weeklyTotal: 'Totale orario',
         approvalWorkflow: 'Workflow',
+        onlyIncompleteApproval: 'Solo workflow incompleto',
         actions: 'Azioni',
         select: 'Seleziona',
         updated: 'Aggiornato',
         row: 'Riga',
         action: 'Azione',
         errors: 'Errori',
+      },
+      // Column-width abbreviations for the directory's workflow cell; the full
+      // role names are still read out to a screen reader.
+      roleShort: {
+        responsabile: 'Resp.',
+        substitute: 'Sost.',
+        preApprover: 'Pre.',
       },
       weekday: {
         monday: 'LU',
@@ -98,8 +113,9 @@ export const resources = {
           'Ricalcolate le date di pensionamento previste di {{count}} dipendenti. Le date confermate non sono state toccate.',
         recalcDoneNone:
           'Nessuna data da ricalcolare: nessun dipendente ha una data di pensionamento prevista.',
+        confirmRecalcTitle: 'Ricalcolare tutte le date di pensionamento?',
         confirmRecalc:
-          'Salvando {{years}} anni e {{months}} mesi, la data di pensionamento prevista viene ricalcolata per tutti i dipendenti che non hanno una data confermata. Continuare?',
+          'Salvando {{years}} anni e {{months}} mesi, la data prevista viene ricalcolata per tutti i dipendenti che non hanno una data confermata.',
         corruptWarning:
           'Il valore salvato non è valido; viene mostrato il valore predefinito di legge. Salva per ripristinarlo.',
       },
@@ -172,16 +188,21 @@ export const resources = {
         weeklySectionHint: 'Ore giornaliere in formato sessantesimi, per esempio 7,30 per sette ore e trenta minuti.',
         requiredFields: 'Campi obbligatori',
         noOptionsFound: 'Nessun risultato',
-        confirmationTitle: 'Conferma richiesta',
+        confirmDeleteEmployeeTitle: 'Eliminare {{name}}?',
+        confirmDeleteDepartmentTitle: 'Eliminare il dipartimento {{name}}?',
+        discardChangesTitle: 'Scartare le modifiche?',
+        confirmUnconfirmRetirementTitle: 'Ricalcolare la data di pensionamento?',
         departmentsSubtitle: 'Gestisci i dipartimenti.',
-        discardChanges:
-          'Ci sono modifiche non salvate in questa scheda. Chiudendo ora andranno perse. Vuoi chiudere senza salvare?',
+        discardChanges: 'Ci sono modifiche non salvate in questa scheda. Chiudendo ora andranno perse.',
         emptyEmployees: 'Nessun dipendente corrisponde ai filtri. Svuota la ricerca o crea un nuovo dipendente.',
         emptyDepartments: 'Aggiungi i dipartimenti prima di importare il file Excel.',
         importInstructions: 'Carica un file Excel con intestazioni italiane o inglesi. I dipartimenti sconosciuti rimangono errori di riga.',
         signInError: 'Accesso non riuscito. Riprova ad accedere.',
         signInUnavailable: 'Impossibile avviare l’accesso. Controlla la connessione e riprova.',
         incompleteApproval: 'Incompleto',
+        approverMissing: 'Da assegnare',
+        retirementProjected: '(prevista)',
+        retirementConfirmed: '(confermata)',
         ineligibleApprover:
           'Non più idoneo a questo ruolo: rimuovilo, oppure riabilitalo nella sua scheda (Ruoli e abilitazioni)',
         invalidWeeklySchedule: 'Inserisci l’orario nel formato 7,30.',
@@ -189,11 +210,11 @@ export const resources = {
         weeklyScheduleMismatch: 'Totale settimanale {{total}}; atteso da FTE {{expected}}.',
         loadErrorHint: 'Premi Riprova. Se l’errore si ripete, ricarica la pagina.',
         confirmDeleteEmployee:
-          'Stai per eliminare definitivamente {{name}} (matricola {{employeeNumber}}) e il suo storico di approvazioni. L’operazione non è reversibile.',
+          'La matricola {{employeeNumber}} e tutto il suo storico di approvazioni verranno eliminati definitivamente. L’operazione non è reversibile.',
         confirmDeleteDepartment:
-          'Stai per eliminare definitivamente il dipartimento {{name}}. L’operazione non è reversibile e riesce solo se nessun dipendente è assegnato a questo dipartimento.',
+          'L’operazione non è reversibile e riesce solo se nessun dipendente è assegnato a questo dipartimento.',
         confirmUnconfirmRetirement:
-          'Al salvataggio la data confermata ({{date}}) sarà sostituita da quella calcolata dalla data di nascita. Continuare?',
+          'Al salvataggio la data confermata ({{date}}) sarà sostituita da quella calcolata dalla data di nascita.',
         workEmailHint:
           'Indirizzo di lavoro ufficiale, univoco per dipendente. Usato dal portale Ferie per le notifiche.',
         preferredLanguageHint:
@@ -408,15 +429,15 @@ export const resources = {
         },
         APPROVER_IN_USE: {
           title: 'Questo dipendente è responsabile di altre persone',
-          body: 'Compare nel workflow dei Numeri Matricola {{employeeNumbers}}. Rimuovi quegli incarichi, poi riprova.',
+          body: 'Compare nel workflow di {{employees}}. Rimuovi quegli incarichi, poi riprova.',
         },
         RESPONSABILE_APPROVER_IN_USE: {
           title: 'Questo dipendente è Responsabile di altre persone',
-          body: 'È Responsabile dei Numeri Matricola {{employeeNumbers}}. Rimuovi quegli incarichi prima di disattivare "Può essere Responsabile".',
+          body: 'È Responsabile di {{employees}}. Rimuovi quegli incarichi prima di disattivare "Può essere Responsabile".',
         },
         SUBSTITUTE_APPROVER_IN_USE: {
           title: 'Questo dipendente è Sostituto-Responsabile di altre persone',
-          body: 'È Sostituto-Responsabile dei Numeri Matricola {{employeeNumbers}}. Rimuovi quegli incarichi prima di disattivare "Può essere Sostituto-Responsabile".',
+          body: 'È Sostituto-Responsabile di {{employees}}. Rimuovi quegli incarichi prima di disattivare "Può essere Sostituto-Responsabile".',
         },
         RESPONSABILE_REQUIRED: {
           title: 'Manca il Responsabile',
@@ -459,10 +480,17 @@ export const resources = {
         language: 'Language',
         confirm: 'Confirm',
         discard: 'Discard changes',
+        openCalendar: 'Open the calendar',
+        clearDate: 'Clear the date',
+        previousMonth: 'Previous month',
+        nextMonth: 'Next month',
+        chooseMonth: 'Choose the month',
+        chooseYear: 'Choose the year',
       },
       fields: {
         firstName: 'First Name',
         lastName: 'Last Name',
+        fullName: 'Full Name',
         workEmail: 'Work Email',
         preferredLanguage: 'Preferred Language',
         department: 'Department',
@@ -486,12 +514,18 @@ export const resources = {
         substituteResponsabili: 'Substitute-Responsible',
         weeklyTotal: 'Weekly Hours',
         approvalWorkflow: 'Workflow',
+        onlyIncompleteApproval: 'Incomplete workflow only',
         actions: 'Actions',
         select: 'Select',
         updated: 'Updated',
         row: 'Row',
         action: 'Action',
         errors: 'Errors',
+      },
+      roleShort: {
+        responsabile: 'Resp.',
+        substitute: 'Sub.',
+        preApprover: 'Pre.',
       },
       weekday: {
         monday: 'Mon',
@@ -524,8 +558,9 @@ export const resources = {
         recalcDoneBody_other:
           'Recalculated the projected retirement date for {{count}} employees. Confirmed dates were left untouched.',
         recalcDoneNone: 'Nothing to recalculate: no employee has a projected retirement date.',
+        confirmRecalcTitle: 'Recalculate every retirement date?',
         confirmRecalc:
-          'Saving {{years}} years and {{months}} months recalculates the projected retirement date for every employee without a confirmed date. Continue?',
+          'Saving {{years}} years and {{months}} months recalculates the projected date for every employee without a confirmed one.',
         corruptWarning:
           'The saved value is invalid; the statutory default is shown. Save to reset it.',
       },
@@ -598,16 +633,21 @@ export const resources = {
         weeklySectionHint: 'Daily hours in payroll sixtieths format, for example 7,30 for seven hours and thirty minutes.',
         requiredFields: 'Required fields',
         noOptionsFound: 'No results found',
-        confirmationTitle: 'Confirmation required',
+        confirmDeleteEmployeeTitle: 'Delete {{name}}?',
+        confirmDeleteDepartmentTitle: 'Delete the {{name}} department?',
+        discardChangesTitle: 'Discard changes?',
+        confirmUnconfirmRetirementTitle: 'Recalculate the retirement date?',
         departmentsSubtitle: 'Manage departments.',
-        discardChanges:
-          'This record has unsaved changes. Closing now discards them. Close without saving?',
+        discardChanges: 'This record has unsaved changes. Closing now discards them.',
         emptyEmployees: 'No employee matches the filters. Clear the search or create a new employee.',
         emptyDepartments: 'Add departments before importing Excel data.',
         importInstructions: 'Upload an Excel file with Italian or English headers. Unknown departments remain row errors.',
         signInError: 'Sign-in failed. Please try signing in again.',
         signInUnavailable: 'Could not start sign-in. Check your connection and try again.',
         incompleteApproval: 'Incomplete',
+        approverMissing: 'Not assigned',
+        retirementProjected: '(projected)',
+        retirementConfirmed: '(confirmed)',
         ineligibleApprover:
           'No longer eligible for this role: remove them, or re-enable the role on their own record (Roles & Capabilities)',
         invalidWeeklySchedule: 'Enter hours in 7,30 format.',
@@ -615,11 +655,11 @@ export const resources = {
         weeklyScheduleMismatch: 'Weekly total {{total}}; expected from FTE {{expected}}.',
         loadErrorHint: 'Press Retry. If the error keeps happening, reload the page.',
         confirmDeleteEmployee:
-          'You are about to permanently delete {{name}} (employee number {{employeeNumber}}) and their approval history. This cannot be undone.',
+          'Employee number {{employeeNumber}} and their whole approval history will be permanently deleted. This cannot be undone.',
         confirmDeleteDepartment:
-          'You are about to permanently delete the {{name}} department. This cannot be undone, and only works if no employee is assigned to it.',
+          'This cannot be undone, and only works if no employee is assigned to it.',
         confirmUnconfirmRetirement:
-          'On save, the confirmed date ({{date}}) will be replaced by the one calculated from the birth date. Continue?',
+          'On save, the confirmed date ({{date}}) will be replaced by the one calculated from the birth date.',
         workEmailHint:
           'Official work address, unique per employee. The Ferie portal uses it for notifications.',
         preferredLanguageHint:
@@ -831,15 +871,15 @@ export const resources = {
         },
         APPROVER_IN_USE: {
           title: 'This employee is an approver for other people',
-          body: 'They appear in the workflow of employee numbers {{employeeNumbers}}. Remove those assignments, then try again.',
+          body: 'They appear in the workflow of {{employees}}. Remove those assignments, then try again.',
         },
         RESPONSABILE_APPROVER_IN_USE: {
           title: 'This employee is Responsible for other people',
-          body: 'They are Responsible for employee numbers {{employeeNumbers}}. Remove those assignments before switching "Can be Responsible" off.',
+          body: 'They are Responsible for {{employees}}. Remove those assignments before switching "Can be Responsible" off.',
         },
         SUBSTITUTE_APPROVER_IN_USE: {
           title: 'This employee is Substitute-Responsible for other people',
-          body: 'They are Substitute-Responsible for employee numbers {{employeeNumbers}}. Remove those assignments before switching "Can be Substitute-Responsible" off.',
+          body: 'They are Substitute-Responsible for {{employees}}. Remove those assignments before switching "Can be Substitute-Responsible" off.',
         },
         RESPONSABILE_REQUIRED: {
           title: 'Responsible is missing',
@@ -871,6 +911,11 @@ void i18n.use(initReactI18next).init({
   lng: storedLanguage(),
   fallbackLng: 'it',
   interpolation: { escapeValue: false },
+  // A value the caller didn't supply leaves `{{employees}}` sitting in the
+  // sentence by default. A gap in a line of prose is bad; showing the operator
+  // the template is worse, and reads as the app being broken rather than the
+  // data being thin.
+  missingInterpolationHandler: () => '',
 });
 
 // Persist the choice so a reload keeps the selected language rather than

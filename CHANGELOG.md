@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.10.0 - 2026-07-29
+
+### Changed
+
+- The web app is rebuilt on **shadcn/ui over Base UI, with Tailwind**, replacing Mantine and the 1,500-line hand-written stylesheet. Nothing about what the app does changes: the same fields, the same rules, the same messages, verified against 0.9.0 side by side in the browser. What changes is where the styling lives — the design tokens are declared once and the components read them, instead of the brand blue being restated in a Mantine palette because the library wrote a filled button's background as an inline custom property no stylesheet could override.
+- Every date in the app now reads the same way: localized `DD MMMM YYYY`. The tables previously used a format of their own — fixed en-GB "30 Jun 2050", chosen for column width — so an Italian operator read one spelling of a date in the directory and a different one in the field they were about to edit. The directory now says "30 giugno 2050", as the field does, and the timestamps in the audit log, the departments table and the retirement-age card follow the same convention with the time appended ("29 luglio 2026, 14:52").
+- Closed enum lists (status, preferred language, contract type, TFR) are listboxes rather than searchable dropdowns. A text box to filter three options is a step, not a shortcut, and typing still jumps to an option. Department and the two directory filters stay searchable and clearable, because those lists grow and "no filter" is a real answer.
+- Confirmation prompts are announced as alert dialogs rather than plain dialogs, which is what they are: a question that has to be answered before anything else can happen. They are also laid out to be stopped at rather than clicked through: a large circular mark above centred text, and the two answers side by side as equal halves rather than tucked into a footer bar. An irreversible one — deleting an employee or a department, discarding unsaved edits — carries a red warning mark and a solid red confirm button; a reversible one carries a neutral question mark and the ordinary brand button, so the two never look alike at a glance.
+- The date field now shows a single calendar button — the one that opens the picker — where the previous control drew a decorative icon as well.
+- The calendar's caption is two dropdowns, month and year, reaching a century back and seventy years forward. A birth date is forty years away and the previous control could only step there a month at a time; the arrows stay for the short hops either side of where the dropdown lands.
+- New "Solo workflow incompleto" filter in the directory toolbar, narrowing the list to the Active employees short of a Responsabile or a Sostituto. Finding the gaps was previously a matter of reading every row's workflow cell. It is a server filter — `?incompleteApproval=true` on the employee list — because the directory and the Excel export share one where-clause, and a filter applied to only the table would silently export a different set of people than the one on screen.
+- Confirmation prompts ask the question in the title and name the record there: "Eliminare Bruno Bianchi?" rather than "Conferma richiesta" with the name buried in the body. The body is now what happens rather than a restatement of what you clicked.
+- The directory's columns sort. Click a heading to order by it, click again to turn it around; the arrow and `aria-sort` say which one is active. The weekly total sorts on minutes rather than on "37,30", and dates sort chronologically rather than by how the month is spelled. The workflow column is deliberately not sortable — a column of names has no order worth asking for.
+- The directory's retirement date says which kind it is — "(prevista)" under a date calculated from the birth date, "(confermata)" under one someone chose. The two look identical in a column but behave differently: the projected one moves when the birth date or the retirement age changes.
+- The workflow column names the approvers instead of counting them. "R 1 / S 2" answered a question nobody has; it now reads "Resp. Ada Rossi / Sost. Bruno Bianchi", and where an Active employee is missing one of the two roles the gap is called out as "Da assegnare" rather than left blank.
+- People are named forename-first wherever they are named — the directory, the approver chips, the employee card's own title, the import preview, the confirmations and the toasts. Lists are still *ordered* by surname, which is what makes a directory scannable, but ordering by a name and writing it backwards are two separate decisions and only the first one has a reason. The directory's "Cognome" and "Nome" columns become one "Nome e cognome".
+
+### Fixed
+
+- Below the 721px breakpoint the sidebar labels overflowed the icon strip instead of collapsing, pushing the icons out of view entirely. `text-[0]` is ambiguous to Tailwind — a bare `0` could be a colour — so it emitted no rule at all; `text-[0px]` is a font size.
+
+- The three "this employee is still an approver" errors name the people involved instead of listing bare Employee Numbers. "Compare nel workflow di 1003" made the operator go and look up who 1003 is before they could act on it; it now says "Compare nel workflow di Carla Verdi (1003)". The API sends the list structured rather than pre-joined, so the order a name is written in stays a decision the interface makes. **API shape change:** these three errors now carry `details.employees` as `[{ employeeNumber, firstName, lastName }]` in place of the pre-joined `details.employeeNumbers` string. Only the admin routes are affected — they are not part of the documented `/api/v1` surface, and no other client reads them.
+- An interpolation the server did not supply used to leave `{{employees}}` sitting in the sentence. A missing value now thins the sentence instead of showing the operator the template.
+- Picking a day now closes the calendar. It closed and then re-opened itself: handing the caret back to the text box was read as the operator arriving at the field. Clicking the box re-offers the calendar, which focus alone cannot do once the caret is already there.
+- The calendar rebuilt its entire day grid on every render, because the component overrides were declared inline and so were a new component type each time. React Day Picker re-renders on focus, which made a click on a day land on a button that had already been replaced.
+
+- Field-level error messages are now wired to their input with `aria-describedby`. Mantine computed that attribute from its own internals and discarded anything passed in, so per-field descriptions were unavailable and a screen reader had only the live-region announcement to go on.
+- A field's caption is no longer a `<label>` wrapping the entire control. It had been read out as part of the input's accessible name, error message included.
+- The remove button on an approver chip has an accessible name. It is an icon, and there is one per chip, so unnamed they were indistinguishable.
+
+### Internal
+
+- `App.tsx`, 2,462 lines, is split into per-route and per-form modules with the draft type, the date formatting and the shared hooks extracted alongside. This also breaks an import cycle: `employee-validation.ts` imported the draft type from `App.tsx`, which imported the validator back.
+- Invalid state is reported through data attributes (`data-invalid`, `data-has-errors`, `data-ineligible`) rather than styling classes, which is both the shadcn convention and a hook that survives having no stylesheet to name. The tests that pin those marks were updated, not removed.
+- `@mantine/core`, `@mantine/dates`, `@mantine/hooks` and `@mantine/modals` are gone. The CSS bundle drops from 348 kB to 98 kB.
+
 ## 0.9.0 - 2026-07-28
 
 ### Added

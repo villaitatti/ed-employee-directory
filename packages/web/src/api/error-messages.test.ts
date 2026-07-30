@@ -34,6 +34,41 @@ describe('describeError', () => {
     });
   });
 
+  it('names the people an approver is still assigned to, rather than their numbers', async () => {
+    // The API sends them structured so the name order stays this app's decision.
+    // "Remove the assignment on 1003" makes the operator go and look up who 1003
+    // is before they can act on it.
+    const error = new ApiError('This employee is used in approval workflows.', 409, 'APPROVER_IN_USE', {
+      employees: [
+        { employeeNumber: 1003, firstName: 'Carla', lastName: 'Verdi' },
+        { employeeNumber: 1002, firstName: 'Bruno', lastName: 'Bianchi' },
+      ],
+    });
+
+    await withLanguage('it', () => {
+      const described = describeError(error, t);
+      expect(described.description).toContain('Carla Verdi (1003), Bruno Bianchi (1002)');
+      expect(described.description).not.toContain('Numeri Matricola');
+    });
+
+    await withLanguage('en', () => {
+      expect(describeError(error, t).description).toContain('Carla Verdi (1003), Bruno Bianchi (1002)');
+    });
+  });
+
+  it('never shows the operator an unfilled placeholder', async () => {
+    // The server always names them, so this is the belt to that braces: a detail
+    // that goes missing should thin the sentence, not print the template at
+    // someone and make the app look broken.
+    const error = new ApiError('This employee is used in approval workflows.', 409, 'APPROVER_IN_USE', {});
+
+    await withLanguage('it', () => {
+      const described = describeError(error, t);
+      expect(described.title).toBe('Questo dipendente è responsabile di altre persone');
+      expect(described.description).not.toContain('{{');
+    });
+  });
+
   it('names the clashing field on a duplicate, and points the form at it', async () => {
     const error = new ApiError('A record with these values already exists.', 409, 'DUPLICATE_VALUE', {
       field: 'workEmail',

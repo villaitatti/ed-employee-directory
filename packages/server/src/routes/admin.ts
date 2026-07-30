@@ -54,7 +54,7 @@ import {
   emptyApprovalRoleIds,
   existingApprovalRoleIds,
   assertEmployeeHasNoApprovalReferences,
-  findApprovalReferenceEmployeeNumbers,
+  findApprovalReferences,
   missingRequiredApprovers,
   REQUIRED_APPROVER_MESSAGES,
   replaceApprovalAssignments,
@@ -467,6 +467,21 @@ function employeeWhereFromQuery(query: ReturnType<typeof employeeListQuerySchema
   const where: Prisma.EmployeeWhereInput = {};
   if (query.status) where.status = query.status;
   if (query.departmentId) where.departmentId = query.departmentId;
+  if (query.incompleteApproval) {
+    // The plainer rule rather than the one the write path enforces: that one
+    // excuses a missing Responsabile while nobody is yet eligible for the role,
+    // and a filter for finding gaps should show the gaps, including the ones
+    // nothing can be done about yet.
+    where.status = 'ATTIVO';
+    where.AND = [
+      {
+        OR: [
+          { approvalAssignments: { none: { role: 'RESPONSABILE' } } },
+          { approvalAssignments: { none: { role: 'SUBSTITUTE_RESPONSABILE' } } },
+        ],
+      },
+    ];
+  }
   if (query.updatedSince) where.updatedAt = { gte: new Date(query.updatedSince) };
   if (query.q) {
     const terms: Prisma.EmployeeWhereInput[] = [
@@ -860,8 +875,8 @@ adminRouter.delete(
       await assertEmployeeHasNoApprovalReferences(tx, {
         approverId: employeeId,
         code: 'APPROVER_IN_USE',
-        message: (employeeNumbers) =>
-          `This employee is used in approval workflows by Employee Numbers ${employeeNumbers}. Remove those approval assignments before deleting the employee.`,
+        message: (employees) =>
+          `This employee is used in approval workflows by ${employees}. Remove those approval assignments before deleting the employee.`,
       });
       await writeAuditLog({
         tx,
@@ -1417,7 +1432,7 @@ adminRouter.post(
       const employeeNumber = existing.employeeNumber;
 
       if (existing.status === 'ATTIVO' && nextStatus !== 'ATTIVO') {
-        const dbRefs = await findApprovalReferenceEmployeeNumbers(prisma, {
+        const dbRefs = await findApprovalReferences(prisma, {
           approverId: existing.id,
           ignoreSubjectEmployeeNumbers: rewrittenSubjectNumbers,
         });
@@ -1430,7 +1445,7 @@ adminRouter.post(
       }
 
       if (existing.canBeResponsible && !nextCanBeResponsible) {
-        const dbRefs = await findApprovalReferenceEmployeeNumbers(prisma, {
+        const dbRefs = await findApprovalReferences(prisma, {
           approverId: existing.id,
           roles: ['RESPONSABILE'],
           ignoreSubjectEmployeeNumbers: rewrittenSubjectNumbers,
@@ -1444,7 +1459,7 @@ adminRouter.post(
       }
 
       if (existing.canBeSubstituteResponsible && !nextCanBeSubstitute) {
-        const dbRefs = await findApprovalReferenceEmployeeNumbers(prisma, {
+        const dbRefs = await findApprovalReferences(prisma, {
           approverId: existing.id,
           roles: ['SUBSTITUTE_RESPONSABILE'],
           ignoreSubjectEmployeeNumbers: rewrittenSubjectNumbers,

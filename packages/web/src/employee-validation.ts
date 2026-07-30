@@ -6,7 +6,7 @@ import {
   validateStatusDates,
   workEmailSchema,
 } from '@itatti/shared';
-import type { EmployeeDraft } from './App.js';
+import type { EmployeeDraft } from './employee-draft.js';
 import type { Translate } from './i18n/types.js';
 
 /**

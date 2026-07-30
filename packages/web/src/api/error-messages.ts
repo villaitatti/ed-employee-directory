@@ -1,3 +1,4 @@
+import { employeeFullName } from '../employee-draft.js';
 import { fieldLabels } from '../employee-validation.js';
 import type { Translate } from '../i18n/types.js';
 import { ApiError } from './client.js';
@@ -79,6 +80,31 @@ function validationFieldErrors(details: unknown): string[] {
 }
 
 /**
+ * The people an error names, written the way this app writes names.
+ *
+ * The API sends them structured — number, forename, surname — rather than
+ * pre-joined, so which order a name reads in stays a decision the interface
+ * makes. The Employee Number comes along because two colleagues can share a
+ * name and only the number will find the right record.
+ */
+function namedEmployees(value: unknown): string | undefined {
+  if (!Array.isArray(value) || value.length === 0) return undefined;
+  const names = value
+    .filter(isRecord)
+    .map((employee) => {
+      const name = employeeFullName({
+        firstName: typeof employee['firstName'] === 'string' ? employee['firstName'] : undefined,
+        lastName: typeof employee['lastName'] === 'string' ? employee['lastName'] : undefined,
+      });
+      const number = employee['employeeNumber'];
+      if (!name) return typeof number === 'number' ? String(number) : '';
+      return typeof number === 'number' ? `${name} (${number})` : name;
+    })
+    .filter(Boolean);
+  return names.length > 0 ? names.join(', ') : undefined;
+}
+
+/**
  * A request that never reached the server (offline, DNS, CORS, aborted): `fetch`
  * rejects with a TypeError rather than resolving to a response, so there is no
  * status or code to key on.
@@ -112,7 +138,11 @@ export function describeError(error: unknown, t: Translate): FriendlyError {
     };
   }
 
-  const params = isRecord(error.details) ? error.details : {};
+  const details = isRecord(error.details) ? error.details : {};
+  // Any code whose copy says `{{employees}}` gets the list formatted here, so
+  // none of them has to know it arrived as an array.
+  const employees = namedEmployees(details['employees']);
+  const params = employees ? { ...details, employees } : details;
 
   if (error.code === 'VALIDATION_ERROR') {
     const fields = validationFieldErrors(error.details);

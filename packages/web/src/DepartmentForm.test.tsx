@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { DepartmentForm, emptyDepartmentDraft } from './App.js';
+import { DepartmentForm, emptyDepartmentDraft } from './routes/DepartmentForm.js';
 import { renderWithProviders } from './test/render.js';
 
 describe('DepartmentForm modal', () => {
@@ -143,9 +143,9 @@ describe('DepartmentForm modal', () => {
       />
     );
 
-    // Cancelling the Mantine confirmation keeps the form open.
+    // Cancelling the confirmation keeps the form open.
     await user.keyboard('{Escape}');
-    const confirmation = await screen.findByRole('dialog', { name: 'Conferma richiesta' });
+    const confirmation = await screen.findByRole('alertdialog', { name: 'Scartare le modifiche?' });
     await user.click(within(confirmation).getByRole('button', { name: 'Annulla' }));
     expect(onCancel).not.toHaveBeenCalled();
 
