@@ -10,42 +10,7 @@ import {
   InputGroupInput,
 } from '@/components/ui/input-group';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-
-/** How a date is written back to the operator: `15 marzo 1990`, in their language. */
-export const DATE_INPUT_DISPLAY_FORMAT = 'DD MMMM YYYY';
-
-/**
- * Day-first formats only — never fall back to browser `Date`, which reads a bare
- * `1/5/1990` as 5 January. Nothing here is ambiguous: `1/5/1990` is 1 May, always.
- *
- * Deliberately not natural-language parsing ("next friday", "in 3 weeks"), which
- * shadcn's own date-picker example reaches for. A birth date and a hire date are
- * transcribed from a document; a parser that guesses is a parser that can be wrong
- * without anyone noticing.
- */
-const DATE_INPUT_PARSE_FORMATS = [
-  DATE_INPUT_DISPLAY_FORMAT,
-  'D MMMM YYYY',
-  'DD/MM/YYYY',
-  'D/M/YYYY',
-  'DD-MM-YYYY',
-  'D-M-YYYY',
-  'DD.MM.YYYY',
-  'D.M.YYYY',
-  'YYYY-MM-DD',
-] as const;
-
-export function parseEmployeeDateInput(input: string, locale: string): string | null {
-  const trimmed = input.trim();
-  if (!trimmed) return null;
-
-  for (const format of DATE_INPUT_PARSE_FORMATS) {
-    const parsed = dayjs(trimmed, format, locale, true);
-    if (parsed.isValid()) return parsed.format('YYYY-MM-DD');
-  }
-
-  return null;
-}
+import { DATE_INPUT_DISPLAY_FORMAT, parseEmployeeDateInput } from '../format.js';
 
 /**
  * How far the month and year dropdowns reach.

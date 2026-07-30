@@ -478,6 +478,28 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
     expect(res.body.data.approvalRoles.substituteResponsabili).toHaveLength(1);
   });
 
+  it('lists only the employees short of an approver, and exports the same set', async () => {
+    const department = await testPrisma.department.create({
+      data: { name: 'Biblioteca', normalizedName: 'biblioteca' },
+    });
+    const approvers = await seedApprovers(department.id);
+    // Marco has both roles filled; the two approvers themselves have neither.
+    const complete = await seedEmployeeUsingApprovers(department.id, approvers);
+
+    const listed = await request(app).get('/api/admin/employees?incompleteApproval=true');
+    expect(listed.status).toBe(200);
+    const numbers = listed.body.data.map((employee: { employeeNumber: number }) => employee.employeeNumber);
+    expect(numbers).not.toContain(complete.employeeNumber);
+    expect(numbers).toContain(approvers.responsabile.employeeNumber);
+
+    // The table and the download share one where-clause, so a filter that
+    // applied to only one of them would be a silent mismatch.
+    const exported = await request(app).get('/api/admin/employees/export.csv?incompleteApproval=true');
+    expect(exported.status).toBe(200);
+    expect(exported.text).not.toContain(String(complete.employeeNumber));
+    expect(exported.text).toContain(String(approvers.responsabile.employeeNumber));
+  });
+
   it('rejects inactivating an employee who is still assigned as an approver', async () => {
     const department = await testPrisma.department.create({
       data: { name: 'Biblioteca', normalizedName: 'biblioteca' },
@@ -505,6 +527,14 @@ describe.skipIf(!dbUp)('retirement-policy settings routes', () => {
 
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('APPROVER_IN_USE');
+    // The web app builds "Compare nel workflow di Marco Bianchi (2002)" out of
+    // this, and formats the name in its own order — so the contract is the
+    // structured list, not a sentence the server pre-joined.
+    expect(res.body.error.details.employees).toEqual([
+      { employeeNumber: 2002, firstName: 'Marco', lastName: 'Bianchi' },
+    ]);
+    // The names are in the message too, for anything that only reads that.
+    expect(res.body.error.message).toContain('Marco Bianchi (2002)');
   });
 
   it('rejects disabling substitute eligibility while the employee is assigned as substitute', async () => {

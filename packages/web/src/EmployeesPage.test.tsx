@@ -106,12 +106,21 @@ beforeEach(() => {
       if (url.includes('/api/admin/departments')) return json({ data: [department] });
       if (url.includes('/api/admin/employee-options')) return json({ data: [] });
       if (url.includes('/api/admin/employees')) {
-        // The search term is a server filter in the real API, so the stub applies
-        // it here rather than letting the page appear to filter on it.
-        const q = new URL(url, 'http://localhost').searchParams.get('q')?.toLowerCase();
-        const data = q
-          ? roster.filter((e) => `${e.firstName} ${e.lastName}`.toLowerCase().includes(q))
-          : roster;
+        // Every filter is a server filter in the real API — including the
+        // workflow one, so that the table and the Excel export can never be
+        // asked for different sets. The stub honours them for the same reason.
+        const params = new URL(url, 'http://localhost').searchParams;
+        const q = params.get('q')?.toLowerCase();
+        const incompleteOnly = params.get('incompleteApproval') === 'true';
+        const data = roster
+          .filter((e) => !q || `${e.firstName} ${e.lastName}`.toLowerCase().includes(q))
+          .filter(
+            (e) =>
+              !incompleteOnly ||
+              (e.status === 'ATTIVO' &&
+                (e.approvalRoles.responsabili.length === 0 ||
+                  e.approvalRoles.substituteResponsabili.length === 0))
+          );
         return json({ data, nextCursor: null });
       }
       return json({ data: [] });

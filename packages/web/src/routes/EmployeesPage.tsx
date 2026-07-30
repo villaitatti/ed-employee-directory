@@ -14,7 +14,7 @@ import {
 } from '../employee-draft.js';
 import { formatDate, useDateLocale } from '../format.js';
 import { useApi, useDebounced, useDepartments } from '../hooks.js';
-import { ApprovalWorkflow, hasIncompleteApproval } from '../ui/ApprovalWorkflow.js';
+import { ApprovalWorkflow } from '../ui/ApprovalWorkflow.js';
 import { CheckboxField } from '../ui/CheckboxField.js';
 import { ActionTooltip } from '../ui/ActionTooltip.js';
 import { ComboboxField } from '../ui/ComboboxField.js';
@@ -67,11 +67,12 @@ export function EmployeesPage() {
   const confirm = useConfirmation();
   const api = useApi();
   const queryClient = useQueryClient();
-  const [filters, setFilters] = useState({ q: '', status: '', departmentId: '' });
-  // Not a server filter like the other three: the workflow rule is about what is
-  // *missing*, which the API has no query for, and every matching row is already
-  // here to check.
-  const [onlyIncompleteApproval, setOnlyIncompleteApproval] = useState(false);
+  const [filters, setFilters] = useState({
+    q: '',
+    status: '',
+    departmentId: '',
+    incompleteApproval: false,
+  });
   // Surname-ascending to begin with, which is the order the API returns and the
   // order a directory is read in. Sorting is done here rather than by the server
   // because the table already holds every matching row — `allEmployees` follows
@@ -92,23 +93,28 @@ export function EmployeesPage() {
     queryKey: ['employee-options'],
     queryFn: () => api.employeeOptions(),
   });
+  /**
+   * Every filter in one object, and the same one for the table and the export.
+   * The workflow filter used to run in the browser, which meant the download
+   * quietly contained the people the table was hiding.
+   */
+  const employeeQuery = {
+    q: debouncedQ || undefined,
+    status: filters.status || undefined,
+    departmentId: filters.departmentId || undefined,
+    incompleteApproval: filters.incompleteApproval ? 'true' : undefined,
+  };
   const employees = useQuery({
-    queryKey: ['employees', debouncedQ, filters.status, filters.departmentId],
-    queryFn: () =>
-      api.allEmployees({
-        q: debouncedQ || undefined,
-        status: filters.status || undefined,
-        departmentId: filters.departmentId || undefined,
-      }),
+    queryKey: ['employees', employeeQuery],
+    queryFn: () => api.allEmployees(employeeQuery),
   });
 
   const rows = useMemo(() => {
-    const matching = (employees.data ?? []).filter(
-      (employee) => !onlyIncompleteApproval || hasIncompleteApproval(employee)
+    const sorted = [...(employees.data ?? [])].sort((left, right) =>
+      compareEmployees(left, right, sort.key)
     );
-    const sorted = matching.sort((left, right) => compareEmployees(left, right, sort.key));
     return sort.direction === 'asc' ? sorted : sorted.reverse();
-  }, [employees.data, sort, onlyIncompleteApproval]);
+  }, [employees.data, sort]);
 
   /** Clicking the column you are already sorted by turns it around. */
   const sortBy = (key: SortKey) =>
@@ -206,11 +212,9 @@ export function EmployeesPage() {
 
   const exportEmployees = async () => {
     try {
-      const blob = await api.exportEmployeesExcel({
-        q: filters.q || undefined,
-        status: filters.status || undefined,
-        departmentId: filters.departmentId || undefined,
-      });
+      // The same filters the table is showing, with the search term undebounced
+      // so the download matches what was typed rather than what was last fetched.
+      const blob = await api.exportEmployeesExcel({ ...employeeQuery, q: filters.q || undefined });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -273,8 +277,10 @@ export function EmployeesPage() {
         />
         <CheckboxField
           label={t('fields.onlyIncompleteApproval')}
-          checked={onlyIncompleteApproval}
-          onCheckedChange={setOnlyIncompleteApproval}
+          checked={filters.incompleteApproval}
+          onCheckedChange={(incompleteApproval) =>
+            setFilters((current) => ({ ...current, incompleteApproval }))
+          }
         />
       </Toolbar>
 

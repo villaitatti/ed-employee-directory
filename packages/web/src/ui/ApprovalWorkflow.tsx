@@ -3,20 +3,6 @@ import type { Employee, EmployeeApprovalReference } from '@itatti/shared';
 import { employeeFullName } from '../employee-draft.js';
 
 /**
- * Whether this person is short of an approver they are supposed to have.
- *
- * Only Active employees are, which is the same line the form and the API draw.
- * Deliberately not the API's fuller rule — which excuses the gap while nobody is
- * yet eligible for the role — because the point of the filter is to find the
- * gaps, including the ones nothing can be done about yet.
- */
-export function hasIncompleteApproval(employee: Employee): boolean {
-  if (employee.status !== 'ATTIVO') return false;
-  const { responsabili, substituteResponsabili } = employee.approvalRoles;
-  return responsabili.length === 0 || substituteResponsabili.length === 0;
-}
-
-/**
  * Who approves this person's leave.
  *
  * This column used to read "R 1 / S 2" — a count of approvers, which answers a

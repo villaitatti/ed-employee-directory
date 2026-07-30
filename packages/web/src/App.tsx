@@ -30,7 +30,10 @@ function NavItem({ to, icon, label }: { to: string; icon: ReactNode; label: stri
   return (
     <NavLink
       to={to}
-      className="flex min-h-10 items-center justify-center gap-3 rounded-lg p-0 text-[0] font-bold text-ink-soft no-underline [&.active]:bg-[color-mix(in_oklch,var(--brand),white_90%)] [&.active]:text-brand [&_svg]:size-5 tablet:justify-start tablet:px-3 tablet:text-[0.92rem] tablet:[&_svg]:size-[18px]"
+      // `text-[0px]`, not `text-[0]`: Tailwind cannot tell a bare `0` from a
+      // colour and silently emits nothing, which left the labels at full size
+      // inside a 4.75rem strip. The unit is what makes it a font size.
+      className="flex min-h-10 items-center justify-center gap-3 rounded-lg p-0 text-[0px] font-bold text-ink-soft no-underline [&.active]:bg-[color-mix(in_oklch,var(--brand),white_90%)] [&.active]:text-brand [&_svg]:size-5 tablet:justify-start tablet:px-3 tablet:text-[0.92rem] tablet:[&_svg]:size-[18px]"
     >
       {icon}
       {label}

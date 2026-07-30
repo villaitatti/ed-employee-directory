@@ -467,6 +467,21 @@ function employeeWhereFromQuery(query: ReturnType<typeof employeeListQuerySchema
   const where: Prisma.EmployeeWhereInput = {};
   if (query.status) where.status = query.status;
   if (query.departmentId) where.departmentId = query.departmentId;
+  if (query.incompleteApproval) {
+    // The plainer rule rather than the one the write path enforces: that one
+    // excuses a missing Responsabile while nobody is yet eligible for the role,
+    // and a filter for finding gaps should show the gaps, including the ones
+    // nothing can be done about yet.
+    where.status = 'ATTIVO';
+    where.AND = [
+      {
+        OR: [
+          { approvalAssignments: { none: { role: 'RESPONSABILE' } } },
+          { approvalAssignments: { none: { role: 'SUBSTITUTE_RESPONSABILE' } } },
+        ],
+      },
+    ];
+  }
   if (query.updatedSince) where.updatedAt = { gte: new Date(query.updatedSince) };
   if (query.q) {
     const terms: Prisma.EmployeeWhereInput[] = [
