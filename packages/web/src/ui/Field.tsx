@@ -88,14 +88,26 @@ export function Field({
         ) : null}
       </span>
 
-      {shimmer ? (
+      {shimmer === undefined ? (
+        children
+      ) : (
         // Purely decorative, and never in the way: the overlay takes no pointer
         // events, so the field stays editable while the sweep plays.
-        <span className="relative block overflow-hidden rounded-[9px] motion-safe:after:pointer-events-none motion-safe:after:absolute motion-safe:after:inset-0 motion-safe:after:animate-field-shimmer motion-safe:after:bg-[linear-gradient(90deg,transparent_0%,color-mix(in_oklch,var(--brand),transparent_86%)_50%,transparent_100%)] motion-safe:after:content-['']">
+        //
+        // The wrapper is permanent for any field that opts into the shimmer, and
+        // only its classes toggle. Mounting it just for the sweep moved the
+        // control to a different spot in the tree when the sweep ended, and React
+        // answers that with a remount — which drops the operator's focus mid-word
+        // if they started correcting the suggested value within its one second.
+        <span
+          className={cn(
+            'relative block',
+            shimmer &&
+              "overflow-hidden rounded-[9px] motion-safe:after:pointer-events-none motion-safe:after:absolute motion-safe:after:inset-0 motion-safe:after:animate-field-shimmer motion-safe:after:bg-[linear-gradient(90deg,transparent_0%,color-mix(in_oklch,var(--brand),transparent_86%)_50%,transparent_100%)] motion-safe:after:content-['']"
+          )}
+        >
           {children}
         </span>
-      ) : (
-        children
       )}
 
       {error ? (

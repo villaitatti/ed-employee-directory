@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
-import { screen, within } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { toast } from 'sonner';
 import { emptyEmployeeDraft, type EmployeeDraft } from './employee-draft.js';
@@ -790,6 +790,57 @@ describe('EmployeeForm modal', () => {
     // Correcting the surname must not clobber the address the operator chose.
     await user.clear(screen.getByLabelText('Cognome'));
     await user.type(screen.getByLabelText('Cognome'), 'Caselli-Verdi');
+    expect(latestDraft.workEmail).toBe('andrea.caselli@itatti.harvard.edu');
+  });
+
+  it('keeps focus in the address field when the suggestion sweep ends', async () => {
+    // The sweep's wrapper used to mount only while shimmering, so when its
+    // one-second timer expired the input moved in the tree, React remounted it,
+    // and an operator who had started correcting the suggested address lost
+    // their caret mid-word. This waits the timer out mid-edit on purpose — on a
+    // slow machine the previous test tripped over this by accident.
+    const user = userEvent.setup();
+    let latestDraft = { ...emptyEmployeeDraft };
+
+    function Controlled() {
+      const [draft, setDraft] = useState({ ...emptyEmployeeDraft });
+      return (
+        <EmployeeForm
+          draft={draft}
+          departments={departments}
+          employeeOptions={employeeOptions}
+          onCancel={() => undefined}
+          onChange={(next) => {
+            latestDraft = next;
+            setDraft(next);
+          }}
+          onSave={vi.fn()}
+          isSaving={false}
+        />
+      );
+    }
+
+    renderWithProviders(<Controlled />);
+
+    await user.type(screen.getByLabelText('Nome'), 'Andrea');
+    // The suggestion fires here, and with it the sweep's one-second timer.
+    await user.type(screen.getByLabelText('Cognome'), 'Caselli');
+
+    const email = screen.getByLabelText('Email di lavoro');
+    await user.clear(email);
+    await user.type(email, 'andrea.caselli@itatti.harvard');
+
+    // The sweep ends while the operator is mid-correction — inside act, since
+    // it is the timer's own state update we are waiting for.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1_100));
+    });
+
+    // The input survived it: same element, still focused, and the remaining
+    // keystrokes land where the operator left off.
+    expect(screen.getByLabelText('Email di lavoro')).toBe(email);
+    expect(document.activeElement).toBe(email);
+    await user.type(email, '.edu');
     expect(latestDraft.workEmail).toBe('andrea.caselli@itatti.harvard.edu');
   });
 
