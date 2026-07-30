@@ -215,6 +215,10 @@ export function EmployeesPage() {
       void queryClient.invalidateQueries({ queryKey: ['employees'] });
       void queryClient.invalidateQueries({ queryKey: ['employee-options'] });
       void queryClient.invalidateQueries({ queryKey: ['audit'] });
+      // The departments response carries headcounts and rosters built from the
+      // employees — and this page's own "su {{total}}" is summed from them — so
+      // an employee write leaves them stale too.
+      void queryClient.invalidateQueries({ queryKey: ['departments'] });
     },
     onError: (error) => {
       // The toast says what went wrong; the field map makes the form show *where*.
@@ -232,6 +236,8 @@ export function EmployeesPage() {
       void queryClient.invalidateQueries({ queryKey: ['employees'] });
       void queryClient.invalidateQueries({ queryKey: ['employee-options'] });
       void queryClient.invalidateQueries({ queryKey: ['audit'] });
+      // See the save mutation: department headcounts count this person too.
+      void queryClient.invalidateQueries({ queryKey: ['departments'] });
     },
     onError: (error) => notifyError(error, t, { unsaved: true }),
   });

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ImportDialog } from './ui/ImportDialog.js';
 import { renderWithProviders } from './test/render.js';
@@ -151,6 +151,45 @@ describe('the import dialog', () => {
     // before the count got its plural forms.
     expect(await screen.findByText('1 riga selezionata su 2')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Importa 1 riga/i })).toBeEnabled();
+  });
+
+  it('drops a preview that arrives for a file the operator has since replaced', async () => {
+    // The race the picker-clearing alone does not cover: preview v1, spot the
+    // mistake, pick the corrected v2 while v1's request is still in flight. If
+    // v1's response installed itself, its near-identical rows would sit under a
+    // picker naming v2, and confirming would import the uncorrected file.
+    let releasePreview!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releasePreview = resolve;
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('/api/admin/departments')) return json({ data: [department] });
+        if (url.includes('/imports/preview')) {
+          await gate;
+          return json({ data: { batchId: 'batch_v1', rows: [previewRow()] } }, 201);
+        }
+        return json({ data: [] });
+      })
+    );
+    renderWithProviders(<ImportDialog open onOpenChange={() => {}} />);
+
+    const user = userEvent.setup();
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    await user.upload(input, new File(['v1'], 'dipendenti-v1.xlsx', { type }));
+    await user.click(screen.getByRole('button', { name: /^Anteprima/i }));
+    // The corrected file replaces the first while its preview is still pending.
+    await user.upload(input, new File(['v2'], 'dipendenti-v2.xlsx', { type }));
+    releasePreview();
+
+    // The request settles — Anteprima frees up for v2 — but v1's rows never
+    // appear and there is nothing to confirm.
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Anteprima/i })).toBeEnabled());
+    expect(screen.queryByText('3. Controlla e conferma')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Importa 0 righe/i })).toBeDisabled();
   });
 
   it('drops a stale preview when a different file is chosen', async () => {

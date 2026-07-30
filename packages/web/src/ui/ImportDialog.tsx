@@ -1,5 +1,5 @@
 import { CircleAlert, Download, FileCheck2, Upload } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { ImportPreview, ImportPreviewRow } from '@itatti/shared';
@@ -42,22 +42,22 @@ export function ImportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
     [departments.data]
   );
   const [file, setFile] = useState<File | null>(null);
+  // The picked file again, readable from a mutation callback: state would show
+  // the render the request was started in, and the staleness check below needs
+  // to know what is picked *now*.
+  const pickedFile = useRef<File | null>(null);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [selectedRows, setSelectedRows] = useState<number[]>([]);
-
-  const reset = () => {
-    setFile(null);
-    setPreview(null);
-    setSelectedRows([]);
-  };
 
   // Discard any previous preview when the operator picks a different file, so
   // Commit can never submit the earlier file's batch.
   const chooseFile = (next: File | null) => {
+    pickedFile.current = next;
     setFile(next);
     setPreview(null);
     setSelectedRows([]);
   };
+  const reset = () => chooseFile(null);
 
   const downloadTemplate = async () => {
     try {
@@ -77,21 +77,23 @@ export function ImportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
   };
 
   const previewImport = useMutation({
-    mutationFn: async () => {
-      if (!file) {
-        notifyValidation(t('copy.excelFileRequired'), t('copy.excelFileRequiredBody'));
-        // Already reported with the file-specific wording; skip the generic
-        // error toast onError would otherwise add on top of it.
-        return null;
-      }
-      return api.previewImport(file);
-    },
-    onSuccess: (data) => {
-      if (!data) return;
+    mutationFn: (fileToPreview: File) => api.previewImport(fileToPreview),
+    onSuccess: (data, fileToPreview) => {
+      // A preview that lands for a file the operator has since replaced is
+      // dropped, not installed. The classic run: upload v1, spot the mistake,
+      // fix it in Excel, pick v2 while v1's preview is still in flight —
+      // showing v1's near-identical rows under a picker naming v2 would let
+      // Conferma import the uncorrected file.
+      if (fileToPreview !== pickedFile.current) return;
       setPreview(data);
       setSelectedRows(data.rows.filter((row) => row.selected).map((row) => row.rowNumber));
     },
-    onError: (error) => notifyError(error, t),
+    onError: (error, fileToPreview) => {
+      // Same guard: a toast blaming the replaced file would read as a problem
+      // with the one now picked.
+      if (fileToPreview !== pickedFile.current) return;
+      notifyError(error, t);
+    },
   });
 
   const commitImport = useMutation({
@@ -158,7 +160,13 @@ export function ImportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           className="grid gap-3 rounded-xl border border-line bg-surface-raised p-4"
           onSubmit={(event) => {
             event.preventDefault();
-            previewImport.mutate();
+            // Belt to the disabled button's braces — the form also submits on
+            // Enter from the file field.
+            if (!file) {
+              notifyValidation(t('copy.excelFileRequired'), t('copy.excelFileRequiredBody'));
+              return;
+            }
+            previewImport.mutate(file);
           }}
         >
           <h3 className="m-0 text-[0.95rem] font-bold text-ink">{t('import.step2Title')}</h3>

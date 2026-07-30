@@ -76,7 +76,9 @@ describe('the change history', () => {
     renderWithProviders(<AuditPage />);
     const cell = (await screen.findByText('Responsabile')).closest('td')!;
 
-    expect(cell).toHaveTextContent('Susan Bates');
+    // Matricola included: on this page a name alone cannot be trusted to be
+    // one person.
+    expect(cell).toHaveTextContent('Susan Bates (110)');
     // The empty side says so in words rather than as "[]".
     expect(cell).toHaveTextContent('(nessuno)');
     // None of the plumbing reaches the operator.
@@ -108,7 +110,38 @@ describe('the change history', () => {
 
     // The Responsabile did not change, so it is not reported as if it had.
     expect(screen.queryByText('Responsabile')).not.toBeInTheDocument();
-    expect(screen.getByText('Alessandro Superbi')).toBeInTheDocument();
+    expect(screen.getByText('Alessandro Superbi (131)')).toBeInTheDocument();
+  });
+
+  it('tells two approvers with the same name apart by matricola', async () => {
+    // Replacing Susan Bates (110) with a different employee also named Susan
+    // Bates used to format to the same text on both sides, so the row was
+    // filtered out and the entry claimed "Nessun campo modificato".
+    stubAudit([
+      entry({
+        before: {
+          approvalRoles: {
+            preApprovers: [],
+            responsabili: [approverSnapshot(110, 'Susan', 'Bates')],
+            substituteResponsabili: [],
+          },
+        },
+        after: {
+          approvalRoles: {
+            preApprovers: [],
+            responsabili: [approverSnapshot(245, 'Susan', 'Bates')],
+            substituteResponsabili: [],
+          },
+        },
+      }),
+    ]);
+
+    renderWithProviders(<AuditPage />);
+    const cell = (await screen.findByText('Responsabile')).closest('td')!;
+
+    expect(cell).toHaveTextContent('Susan Bates (110)');
+    expect(cell).toHaveTextContent('Susan Bates (245)');
+    expect(screen.queryByText('Nessun campo modificato')).not.toBeInTheDocument();
   });
 
   it('names the weekday whose hours changed', async () => {

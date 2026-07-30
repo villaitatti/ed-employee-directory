@@ -96,11 +96,19 @@ function formatAuditValue(key: string, value: unknown, t: Translate, locale: str
   return String(value);
 }
 
-/** Names in an approver list, forename-first and comma-joined, or "(nessuno)". */
+/** Names in an approver list — "Susan Bates (110)", comma-joined — or "(nessuno)". */
 function formatApproverList(value: unknown, t: Translate): string {
   if (!Array.isArray(value) || value.length === 0) return t('audit.noneValue');
   return value
-    .map((entry) => (isRecord(entry) ? employeeFullName(entry as { firstName?: string; lastName?: string }) : ''))
+    .map((entry) => {
+      if (!isRecord(entry)) return '';
+      const name = employeeFullName(entry as { firstName?: string; lastName?: string });
+      // The matricola is what tells two people with one name apart. Without it,
+      // swapping a Responsabile for a namesake formats to the same text on both
+      // sides, and the role filter below reports the change as no change at all.
+      const number = typeof entry.employeeNumber === 'number' ? `(${entry.employeeNumber})` : '';
+      return [name, number].filter(Boolean).join(' ');
+    })
     .filter(Boolean)
     .join(', ');
 }
@@ -132,6 +140,8 @@ function approvalRoleChanges(before: unknown, after: unknown, t: Translate): Aud
       before: formatApproverList(beforeRoles[role.key], t),
       after: formatApproverList(afterRoles[role.key], t),
     }))
+    // Sound only because the formatted text carries the matricola: names alone
+    // can compare equal across two different people.
     .filter((change) => change.before !== change.after);
 }
 
